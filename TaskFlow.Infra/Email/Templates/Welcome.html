@@ -1,0 +1,102 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome To TaskFlow</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f4f6f9;font-family:Arial,Helvetica,sans-serif;">
+
+    <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f6f9;padding:40px 0;">
+        <tr>
+            <td align="center">
+
+                <table width="600" cellpadding="0" cellspacing="0"
+                       style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,0.08);">
+
+                    <!-- Header -->
+                    <tr>
+                        <td align="center"
+                            style="background:#2563eb;padding:30px;color:#ffffff;">
+                            <h1 style="margin:0;">
+                                Welcome To TaskFlow
+                            </h1>
+                            <p style="margin-top:10px;font-size:14px;">
+                                Task Management & Attendance Platform
+                            </p>
+                        </td>
+                    </tr>
+
+                    <!-- Body -->
+                    <tr>
+                        <td style="padding:40px;">
+
+                            <h2 style="color:#111827;">
+                                Hello {{UserName}},
+                            </h2>
+
+                            <p style="color:#4b5563;line-height:1.7;">
+                                Thank you for joining TaskFlow.
+                                Your account has been successfully created and is now ready to use.
+                            </p>
+
+                            <p style="color:#4b5563;line-height:1.7;">
+                                With TaskFlow you can:
+                            </p>
+
+                            <ul style="color:#4b5563;line-height:1.8;">
+                                <li>Create and manage tasks</li>
+                                <li>Track attendance efficiently</li>
+                                <li>Monitor team productivity</li>
+                                <li>Manage projects from one place</li>
+                            </ul>
+
+                            <div style="text-align:center;margin:35px 0;">
+                                <a href="{{LoginUrl}}"
+                                   style="background:#2563eb;
+                                          color:#ffffff;
+                                          text-decoration:none;
+                                          padding:14px 28px;
+                                          border-radius:8px;
+                                          display:inline-block;
+                                          font-weight:bold;">
+                                    Get Started
+                                </a>
+                            </div>
+
+                            <p style="color:#4b5563;line-height:1.7;">
+                                Registered Email:
+                                <strong>{{Email}}</strong>
+                            </p>
+
+                            <p style="color:#4b5563;line-height:1.7;">
+                                If you did not create this account, please contact our support team immediately.
+                            </p>
+
+                        </td>
+                    </tr>
+
+                    <!-- Footer -->
+                    <tr>
+                        <td align="center"
+                            style="padding:25px;background:#f9fafb;border-top:1px solid #e5e7eb;">
+
+                            <p style="margin:0;color:#6b7280;font-size:13px;">
+                                © {{CurrentYear}} TaskFlow. All Rights Reserved.
+                            </p>
+
+                            <p style="margin-top:8px;color:#9ca3af;font-size:12px;">
+                                This is an automated email. Please do not reply.
+                            </p>
+
+                        </td>
+                    </tr>
+
+                </table>
+
+            </td>
+        </tr>
+    </table>
+
+</body>
+</html>
