@@ -2,8 +2,9 @@
 using TaskFlow.Application.Contracts.Security;
 using TaskFlow.Application.Exceptions;
 using TaskFlow.Application.Features.Identity.User.DTOs.Commands.LoginUser;
-using TaskFlow.Domain.Enums;
+using TaskFlow.Domain.Enums.Identity;
 using TaskFlow.Domain.Interfaces.Identity.Users;
+using TaskFlow.Domain.Interfaces.Persistence;
 using TaskFlow.Domain.ValueObjects;
 
 namespace TaskFlow.Application.Features.Identity.User.Commands.LoginUser
@@ -14,26 +15,31 @@ namespace TaskFlow.Application.Features.Identity.User.Commands.LoginUser
         private readonly IUserRepository _userRepository;
         private readonly IPasswordHasher _passwordHasher;
         private readonly IJwtProvider _jwtProvider;
+        private readonly IUnitOfWork _unitOfWork;
 
         public LoginUserCommandHandler(
             IUserRepository userRepository,
             IPasswordHasher passwordHasher,
-            IJwtProvider jwtProvider)
+            IJwtProvider jwtProvider,
+            IUnitOfWork unitOfWork)
         {
             _userRepository = userRepository;
             _passwordHasher = passwordHasher;
             _jwtProvider = jwtProvider;
+            _unitOfWork = unitOfWork;
         }
 
         public async Task<LoginUserResponseDto> Handle(
             LoginUserCommand request,
             CancellationToken cancellationToken)
         {
-            var email = new Email(request.Email);
+            var email = new Email(
+                request.Email);
 
-            var user = await _userRepository.GetByEmailAsync(
-                email,
-                cancellationToken);
+            var user =
+                await _userRepository.GetByEmailAsync(
+                    email,
+                    cancellationToken);
 
             if (user is null)
             {
@@ -77,14 +83,20 @@ namespace TaskFlow.Application.Features.Identity.User.Commands.LoginUser
 
             user.RecordLogin();
 
-            var token = _jwtProvider.GenerateToken(
-                user.Id,
-                user.Email.Value);
+            _userRepository.Update(user);
+
+            await _unitOfWork.SaveChangesAsync(
+                cancellationToken);
+
+            var token =
+                _jwtProvider.GenerateToken(
+                    user.Id,
+                    user.Email.Value);
 
             return new LoginUserResponseDto
             {
                 UserId = user.Id,
-                FullName = user.Name.DisplayName,
+                FullName = user.FullName.DisplayName,
                 Email = user.Email.Value,
                 Token = token
             };

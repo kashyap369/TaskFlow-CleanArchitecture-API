@@ -11,13 +11,17 @@ using TaskFlow.Application.DomainEvents;
 using TaskFlow.Application.DomainEvents.Identity.User;
 using TaskFlow.Domain.DomainEvents.Identity.User;
 using TaskFlow.Domain.Interfaces.Identity.Users;
+using TaskFlow.Domain.Interfaces.Organizations;
 using TaskFlow.Domain.Interfaces.Persistence;
+using TaskFlow.Domain.Interfaces.WorkManagement;
 using TaskFlow.Infra.DomainEvents.Dispatchers;
 using TaskFlow.Infra.Email;
 using TaskFlow.Infra.Email.Smtp;
 using TaskFlow.Infra.Persistence;
 using TaskFlow.Infra.Persistence.Context;
 using TaskFlow.Infra.Persistence.Repositories.Identity.Users;
+using TaskFlow.Infra.Persistence.Repositories.Organizations;
+using TaskFlow.Infra.Persistence.Repositories.WorkManagement;
 using TaskFlow.Infra.Security;
 
 namespace TaskFlow.Infra.DependencyInjection
@@ -37,10 +41,39 @@ namespace TaskFlow.Infra.DependencyInjection
             services.AddScoped<IDomainEventDispatcher, DomainEventDispatcher>();
             services.AddScoped<IUnitOfWork, UnitOfWork>();
             services.AddScoped<IPasswordHasher, PasswordHasher>();
-            services.AddScoped<IUserRepository,UserRepository>();
+            services.AddScoped<IUserRepository, UserRepository>();
             services.AddScoped<IDomainEventHandler<UserRegisteredEvent>, UserRegisteredEventHandler>();
             services.Configure<JwtSettings>(configuration.GetSection("JwtSettings"));
             services.Configure<EmailSettings>(configuration.GetSection("EmailSettings"));
+            // Register the organization repositories
+            services.AddScoped<
+    IOrganizationRepository,
+    OrganizationRepository>();
+
+            services.AddScoped<
+                IOrganizationRoleRepository,
+                OrganizationRoleRepository>();
+
+            services.AddScoped<
+                IOrganizationMemberRepository,
+                OrganizationMemberRepository>();
+
+            services.AddScoped<
+                IOrganizationInvitationRepository,
+                OrganizationInvitationRepository>();
+
+            // Register the Wrok management  repositories
+            services.AddScoped<
+    IProjectRepository,
+    ProjectRepository>();
+
+            services.AddScoped<
+                ITaskRepository,
+                TaskRepository>();
+
+            services.AddScoped<
+                ISubTaskRepository,
+                SubTaskRepository>();
 
             services.AddScoped<SmtpEmailSender>();
 

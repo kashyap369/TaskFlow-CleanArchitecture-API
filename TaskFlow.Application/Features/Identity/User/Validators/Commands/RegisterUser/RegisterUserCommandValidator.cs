@@ -1,13 +1,10 @@
 ﻿using FluentValidation;
-using System;
-using System.Collections.Generic;
-using System.Text;
 using TaskFlow.Application.Features.Identity.User.Commands.RegisterUser;
 
 namespace TaskFlow.Application.Features.Identity.User.Validators.Commands.RegisterUser
 {
     public sealed class RegisterUserCommandValidator
-       : AbstractValidator<RegisterUserCommand>
+        : AbstractValidator<RegisterUserCommand>
     {
         public RegisterUserCommandValidator()
         {
@@ -33,14 +30,14 @@ namespace TaskFlow.Application.Features.Identity.User.Validators.Commands.Regist
                 .NotEmpty()
                 .MinimumLength(8)
                 .Matches("[A-Z]")
-                .WithMessage("Password must contain an uppercase letter.")
+                .WithMessage(
+                    "Password must contain at least one uppercase letter.")
                 .Matches("[a-z]")
-                .WithMessage("Password must contain a lowercase letter.")
+                .WithMessage(
+                    "Password must contain at least one lowercase letter.")
                 .Matches("[0-9]")
-                .WithMessage("Password must contain a number.");
-
-            RuleFor(x => x.AccountType)
-                .IsInEnum();
+                .WithMessage(
+                    "Password must contain at least one number.");
         }
     }
 }

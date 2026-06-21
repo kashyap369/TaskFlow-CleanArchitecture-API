@@ -28,7 +28,8 @@ namespace TaskFlow.Application.Features.Identity.User.Commands.RegisterUser
             RegisterUserCommand request,
             CancellationToken cancellationToken)
         {
-            var email = new Email(request.Email);
+            var email = new Email(
+                request.Email);
 
             var phoneNumber = new PhoneNumber(
                 request.PhoneNumber);
@@ -65,12 +66,12 @@ namespace TaskFlow.Application.Features.Identity.User.Commands.RegisterUser
                 _passwordHasher.Hash(
                     request.Password);
 
-            var user = Domain.Entities.Identity.User.Register(
-                fullName,
-                email,
-                phoneNumber,
-                passwordHash,
-                request.AccountType);
+            var user =
+                Domain.Entities.Identity.User.Register(
+                    fullName,
+                    email,
+                    phoneNumber,
+                    passwordHash);
 
             await _userRepository.AddAsync(
                 user,

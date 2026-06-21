@@ -15,6 +15,20 @@
     <Folder Include="Features\Identity\User\Queries\" />
     <Folder Include="Common\" />
     <Folder Include="Features\Identity\User\Validators\Queries\" />
+    <Folder Include="Features\Organizations\OrganizationInvitation\DTOs\" />
+    <Folder Include="Features\Organizations\OrganizationInvitation\Queries\" />
+    <Folder Include="Features\Organizations\OrganizationMember\DTOs\" />
+    <Folder Include="Features\Organizations\OrganizationMember\Queries\" />
+    <Folder Include="Features\Organizations\OrganizationRole\DTOs\" />
+    <Folder Include="Features\Organizations\OrganizationRole\Queries\" />
+    <Folder Include="Features\Organizations\Organization\DTOs\" />
+    <Folder Include="Features\Organizations\Organization\Queries\" />
+    <Folder Include="Features\WorkManagement\Projects\DTOs\" />
+    <Folder Include="Features\WorkManagement\Projects\Queries\" />
+    <Folder Include="Features\WorkManagement\SubTasks\DTOs\" />
+    <Folder Include="Features\WorkManagement\SubTasks\Queries\" />
+    <Folder Include="Features\WorkManagement\Tasks\DTOs\" />
+    <Folder Include="Features\WorkManagement\Tasks\Queries\" />
   </ItemGroup>
 
   <ItemGroup>

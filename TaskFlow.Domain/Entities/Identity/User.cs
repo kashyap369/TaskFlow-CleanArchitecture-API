@@ -1,14 +1,14 @@
 ﻿using System;
 using TaskFlow.Domain.Common;
 using TaskFlow.Domain.DomainEvents.Identity.User;
-using TaskFlow.Domain.Enums;
+using TaskFlow.Domain.Enums.Identity;
 using TaskFlow.Domain.ValueObjects;
 
 namespace TaskFlow.Domain.Entities.Identity
 {
     public class User : AuditableEntity, IAggregateRoot
     {
-        public FullName Name { get; private set; }
+        public FullName FullName { get; private set; }
 
         public Email Email { get; private set; }
 
@@ -16,15 +16,13 @@ namespace TaskFlow.Domain.Entities.Identity
 
         public string PasswordHash { get; private set; }
 
-        public AccountType AccountType { get; private set; }
-
         public UserStatus Status { get; private set; }
 
         public bool IsEmailVerified { get; private set; }
 
         public DateTime? LastLoginAt { get; private set; }
 
-        private User()
+        protected User()
         {
         }
 
@@ -32,14 +30,16 @@ namespace TaskFlow.Domain.Entities.Identity
             FullName name,
             Email email,
             PhoneNumber phoneNumber,
-            string passwordHash,
-            AccountType accountType)
+            string passwordHash)
         {
-            Name = name ?? throw new ArgumentNullException(nameof(name));
+            FullName = name ??
+                throw new ArgumentNullException(nameof(name));
 
-            Email = email ?? throw new ArgumentNullException(nameof(email));
+            Email = email ??
+                throw new ArgumentNullException(nameof(email));
 
-            PhoneNumber = phoneNumber ?? throw new ArgumentNullException(nameof(phoneNumber));
+            PhoneNumber = phoneNumber ??
+                throw new ArgumentNullException(nameof(phoneNumber));
 
             if (string.IsNullOrWhiteSpace(passwordHash))
                 throw new ArgumentException(
@@ -47,8 +47,6 @@ namespace TaskFlow.Domain.Entities.Identity
                     nameof(passwordHash));
 
             PasswordHash = passwordHash;
-
-            AccountType = accountType;
 
             Status = UserStatus.PendingVerification;
 
@@ -59,19 +57,17 @@ namespace TaskFlow.Domain.Entities.Identity
             FullName name,
             Email email,
             PhoneNumber phoneNumber,
-            string passwordHash,
-            AccountType accountType)
+            string passwordHash)
         {
             var user = new User(
                 name,
                 email,
                 phoneNumber,
-                passwordHash,
-                accountType);
+                passwordHash);
 
             user.AddDomainEvent(
                 new UserRegisteredEvent(
-                    user.Name.DisplayName,
+                    user.FullName.DisplayName,
                     user.Email.Value));
 
             return user;
@@ -83,7 +79,6 @@ namespace TaskFlow.Domain.Entities.Identity
                 return;
 
             IsEmailVerified = true;
-
             Status = UserStatus.Active;
 
             MarkAsUpdated();
@@ -97,8 +92,7 @@ namespace TaskFlow.Domain.Entities.Identity
         {
             if (string.IsNullOrWhiteSpace(passwordHash))
                 throw new ArgumentException(
-                    "Password hash is required.",
-                    nameof(passwordHash));
+                    "Password hash is required.");
 
             if (PasswordHash == passwordHash)
                 return;
@@ -114,24 +108,17 @@ namespace TaskFlow.Domain.Entities.Identity
 
         public void UpdateName(FullName name)
         {
-            if (name is null)
-                throw new ArgumentNullException(nameof(name));
+            ArgumentNullException.ThrowIfNull(name);
 
-            if (Name == name)
-                return;
-
-            Name = name;
+            FullName = name;
 
             MarkAsUpdated();
         }
 
-        public void UpdatePhoneNumber(PhoneNumber phoneNumber)
+        public void UpdatePhoneNumber(
+            PhoneNumber phoneNumber)
         {
-            if (phoneNumber is null)
-                throw new ArgumentNullException(nameof(phoneNumber));
-
-            if (PhoneNumber == phoneNumber)
-                return;
+            ArgumentNullException.ThrowIfNull(phoneNumber);
 
             PhoneNumber = phoneNumber;
 
@@ -168,10 +155,7 @@ namespace TaskFlow.Domain.Entities.Identity
         {
             if (!IsEmailVerified)
                 throw new InvalidOperationException(
-                    "User must verify email before activation.");
-
-            if (Status == UserStatus.Active)
-                return;
+                    "Email must be verified.");
 
             Status = UserStatus.Active;
 
@@ -184,9 +168,6 @@ namespace TaskFlow.Domain.Entities.Identity
 
         public void Deactivate()
         {
-            if (Status == UserStatus.Inactive)
-                return;
-
             Status = UserStatus.Inactive;
 
             MarkAsUpdated();

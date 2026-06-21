@@ -4,9 +4,11 @@ using TaskFlow.Domain.Entities.Identity;
 
 namespace TaskFlow.Infra.Persistence.Configurations.Identity
 {
-    public sealed class UserConfiguration : IEntityTypeConfiguration<User>
+    public sealed class UserConfiguration
+        : IEntityTypeConfiguration<User>
     {
-        public void Configure(EntityTypeBuilder<User> builder)
+        public void Configure(
+            EntityTypeBuilder<User> builder)
         {
             builder.ToTable("Users");
 
@@ -16,10 +18,6 @@ namespace TaskFlow.Infra.Persistence.Configurations.Identity
 
             builder.Property(x => x.PasswordHash)
                 .HasMaxLength(500)
-                .IsRequired();
-
-            builder.Property(x => x.AccountType)
-                .HasConversion<int>()
                 .IsRequired();
 
             builder.Property(x => x.Status)
@@ -41,7 +39,7 @@ namespace TaskFlow.Infra.Persistence.Configurations.Identity
 
             builder.Property(x => x.DeletedAt);
 
-            ConfigureName(builder);
+            ConfigureFullName(builder);
             ConfigureEmail(builder);
             ConfigurePhoneNumber(builder);
 
@@ -50,9 +48,10 @@ namespace TaskFlow.Infra.Persistence.Configurations.Identity
             builder.HasQueryFilter(x => !x.IsDeleted);
         }
 
-        private static void ConfigureName(EntityTypeBuilder<User> builder)
+        private static void ConfigureFullName(
+            EntityTypeBuilder<User> builder)
         {
-            builder.OwnsOne(x => x.Name, name =>
+            builder.OwnsOne(x => x.FullName, name =>
             {
                 name.Property(x => x.FirstName)
                     .HasColumnName("FirstName")
@@ -66,7 +65,8 @@ namespace TaskFlow.Infra.Persistence.Configurations.Identity
             });
         }
 
-        private static void ConfigureEmail(EntityTypeBuilder<User> builder)
+        private static void ConfigureEmail(
+    EntityTypeBuilder<User> builder)
         {
             builder.OwnsOne(x => x.Email, email =>
             {
@@ -74,13 +74,14 @@ namespace TaskFlow.Infra.Persistence.Configurations.Identity
                     .HasColumnName("Email")
                     .HasMaxLength(256)
                     .IsRequired();
-            });
 
-            builder.HasIndex("Email")
-                .IsUnique();
+                email.HasIndex(x => x.Value)
+                    .IsUnique();
+            });
         }
 
-        private static void ConfigurePhoneNumber(EntityTypeBuilder<User> builder)
+        private static void ConfigurePhoneNumber(
+    EntityTypeBuilder<User> builder)
         {
             builder.OwnsOne(x => x.PhoneNumber, phone =>
             {
@@ -88,19 +89,21 @@ namespace TaskFlow.Infra.Persistence.Configurations.Identity
                     .HasColumnName("PhoneNumber")
                     .HasMaxLength(20)
                     .IsRequired();
-            });
 
-            builder.HasIndex("PhoneNumber")
-                .IsUnique();
+                phone.HasIndex(x => x.Value)
+                    .IsUnique();
+            });
         }
 
         private static void ConfigureIndexes(EntityTypeBuilder<User> builder)
         {
             builder.HasIndex(x => x.Status);
 
-            builder.HasIndex(x => x.AccountType);
+            builder.HasIndex(x => x.IsEmailVerified);
 
             builder.HasIndex(x => x.CreatedAt);
+
+            builder.HasIndex(x => x.LastLoginAt);
 
             builder.HasIndex(x => x.IsDeleted);
 
@@ -112,8 +115,8 @@ namespace TaskFlow.Infra.Persistence.Configurations.Identity
 
             builder.HasIndex(x => new
             {
-                x.AccountType,
-                x.Status
+                x.Status,
+                x.IsEmailVerified
             });
         }
     }

@@ -1,5 +1,4 @@
 ﻿using MediatR;
-using TaskFlow.Domain.Enums;
 
 namespace TaskFlow.Application.Features.Identity.User.Commands.RegisterUser
 {
@@ -8,7 +7,6 @@ namespace TaskFlow.Application.Features.Identity.User.Commands.RegisterUser
         string LastName,
         string Email,
         string PhoneNumber,
-        string Password,
-        AccountType AccountType
+        string Password
     ) : IRequest<int>;
 }

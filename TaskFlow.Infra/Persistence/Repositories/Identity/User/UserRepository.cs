@@ -1,5 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using TaskFlow.Domain.Entities.Identity;
+using TaskFlow.Domain.Enums.Identity;
 using TaskFlow.Domain.Interfaces.Identity.Users;
 using TaskFlow.Domain.ValueObjects;
 using TaskFlow.Infra.Persistence.Context;
@@ -10,7 +11,8 @@ namespace TaskFlow.Infra.Persistence.Repositories.Identity.Users
     {
         private readonly TaskFlowDbContext _context;
 
-        public UserRepository(TaskFlowDbContext context)
+        public UserRepository(
+            TaskFlowDbContext context)
         {
             _context = context;
         }
@@ -26,7 +28,7 @@ namespace TaskFlow.Infra.Persistence.Repositories.Identity.Users
         }
 
         public async Task<User?> GetByEmailAsync(
-            TaskFlow.Domain.ValueObjects.Email email,
+           Domain.ValueObjects.Email email,
             CancellationToken cancellationToken = default)
         {
             return await _context.Users
@@ -45,8 +47,19 @@ namespace TaskFlow.Infra.Persistence.Repositories.Identity.Users
                     cancellationToken);
         }
 
+        public async Task<bool> ExistsAsync(
+            int id,
+            CancellationToken cancellationToken = default)
+        {
+            return await _context.Users
+                .AsNoTracking()
+                .AnyAsync(
+                    x => x.Id == id,
+                    cancellationToken);
+        }
+
         public async Task<bool> ExistsByEmailAsync(
-            TaskFlow.Domain.ValueObjects.Email email,
+           Domain.ValueObjects.Email email,
             CancellationToken cancellationToken = default)
         {
             return await _context.Users
@@ -65,6 +78,23 @@ namespace TaskFlow.Infra.Persistence.Repositories.Identity.Users
                     cancellationToken);
         }
 
+        public async Task<IReadOnlyList<User>> GetByStatusAsync(
+            UserStatus status,
+            CancellationToken cancellationToken = default)
+        {
+            return await _context.Users
+                .Where(x => x.Status == status)
+                .ToListAsync(cancellationToken);
+        }
+
+        public async Task<IReadOnlyList<User>> GetUnverifiedUsersAsync(
+            CancellationToken cancellationToken = default)
+        {
+            return await _context.Users
+                .Where(x => !x.IsEmailVerified)
+                .ToListAsync(cancellationToken);
+        }
+
         public async Task AddAsync(
             User user,
             CancellationToken cancellationToken = default)
@@ -74,12 +104,14 @@ namespace TaskFlow.Infra.Persistence.Repositories.Identity.Users
                 cancellationToken);
         }
 
-        public void Update(User user)
+        public void Update(
+            User user)
         {
             _context.Users.Update(user);
         }
 
-        public void Remove(User user)
+        public void Remove(
+            User user)
         {
             user.SoftDelete();
 

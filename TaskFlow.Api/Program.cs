@@ -1,6 +1,9 @@
 using TaskFlow.Api.Extensions;
+using TaskFlow.Application.Contracts.Security;
 using TaskFlow.Application.DependencyInjection;
 using TaskFlow.Infra.DependencyInjection;
+using TaskFlow.Infra.Persistence.Context;
+using TaskFlow.Infra.Seeder.Identity.User;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -39,5 +42,20 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
+using (var scope = app.Services.CreateScope())
+{
+    var context =
+        scope.ServiceProvider
+            .GetRequiredService<TaskFlowDbContext>();
+
+    var passwordHasher =
+        scope.ServiceProvider
+            .GetRequiredService<IPasswordHasher>();
+
+    await UserSeeder.SeedAsync(
+        context,
+        passwordHasher);
+}
 
 app.Run();

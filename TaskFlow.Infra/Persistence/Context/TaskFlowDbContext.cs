@@ -2,8 +2,11 @@
 using System.Reflection;
 using TaskFlow.Domain.Common;
 using TaskFlow.Domain.Entities.Identity;
+using TaskFlow.Domain.Entities.Organization;
+using TaskFlow.Domain.Entities.WorkManagement.Projects;
+using TaskFlow.Domain.Entities.WorkManagement.SubTasks;
 using TaskFlow.Infra.DomainEvents.Dispatchers;
-
+using Task = TaskFlow.Domain.Entities.WorkManagement.Tasks.Task;
 namespace TaskFlow.Infra.Persistence.Context
 {
     public sealed class TaskFlowDbContext : DbContext
@@ -16,7 +19,22 @@ namespace TaskFlow.Infra.Persistence.Context
         }
 
         public DbSet<User> Users => Set<User>();
+        public DbSet<Organization> Organizations => Set<Organization>();
+        public DbSet<OrganizationRole> OrganizationRoles => Set<OrganizationRole>();
 
+        public DbSet<OrganizationMember> OrganizationMembers => Set<OrganizationMember>();
+
+        public DbSet<OrganizationInvitation> OrganizationInvitations => Set<OrganizationInvitation>();
+
+        public DbSet<Project> Projects => Set<Project>();
+        public DbSet<SystemRole> SystemRoles => Set<SystemRole>();
+
+        public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+        public DbSet<Task> Tasks => Set<Task>();
+
+        public DbSet<SubTask> SubTasks => Set<SubTask>();
+
+        public DbSet<UserRole> UserRoles => Set<UserRole>();
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             modelBuilder.ApplyConfigurationsFromAssembly(typeof(TaskFlowDbContext).Assembly);

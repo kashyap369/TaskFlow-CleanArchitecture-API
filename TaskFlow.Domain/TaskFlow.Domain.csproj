@@ -7,7 +7,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Folder Include="Exceptions\" />
+    <Folder Include="Entities\AttendenceManagement\" />
+    <Folder Include="Entities\LeaveManagement\" />
+    <Folder Include="Entities\Notification\" />
     <Folder Include="Aggregates\" />
     <Folder Include="Specifications\" />
   </ItemGroup>
