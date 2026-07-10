@@ -1,4 +1,5 @@
 ﻿using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using TaskFlow.Application.Features.WorkManagement.SubTasks.Commands.CompleteSubTask;
 using TaskFlow.Application.Features.WorkManagement.SubTasks.Commands.CreateSubTask;
@@ -8,6 +9,7 @@ using TaskFlow.Application.Features.WorkManagement.SubTasks.Commands.UpdateSubTa
 
 namespace TaskFlow.Api.Controllers.WorkManagement
 {
+    [Authorize]
     [Route("api/[controller]")]
     [ApiController]
     public class SubTaskController : ControllerBase

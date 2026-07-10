@@ -17,9 +17,6 @@ namespace TaskFlow.Application.Features.WorkManagement.Projects.Commands.CreateP
             RuleFor(x => x.OrganizationId)
                 .GreaterThan(0);
 
-            RuleFor(x => x.CreatedByUserId)
-                .GreaterThan(0);
-
             RuleFor(x => x.StartDate)
                 .NotEmpty();
 

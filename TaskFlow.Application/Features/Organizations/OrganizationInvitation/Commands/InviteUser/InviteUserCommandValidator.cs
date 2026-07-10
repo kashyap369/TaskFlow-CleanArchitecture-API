@@ -13,9 +13,6 @@ namespace TaskFlow.Application.Features.Organizations.OrganizationInvitation.Com
             RuleFor(x => x.OrganizationRoleId)
                 .GreaterThan(0);
 
-            RuleFor(x => x.InvitedByUserId)
-                .GreaterThan(0);
-
             RuleFor(x => x.Email)
                 .NotEmpty()
                 .EmailAddress()

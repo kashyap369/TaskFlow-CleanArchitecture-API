@@ -1,4 +1,5 @@
 using TaskFlow.Api.Extensions;
+using TaskFlow.Api.Services;
 using TaskFlow.Application.Contracts.Security;
 using TaskFlow.Application.DependencyInjection;
 using TaskFlow.Infra.DependencyInjection;
@@ -13,13 +14,55 @@ builder.Services.AddControllers();
 
 builder.Services.AddEndpointsApiExplorer();
 
-builder.Services.AddSwaggerGen();
+// Swagger with a Bearer token input, so protected
+// endpoints can be tested from the Swagger UI.
+
+builder.Services.AddSwaggerGen(options =>
+{
+    options.AddSecurityDefinition(
+        "Bearer",
+        new Microsoft.OpenApi.OpenApiSecurityScheme
+        {
+            Name = "Authorization",
+            Type = Microsoft.OpenApi.SecuritySchemeType.Http,
+            Scheme = "Bearer",
+            BearerFormat = "JWT",
+            In = Microsoft.OpenApi.ParameterLocation.Header,
+            Description = "Paste the JWT from the login response."
+        });
+
+    options.AddSecurityRequirement(document =>
+        new Microsoft.OpenApi.OpenApiSecurityRequirement
+        {
+            {
+                new Microsoft.OpenApi.OpenApiSecuritySchemeReference(
+                    "Bearer",
+                    document),
+                new List<string>()
+            }
+        });
+});
 
 builder.Services.AddApplication();
 
 builder.Services.AddInfrastructure(
     builder.Configuration);
 
+// Current user (reads the user id and email from the JWT claims)
+
+builder.Services.AddHttpContextAccessor();
+
+builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AngularPolicy", policy =>
+    {
+        policy
+            .WithOrigins("http://localhost:4200")
+            .AllowAnyHeader()
+            .AllowAnyMethod();
+    });
+});
 var app = builder.Build();
 
 // Middlewares
@@ -36,6 +79,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseCors("AngularPolicy");
 
 app.UseAuthentication();
 

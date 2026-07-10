@@ -1,4 +1,5 @@
 ﻿using MediatR;
+using TaskFlow.Application.Contracts.Security;
 using TaskFlow.Application.Exceptions;
 using TaskFlow.Domain.Entities.Organization;
 using TaskFlow.Domain.Interfaces.Organizations;
@@ -12,17 +13,20 @@ namespace TaskFlow.Application.Features.Organizations.OrganizationInvitation.Com
         private readonly IOrganizationRepository _organizationRepository;
         private readonly IOrganizationRoleRepository _organizationRoleRepository;
         private readonly IOrganizationInvitationRepository _organizationInvitationRepository;
+        private readonly ICurrentUserService _currentUserService;
         private readonly IUnitOfWork _unitOfWork;
 
         public InviteUserCommandHandler(
             IOrganizationRepository organizationRepository,
             IOrganizationRoleRepository organizationRoleRepository,
             IOrganizationInvitationRepository organizationInvitationRepository,
+            ICurrentUserService currentUserService,
             IUnitOfWork unitOfWork)
         {
             _organizationRepository = organizationRepository;
             _organizationRoleRepository = organizationRoleRepository;
             _organizationInvitationRepository = organizationInvitationRepository;
+            _currentUserService = currentUserService;
             _unitOfWork = unitOfWork;
         }
 
@@ -68,12 +72,14 @@ namespace TaskFlow.Application.Features.Organizations.OrganizationInvitation.Com
                     "A pending invitation already exists.");
             }
 
+            // The inviter is always the logged-in user (taken
+            // from the JWT), never from the request body.
             var invitation =
                 new Domain.Entities.Organization.OrganizationInvitation(
                     request.OrganizationId,
                     request.Email,
                     request.OrganizationRoleId,
-                    request.InvitedByUserId,
+                    _currentUserService.UserId,
                     DateTime.UtcNow.AddDays(7));
 
             await _organizationInvitationRepository

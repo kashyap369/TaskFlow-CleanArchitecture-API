@@ -1,4 +1,5 @@
 ﻿using MediatR;
+using TaskFlow.Application.Contracts.Security;
 using TaskFlow.Application.Exceptions;
 using TaskFlow.Domain.Entities.Organization;
 using TaskFlow.Domain.Interfaces.Identity.Users;
@@ -12,15 +13,18 @@ namespace TaskFlow.Application.Features.Organizations.Organization.Commands.Crea
     {
         private readonly IOrganizationRepository _organizationRepository;
         private readonly IUserRepository _userRepository;
+        private readonly ICurrentUserService _currentUserService;
         private readonly IUnitOfWork _unitOfWork;
 
         public CreateOrganizationCommandHandler(
             IOrganizationRepository organizationRepository,
             IUserRepository userRepository,
+            ICurrentUserService currentUserService,
             IUnitOfWork unitOfWork)
         {
             _organizationRepository = organizationRepository;
             _userRepository = userRepository;
+            _currentUserService = currentUserService;
             _unitOfWork = unitOfWork;
         }
 
@@ -28,9 +32,14 @@ namespace TaskFlow.Application.Features.Organizations.Organization.Commands.Crea
             CreateOrganizationCommand request,
             CancellationToken cancellationToken)
         {
+            // The owner is always the logged-in user (taken
+            // from the JWT), never from the request body.
+            var ownerUserId =
+                _currentUserService.UserId;
+
             var owner =
                 await _userRepository.GetByIdAsync(
-                    request.OwnerUserId,
+                    ownerUserId,
                     cancellationToken);
 
             if (owner is null)
@@ -57,7 +66,7 @@ namespace TaskFlow.Application.Features.Organizations.Organization.Commands.Crea
                 new Domain.Entities.Organization.Organization(
                     request.Name,
                     request.Description,
-                    request.OwnerUserId);
+                    ownerUserId);
 
             await _organizationRepository.AddAsync(
                 organization,

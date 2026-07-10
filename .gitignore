@@ -361,3 +361,6 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+# Local app settings with real secrets (use appsettings.Example.json as a template)
+TaskFlow.Api/appsettings.json
+TaskFlow.Api/appsettings.Development.json

@@ -1,4 +1,5 @@
 ﻿using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using TaskFlow.Application.Features.Organizations.OrganizationMember.Commands.ActivateMember;
 using TaskFlow.Application.Features.Organizations.OrganizationMember.Commands.ChangeMemberRole;
@@ -7,6 +8,7 @@ using TaskFlow.Application.Features.Organizations.OrganizationMember.Commands.Re
 
 namespace TaskFlow.Api.Controllers.Organization
 {
+    [Authorize]
     [Route("api/[controller]")]
     [ApiController]
     public class OrganizationMemberController : ControllerBase

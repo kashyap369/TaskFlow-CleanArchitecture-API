@@ -5,7 +5,6 @@ namespace TaskFlow.Application.Features.Organizations.OrganizationInvitation.Com
     public sealed record InviteUserCommand(
         int OrganizationId,
         string Email,
-        int OrganizationRoleId,
-        int InvitedByUserId
+        int OrganizationRoleId
     ) : IRequest<int>;
 }

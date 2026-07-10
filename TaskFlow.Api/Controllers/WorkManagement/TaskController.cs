@@ -1,4 +1,5 @@
 ﻿using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using TaskFlow.Application.Features.WorkManagement.Tasks.Commands.CompleteTask;
 using TaskFlow.Application.Features.WorkManagement.Tasks.Commands.CreateTask;
@@ -8,6 +9,7 @@ using TaskFlow.Application.Features.WorkManagement.Tasks.Commands.UpdateTask;
 
 namespace TaskFlow.Api.Controllers.WorkManagement
 {
+    [Authorize]
     [Route("api/[controller]")]
     [ApiController]
     public class TaskController : ControllerBase

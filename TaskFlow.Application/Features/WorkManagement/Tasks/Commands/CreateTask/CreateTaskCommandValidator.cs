@@ -14,9 +14,6 @@ namespace TaskFlow.Application.Features.WorkManagement.Tasks.Commands.CreateTask
             RuleFor(x => x.OrganizationId)
                 .GreaterThan(0);
 
-            RuleFor(x => x.CreatedByUserId)
-                .GreaterThan(0);
-
             RuleFor(x => x.ExpectedCompletionDate)
                 .GreaterThan(x => x.StartDate)
                 .When(x => x.ExpectedCompletionDate.HasValue);

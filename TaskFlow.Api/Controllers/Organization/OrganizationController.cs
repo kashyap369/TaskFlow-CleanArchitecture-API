@@ -1,4 +1,5 @@
 ﻿using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using TaskFlow.Application.Features.Organizations.Organization.Commands.DeleteOrganization;
 using TaskFlow.Application.Features.Organizations.Organization.Commands.CreateOrganization;
@@ -6,6 +7,7 @@ using TaskFlow.Application.Features.Organizations.Organization.Commands.UpdateOr
 
 namespace TaskFlow.Api.Controllers.Organization
 {
+    [Authorize]
     [Route("api/[controller]")]
     [ApiController]
     public class OrganizationController : ControllerBase

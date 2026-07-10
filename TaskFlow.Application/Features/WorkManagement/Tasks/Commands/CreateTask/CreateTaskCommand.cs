@@ -9,7 +9,6 @@ namespace TaskFlow.Application.Features.WorkManagement.Tasks.Commands.CreateTask
         DateTime StartDate,
         TaskPriority Priority,
         int OrganizationId,
-        int CreatedByUserId,
         DateTime? ExpectedCompletionDate,
         int? ProjectId
     ) : IRequest<int>;

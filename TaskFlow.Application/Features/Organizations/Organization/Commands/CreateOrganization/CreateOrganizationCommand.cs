@@ -4,7 +4,6 @@ namespace TaskFlow.Application.Features.Organizations.Organization.Commands.Crea
 {
     public sealed record CreateOrganizationCommand(
         string Name,
-        string Description,
-        int OwnerUserId
+        string Description
     ) : IRequest<int>;
 }

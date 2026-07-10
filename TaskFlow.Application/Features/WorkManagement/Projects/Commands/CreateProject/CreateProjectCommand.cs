@@ -7,7 +7,6 @@ namespace TaskFlow.Application.Features.WorkManagement.Projects.Commands.CreateP
         string Description,
         DateTime StartDate,
         DateTime? ExpectedCompletionDate,
-        int OrganizationId,
-        int CreatedByUserId
+        int OrganizationId
     ) : IRequest<int>;
 }

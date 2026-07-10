@@ -1,4 +1,5 @@
 ﻿using MediatR;
+using TaskFlow.Application.Contracts.Security;
 using TaskFlow.Application.Exceptions;
 using TaskFlow.Domain.Interfaces.Identity.Users;
 using TaskFlow.Domain.Interfaces.Organizations;
@@ -17,6 +18,7 @@ namespace TaskFlow.Application.Features.WorkManagement.Tasks.Commands.CreateTask
         private readonly IProjectRepository _projectRepository;
         private readonly IOrganizationRepository _organizationRepository;
         private readonly IUserRepository _userRepository;
+        private readonly ICurrentUserService _currentUserService;
         private readonly IUnitOfWork _unitOfWork;
 
         public CreateTaskCommandHandler(
@@ -24,12 +26,14 @@ namespace TaskFlow.Application.Features.WorkManagement.Tasks.Commands.CreateTask
             IProjectRepository projectRepository,
             IOrganizationRepository organizationRepository,
             IUserRepository userRepository,
+            ICurrentUserService currentUserService,
             IUnitOfWork unitOfWork)
         {
             _taskRepository = taskRepository;
             _projectRepository = projectRepository;
             _organizationRepository = organizationRepository;
             _userRepository = userRepository;
+            _currentUserService = currentUserService;
             _unitOfWork = unitOfWork;
         }
 
@@ -49,9 +53,14 @@ namespace TaskFlow.Application.Features.WorkManagement.Tasks.Commands.CreateTask
                     "Organization not found.");
             }
 
+            // The creator is always the logged-in user (taken
+            // from the JWT), never from the request body.
+            var createdByUserId =
+                _currentUserService.UserId;
+
             var user =
                 await _userRepository.GetByIdAsync(
-                    request.CreatedByUserId,
+                    createdByUserId,
                     cancellationToken);
 
             if (user is null)
@@ -102,7 +111,7 @@ namespace TaskFlow.Application.Features.WorkManagement.Tasks.Commands.CreateTask
                 request.StartDate,
                 request.Priority,
                 request.OrganizationId,
-                request.CreatedByUserId,
+                createdByUserId,
                 request.ExpectedCompletionDate,
                 request.ProjectId);
 

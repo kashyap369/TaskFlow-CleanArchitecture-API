@@ -1,4 +1,5 @@
 ﻿using MediatR;
+using TaskFlow.Application.Contracts.Security;
 using TaskFlow.Application.Exceptions;
 using TaskFlow.Domain.Entities.WorkManagement.Projects;
 using TaskFlow.Domain.Interfaces.Identity.Users;
@@ -14,17 +15,20 @@ namespace TaskFlow.Application.Features.WorkManagement.Projects.Commands.CreateP
         private readonly IProjectRepository _projectRepository;
         private readonly IOrganizationRepository _organizationRepository;
         private readonly IUserRepository _userRepository;
+        private readonly ICurrentUserService _currentUserService;
         private readonly IUnitOfWork _unitOfWork;
 
         public CreateProjectCommandHandler(
             IProjectRepository projectRepository,
             IOrganizationRepository organizationRepository,
             IUserRepository userRepository,
+            ICurrentUserService currentUserService,
             IUnitOfWork unitOfWork)
         {
             _projectRepository = projectRepository;
             _organizationRepository = organizationRepository;
             _userRepository = userRepository;
+            _currentUserService = currentUserService;
             _unitOfWork = unitOfWork;
         }
 
@@ -44,9 +48,14 @@ namespace TaskFlow.Application.Features.WorkManagement.Projects.Commands.CreateP
                     "Organization not found.");
             }
 
+            // The creator is always the logged-in user (taken
+            // from the JWT), never from the request body.
+            var createdByUserId =
+                _currentUserService.UserId;
+
             var user =
                 await _userRepository.GetByIdAsync(
-                    request.CreatedByUserId,
+                    createdByUserId,
                     cancellationToken);
 
             if (user is null)
@@ -74,7 +83,7 @@ namespace TaskFlow.Application.Features.WorkManagement.Projects.Commands.CreateP
                 request.Description,
                 request.StartDate,
                 request.OrganizationId,
-                request.CreatedByUserId,
+                createdByUserId,
                 request.ExpectedCompletionDate);
 
             await _projectRepository.AddAsync(

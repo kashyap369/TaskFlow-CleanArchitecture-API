@@ -5,7 +5,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 #nullable disable
 
 namespace TaskFlow.Infra.Migrations
-{git status 
+{
     /// <inheritdoc />
     public partial class AddedConfigurations_Identiy_Organization_Workmanagement : Migration
     {

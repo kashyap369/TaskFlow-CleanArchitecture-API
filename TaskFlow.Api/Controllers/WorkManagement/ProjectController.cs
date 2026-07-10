@@ -1,4 +1,5 @@
 ﻿using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using TaskFlow.Application.Features.WorkManagement.Projects.Commands.CreateProject;
 using TaskFlow.Application.Features.WorkManagement.Projects.Commands.DeleteProject;
@@ -6,6 +7,7 @@ using TaskFlow.Application.Features.WorkManagement.Projects.Commands.UpdateProje
 
 namespace TaskFlow.Api.Controllers.WorkManagement
 {
+    [Authorize]
     [Route("api/[controller]")]
     [ApiController]
     public class ProjectController : ControllerBase

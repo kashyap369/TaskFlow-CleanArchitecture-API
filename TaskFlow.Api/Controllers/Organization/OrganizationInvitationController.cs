@@ -1,4 +1,5 @@
 ﻿using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using TaskFlow.Application.Features.Organizations.OrganizationInvitation.Commands.AcceptInvitation;
 using TaskFlow.Application.Features.Organizations.OrganizationInvitation.Commands.CancelInvitation;
@@ -7,6 +8,7 @@ using TaskFlow.Application.Features.Organizations.OrganizationInvitation.Command
 
 namespace TaskFlow.Api.Controllers.Organization
 {
+    [Authorize]
     [Route("api/[controller]")]
     [ApiController]
     public class OrganizationInvitationController : ControllerBase
