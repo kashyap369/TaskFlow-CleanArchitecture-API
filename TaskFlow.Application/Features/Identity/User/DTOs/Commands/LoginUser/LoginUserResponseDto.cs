@@ -9,5 +9,12 @@
         public string Email { get; init; } = string.Empty;
 
         public string Token { get; init; } = string.Empty;
+
+        public string RefreshToken { get; init; } = string.Empty;
+
+        public DateTime RefreshTokenExpiresAt { get; init; }
+
+        public IReadOnlyList<string> Roles { get; init; } =
+            Array.Empty<string>();
     }
 }

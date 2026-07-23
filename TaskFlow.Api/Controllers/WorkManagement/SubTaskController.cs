@@ -6,10 +6,12 @@ using TaskFlow.Application.Features.WorkManagement.SubTasks.Commands.CreateSubTa
 using TaskFlow.Application.Features.WorkManagement.SubTasks.Commands.DeleteSubTask;
 using TaskFlow.Application.Features.WorkManagement.SubTasks.Commands.ReOpenSubTask;
 using TaskFlow.Application.Features.WorkManagement.SubTasks.Commands.UpdateSubTask;
+using TaskFlow.Application.Features.WorkManagement.SubTasks.Queries.GetTaskSubTasks;
 
 namespace TaskFlow.Api.Controllers.WorkManagement
 {
-    [Authorize]
+    // Development stage: endpoints are open. Secure later with:
+    // [Authorize(Policy = Constants.AuthorizationPolicies.AllRoles)]
     [Route("api/[controller]")]
     [ApiController]
     public class SubTaskController : ControllerBase
@@ -81,5 +83,17 @@ namespace TaskFlow.Api.Controllers.WorkManagement
             return NoContent();
         }
 
+        [HttpGet("task/{taskId:int}")]
+        public async Task<IActionResult> GetByTask(
+            int taskId,
+            CancellationToken cancellationToken)
+        {
+            var subTasks =
+                await _mediator.Send(
+                    new GetTaskSubTasksQuery(taskId),
+                    cancellationToken);
+
+            return Ok(subTasks);
+        }
     }
 }

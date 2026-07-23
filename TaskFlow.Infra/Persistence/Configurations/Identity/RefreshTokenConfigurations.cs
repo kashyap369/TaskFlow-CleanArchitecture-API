@@ -28,10 +28,12 @@ namespace TaskFlow.Infra.Persistence.Configurations.Identity
                 .IsRequired();
 
             builder.Property(x => x.RevokedByIp)
-                .HasMaxLength(100);
+                .HasMaxLength(100)
+                .IsRequired(false);
 
             builder.Property(x => x.ReplacedByToken)
-                .HasMaxLength(500);
+                .HasMaxLength(500)
+                .IsRequired(false);
 
             builder.Property(x => x.ExpiresAt)
                 .IsRequired();

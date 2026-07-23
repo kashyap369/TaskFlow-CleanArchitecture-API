@@ -24,6 +24,14 @@ namespace TaskFlow.Infra.Persistence.Configurations.Identity
                 .HasConversion<int>()
                 .IsRequired();
 
+            // Default keeps existing rows valid: every user
+            // created before account types is an Individual.
+            builder.Property(x => x.AccountType)
+                .HasConversion<int>()
+                .HasDefaultValue(
+                    Domain.Enums.Identity.AccountType.Individual)
+                .IsRequired();
+
             builder.Property(x => x.IsEmailVerified)
                 .IsRequired();
 

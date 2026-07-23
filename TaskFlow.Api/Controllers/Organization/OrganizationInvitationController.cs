@@ -5,10 +5,13 @@ using TaskFlow.Application.Features.Organizations.OrganizationInvitation.Command
 using TaskFlow.Application.Features.Organizations.OrganizationInvitation.Commands.CancelInvitation;
 using TaskFlow.Application.Features.Organizations.OrganizationInvitation.Commands.InviteUser;
 using TaskFlow.Application.Features.Organizations.OrganizationInvitation.Commands.RejectInvitation;
+using TaskFlow.Application.Features.Organizations.OrganizationInvitation.Queries.GetMyInvitations;
+using TaskFlow.Application.Features.Organizations.OrganizationInvitation.Queries.GetOrganizationInvitations;
 
 namespace TaskFlow.Api.Controllers.Organization
 {
-    [Authorize]
+    // Development stage: endpoints are open. Secure later with:
+    // [Authorize(Policy = Constants.AuthorizationPolicies.ManagerAndAbove)]
     [Route("api/[controller]")]
     [ApiController]
     public class OrganizationInvitationController : ControllerBase
@@ -72,6 +75,29 @@ namespace TaskFlow.Api.Controllers.Organization
             return NoContent();
         }
 
+        [HttpGet("organization/{organizationId:int}")]
+        public async Task<IActionResult> GetByOrganization(
+            int organizationId,
+            CancellationToken cancellationToken)
+        {
+            var invitations =
+                await _mediator.Send(
+                    new GetOrganizationInvitationsQuery(organizationId),
+                    cancellationToken);
 
+            return Ok(invitations);
+        }
+
+        [HttpGet("mine")]
+        public async Task<IActionResult> GetMine(
+            CancellationToken cancellationToken)
+        {
+            var invitations =
+                await _mediator.Send(
+                    new GetMyInvitationsQuery(),
+                    cancellationToken);
+
+            return Ok(invitations);
+        }
     }
 }

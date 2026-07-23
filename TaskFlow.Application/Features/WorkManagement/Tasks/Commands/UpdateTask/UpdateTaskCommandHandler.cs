@@ -38,6 +38,7 @@ namespace TaskFlow.Application.Features.WorkManagement.Tasks.Commands.UpdateTask
             var existingTask =
                 await _taskRepository.GetByTitleAsync(
                     task.OrganizationId,
+                    task.CreatedByUserId,
                     request.Title,
                     cancellationToken);
 

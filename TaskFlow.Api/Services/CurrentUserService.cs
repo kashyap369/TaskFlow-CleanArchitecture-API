@@ -53,5 +53,21 @@ namespace TaskFlow.Api.Services
                 return emailClaim;
             }
         }
+
+        public string IpAddress
+        {
+            get
+            {
+                var ipAddress =
+                    _httpContextAccessor.HttpContext?
+                        .Connection
+                        .RemoteIpAddress?
+                        .ToString();
+
+                return string.IsNullOrWhiteSpace(ipAddress)
+                    ? "unknown"
+                    : ipAddress;
+            }
+        }
     }
 }

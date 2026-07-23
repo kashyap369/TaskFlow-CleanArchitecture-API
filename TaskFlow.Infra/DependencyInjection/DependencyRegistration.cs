@@ -6,10 +6,13 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using TaskFlow.Application.Contracts.Email;
+using TaskFlow.Application.Contracts.Persistence;
 using TaskFlow.Application.Contracts.Security;
 using TaskFlow.Application.DomainEvents;
 using TaskFlow.Application.DomainEvents.Identity.User;
+using TaskFlow.Application.DomainEvents.Organizations;
 using TaskFlow.Domain.DomainEvents.Identity.User;
+using TaskFlow.Domain.DomainEvents.Organizations;
 using TaskFlow.Domain.Interfaces.Identity.Users;
 using TaskFlow.Domain.Interfaces.Organizations;
 using TaskFlow.Domain.Interfaces.Persistence;
@@ -42,7 +45,17 @@ namespace TaskFlow.Infra.DependencyInjection
             services.AddScoped<IUnitOfWork, UnitOfWork>();
             services.AddScoped<IPasswordHasher, PasswordHasher>();
             services.AddScoped<IUserRepository, UserRepository>();
+            services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
+            services.AddScoped<ISystemRoleRepository, SystemRoleRepository>();
+            services.AddScoped<IUserRoleRepository, UserRoleRepository>();
             services.AddScoped<IDomainEventHandler<UserRegisteredEvent>, UserRegisteredEventHandler>();
+            services.AddScoped<IDomainEventHandler<OrganizationMemberInvitedEvent>, OrganizationMemberInvitedEventHandler>();
+            services.AddScoped<IOrganizationPermissionChecker, OrganizationPermissionChecker>();
+
+            // Read side (Dapper): a connection factory the query
+            // handlers use to run raw SQL straight into DTOs.
+            services.AddSingleton<ISqlConnectionFactory, TaskFlow.Infra.Dapper.SqlConnectionFactory>();
+
             services.Configure<JwtSettings>(configuration.GetSection("JwtSettings"));
             services.Configure<EmailSettings>(configuration.GetSection("EmailSettings"));
             // Register the organization repositories
@@ -62,6 +75,14 @@ namespace TaskFlow.Infra.DependencyInjection
                 IOrganizationInvitationRepository,
                 OrganizationInvitationRepository>();
 
+            services.AddScoped<
+                ITeamRepository,
+                TeamRepository>();
+
+            services.AddScoped<
+                IOrganizationPermissionRepository,
+                OrganizationPermissionRepository>();
+
             // Register the Wrok management  repositories
             services.AddScoped<
     IProjectRepository,
@@ -74,6 +95,10 @@ namespace TaskFlow.Infra.DependencyInjection
             services.AddScoped<
                 ISubTaskRepository,
                 SubTaskRepository>();
+
+            services.AddScoped<
+                ITaskWorkLogRepository,
+                TaskWorkLogRepository>();
 
             services.AddScoped<SmtpEmailSender>();
 

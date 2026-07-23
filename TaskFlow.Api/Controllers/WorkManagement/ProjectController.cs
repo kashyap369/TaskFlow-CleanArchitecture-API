@@ -4,10 +4,13 @@ using Microsoft.AspNetCore.Mvc;
 using TaskFlow.Application.Features.WorkManagement.Projects.Commands.CreateProject;
 using TaskFlow.Application.Features.WorkManagement.Projects.Commands.DeleteProject;
 using TaskFlow.Application.Features.WorkManagement.Projects.Commands.UpdateProject;
+using TaskFlow.Application.Features.WorkManagement.Projects.Queries.GetOrganizationProjects;
+using TaskFlow.Application.Features.WorkManagement.Projects.Queries.GetProjectById;
 
 namespace TaskFlow.Api.Controllers.WorkManagement
 {
-    [Authorize]
+    // Development stage: endpoints are open. Secure later with:
+    // [Authorize(Policy = Constants.AuthorizationPolicies.ManagerAndAbove)]
     [Route("api/[controller]")]
     [ApiController]
     public class ProjectController : ControllerBase
@@ -56,5 +59,30 @@ namespace TaskFlow.Api.Controllers.WorkManagement
             return NoContent();
         }
 
+        [HttpGet("{projectId:int}")]
+        public async Task<IActionResult> GetById(
+            int projectId,
+            CancellationToken cancellationToken)
+        {
+            var project =
+                await _mediator.Send(
+                    new GetProjectByIdQuery(projectId),
+                    cancellationToken);
+
+            return Ok(project);
+        }
+
+        [HttpGet("organization/{organizationId:int}")]
+        public async Task<IActionResult> GetByOrganization(
+            int organizationId,
+            CancellationToken cancellationToken)
+        {
+            var projects =
+                await _mediator.Send(
+                    new GetOrganizationProjectsQuery(organizationId),
+                    cancellationToken);
+
+            return Ok(projects);
+        }
     }
 }

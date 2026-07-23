@@ -5,10 +5,12 @@ using TaskFlow.Application.Features.Organizations.OrganizationMember.Commands.Ac
 using TaskFlow.Application.Features.Organizations.OrganizationMember.Commands.ChangeMemberRole;
 using TaskFlow.Application.Features.Organizations.OrganizationMember.Commands.DeactivateMember;
 using TaskFlow.Application.Features.Organizations.OrganizationMember.Commands.RemoveMember;
+using TaskFlow.Application.Features.Organizations.OrganizationMember.Queries.GetOrganizationMembers;
 
 namespace TaskFlow.Api.Controllers.Organization
 {
-    [Authorize]
+    // Development stage: endpoints are open. Secure later with:
+    // [Authorize(Policy = Constants.AuthorizationPolicies.ManagerAndAbove)]
     [Route("api/[controller]")]
     [ApiController]
     public class OrganizationMemberController : ControllerBase
@@ -64,6 +66,19 @@ namespace TaskFlow.Api.Controllers.Organization
                 cancellationToken);
 
             return NoContent();
+        }
+
+        [HttpGet("organization/{organizationId:int}")]
+        public async Task<IActionResult> GetByOrganization(
+            int organizationId,
+            CancellationToken cancellationToken)
+        {
+            var members =
+                await _mediator.Send(
+                    new GetOrganizationMembersQuery(organizationId),
+                    cancellationToken);
+
+            return Ok(members);
         }
     }
 }

@@ -8,6 +8,14 @@ namespace TaskFlow.Domain.Interfaces.Organizations
             int id,
             CancellationToken cancellationToken = default);
 
+        /// <summary>
+        /// Loads the role including its granted permissions —
+        /// use this before Grant/Revoke/HasPermission.
+        /// </summary>
+        Task<OrganizationRole?> GetByIdWithPermissionsAsync(
+            int id,
+            CancellationToken cancellationToken = default);
+
         Task<OrganizationRole?> GetByNameAsync(
             int organizationId,
             string roleName,

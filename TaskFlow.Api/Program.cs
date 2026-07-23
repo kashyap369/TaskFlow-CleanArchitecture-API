@@ -4,7 +4,9 @@ using TaskFlow.Application.Contracts.Security;
 using TaskFlow.Application.DependencyInjection;
 using TaskFlow.Infra.DependencyInjection;
 using TaskFlow.Infra.Persistence.Context;
+using TaskFlow.Infra.Seeder.Identity.Role;
 using TaskFlow.Infra.Seeder.Identity.User;
+using TaskFlow.Infra.Seeder.Organization.Permission;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -53,6 +55,11 @@ builder.Services.AddInfrastructure(
 builder.Services.AddHttpContextAccessor();
 
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
+
+// Role based authorization policies (AdminOnly,
+// ManagerAndAbove, ...) — see ServiceCollectionExtensions.
+
+builder.Services.AddAuthorizationPolicies();
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AngularPolicy", policy =>
@@ -97,9 +104,18 @@ using (var scope = app.Services.CreateScope())
         scope.ServiceProvider
             .GetRequiredService<IPasswordHasher>();
 
+    // Roles first, because the user seeder assigns
+    // the Admin role to the seeded admin user.
+    await RoleSeeder.SeedAsync(context);
+
     await UserSeeder.SeedAsync(
         context,
         passwordHasher);
+
+    // Organization permission catalog — populated from
+    // OrganizationPermissionNames so roles can be granted
+    // permissions by id.
+    await OrganizationPermissionSeeder.SeedAsync(context);
 }
 
 app.Run();

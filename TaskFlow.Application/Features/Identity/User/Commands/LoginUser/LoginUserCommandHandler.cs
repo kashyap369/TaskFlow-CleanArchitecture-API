@@ -13,19 +13,28 @@ namespace TaskFlow.Application.Features.Identity.User.Commands.LoginUser
         : IRequestHandler<LoginUserCommand, LoginUserResponseDto>
     {
         private readonly IUserRepository _userRepository;
+        private readonly IUserRoleRepository _userRoleRepository;
+        private readonly IRefreshTokenRepository _refreshTokenRepository;
         private readonly IPasswordHasher _passwordHasher;
         private readonly IJwtProvider _jwtProvider;
+        private readonly ICurrentUserService _currentUserService;
         private readonly IUnitOfWork _unitOfWork;
 
         public LoginUserCommandHandler(
             IUserRepository userRepository,
+            IUserRoleRepository userRoleRepository,
+            IRefreshTokenRepository refreshTokenRepository,
             IPasswordHasher passwordHasher,
             IJwtProvider jwtProvider,
+            ICurrentUserService currentUserService,
             IUnitOfWork unitOfWork)
         {
             _userRepository = userRepository;
+            _userRoleRepository = userRoleRepository;
+            _refreshTokenRepository = refreshTokenRepository;
             _passwordHasher = passwordHasher;
             _jwtProvider = jwtProvider;
+            _currentUserService = currentUserService;
             _unitOfWork = unitOfWork;
         }
 
@@ -85,20 +94,47 @@ namespace TaskFlow.Application.Features.Identity.User.Commands.LoginUser
 
             _userRepository.Update(user);
 
-            await _unitOfWork.SaveChangesAsync(
-                cancellationToken);
+            // The user's system roles go into the JWT as
+            // role claims, so authorization policies can
+            // check them without hitting the database.
+            var roles =
+                await _userRoleRepository
+                    .GetRoleNamesByUserIdAsync(
+                        user.Id,
+                        cancellationToken);
 
             var token =
                 _jwtProvider.GenerateToken(
                     user.Id,
-                    user.Email.Value);
+                    user.Email.Value,
+                    roles);
+
+            // The refresh token is a random string stored in
+            // the database. It is used to get a new access
+            // token when the current one expires.
+            var refreshToken =
+                new Domain.Entities.Identity.RefreshToken(
+                    user.Id,
+                    _jwtProvider.GenerateRefreshToken(),
+                    _jwtProvider.GetRefreshTokenExpiryDate(),
+                    _currentUserService.IpAddress);
+
+            await _refreshTokenRepository.AddAsync(
+                refreshToken,
+                cancellationToken);
+
+            await _unitOfWork.SaveChangesAsync(
+                cancellationToken);
 
             return new LoginUserResponseDto
             {
                 UserId = user.Id,
                 FullName = user.FullName.DisplayName,
                 Email = user.Email.Value,
-                Token = token
+                Token = token,
+                RefreshToken = refreshToken.Token,
+                RefreshTokenExpiresAt = refreshToken.ExpiresAt,
+                Roles = roles
             };
         }
     }

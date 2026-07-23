@@ -26,6 +26,17 @@ namespace TaskFlow.Infra.Persistence.Repositories.Organizations
                     cancellationToken);
         }
 
+        public async Task<OrganizationRole?> GetByIdWithPermissionsAsync(
+            int id,
+            CancellationToken cancellationToken = default)
+        {
+            return await _context.OrganizationRoles
+                .Include(x => x.Permissions)
+                .FirstOrDefaultAsync(
+                    x => x.Id == id,
+                    cancellationToken);
+        }
+
         public async Task<OrganizationRole?> GetByNameAsync(
             int organizationId,
             string roleName,

@@ -31,11 +31,13 @@ namespace TaskFlow.Infra.Persistence.Configurations.WorkManagement
                 .HasConversion<int>()
                 .IsRequired();
 
-            builder.Property(x => x.OrganizationId)
-                .IsRequired();
+            // Nullable: personal tasks have no organization.
+            builder.Property(x => x.OrganizationId);
 
             builder.Property(x => x.CreatedByUserId)
                 .IsRequired();
+
+            builder.Property(x => x.AssignedToUserId);
 
             builder.Property(x => x.StartDate)
                 .IsRequired();
@@ -57,6 +59,8 @@ namespace TaskFlow.Infra.Persistence.Configurations.WorkManagement
             builder.HasIndex(x => x.ProjectId);
 
             builder.HasIndex(x => x.CreatedByUserId);
+
+            builder.HasIndex(x => x.AssignedToUserId);
 
             builder.HasIndex(x => x.Priority);
 

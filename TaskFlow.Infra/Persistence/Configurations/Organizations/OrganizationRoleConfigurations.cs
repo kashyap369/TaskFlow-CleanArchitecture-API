@@ -26,6 +26,11 @@ namespace TaskFlow.Infra.Persistence.Configurations.Organizations
             builder.Property(x => x.Description)
                 .HasMaxLength(500);
 
+            builder.Metadata
+                .FindNavigation(nameof(OrganizationRole.Permissions))
+                ?.SetPropertyAccessMode(
+                    PropertyAccessMode.Field);
+
             builder.Property(x => x.CreatedAt)
                 .IsRequired();
 

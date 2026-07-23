@@ -15,9 +15,11 @@ namespace TaskFlow.Domain.Entities.Identity
 
         public string CreatedByIp { get; private set; }
 
-        public string RevokedByIp { get; private set; }
+        // Only set when the token is revoked / rotated, so both
+        // are nullable — a freshly issued token has neither.
+        public string? RevokedByIp { get; private set; }
 
-        public string ReplacedByToken { get; private set; }
+        public string? ReplacedByToken { get; private set; }
 
         public bool IsExpired =>
             DateTime.UtcNow >= ExpiresAt;
@@ -46,7 +48,7 @@ namespace TaskFlow.Domain.Entities.Identity
 
         public void Revoke(
             string revokedByIp,
-            string replacedByToken = null)
+            string? replacedByToken = null)
         {
             if (IsRevoked)
                 return;

@@ -20,6 +20,10 @@ namespace TaskFlow.Domain.Interfaces.WorkManagement
             int userId,
             CancellationToken cancellationToken = default);
 
+        Task<IReadOnlyList<TaskEntity>> GetByAssignedUserIdAsync(
+            int userId,
+            CancellationToken cancellationToken = default);
+
         Task<bool> ExistsAsync(
             int id,
             CancellationToken cancellationToken = default);
@@ -33,8 +37,14 @@ namespace TaskFlow.Domain.Interfaces.WorkManagement
 
         void Remove(
             TaskEntity task);
+        /// <summary>
+        /// Duplicate-title lookup. Organization tasks are scoped
+        /// per organization; personal tasks (organizationId null)
+        /// are scoped per creator.
+        /// </summary>
         Task<TaskEntity?> GetByTitleAsync(
-    int organizationId,
+    int? organizationId,
+    int createdByUserId,
     string title,
     CancellationToken cancellationToken = default);
     }

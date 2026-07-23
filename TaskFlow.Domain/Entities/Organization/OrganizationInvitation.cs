@@ -1,5 +1,6 @@
 ﻿using System;
 using TaskFlow.Domain.Common;
+using TaskFlow.Domain.DomainEvents.Organizations;
 using TaskFlow.Domain.Enums.Organizations;
 
 namespace TaskFlow.Domain.Entities.Organization
@@ -36,6 +37,15 @@ namespace TaskFlow.Domain.Entities.Organization
             ExpiryDate = expiryDate;
 
             Status = InvitationStatus.Pending;
+
+            // Handled by the Application layer to send the
+            // invitation email after the invitation is saved.
+            AddDomainEvent(
+                new OrganizationMemberInvitedEvent(
+                    organizationId,
+                    Email,
+                    organizationRoleId,
+                    invitedByUserId));
         }
 
         public void Accept()

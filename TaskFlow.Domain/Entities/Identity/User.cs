@@ -18,6 +18,13 @@ namespace TaskFlow.Domain.Entities.Identity
 
         public UserStatus Status { get; private set; }
 
+        /// <summary>
+        /// Individual — personal workspace (own tasks/subtasks
+        /// and personal reports). Organization — registered a
+        /// company account and can own an organization.
+        /// </summary>
+        public AccountType AccountType { get; private set; }
+
         public bool IsEmailVerified { get; private set; }
 
         public DateTime? LastLoginAt { get; private set; }
@@ -30,7 +37,8 @@ namespace TaskFlow.Domain.Entities.Identity
             FullName name,
             Email email,
             PhoneNumber phoneNumber,
-            string passwordHash)
+            string passwordHash,
+            AccountType accountType)
         {
             FullName = name ??
                 throw new ArgumentNullException(nameof(name));
@@ -48,6 +56,8 @@ namespace TaskFlow.Domain.Entities.Identity
 
             PasswordHash = passwordHash;
 
+            AccountType = accountType;
+
             Status = UserStatus.PendingVerification;
 
             IsEmailVerified = false;
@@ -57,13 +67,15 @@ namespace TaskFlow.Domain.Entities.Identity
             FullName name,
             Email email,
             PhoneNumber phoneNumber,
-            string passwordHash)
+            string passwordHash,
+            AccountType accountType = AccountType.Individual)
         {
             var user = new User(
                 name,
                 email,
                 phoneNumber,
-                passwordHash);
+                passwordHash,
+                accountType);
 
             user.AddDomainEvent(
                 new UserRegisteredEvent(

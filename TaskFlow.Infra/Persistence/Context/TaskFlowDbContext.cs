@@ -5,6 +5,7 @@ using TaskFlow.Domain.Entities.Identity;
 using TaskFlow.Domain.Entities.Organization;
 using TaskFlow.Domain.Entities.WorkManagement.Projects;
 using TaskFlow.Domain.Entities.WorkManagement.SubTasks;
+using TaskFlow.Domain.Entities.WorkManagement.WorkLogs;
 using TaskFlow.Infra.DomainEvents.Dispatchers;
 using Task = TaskFlow.Domain.Entities.WorkManagement.Tasks.Task;
 namespace TaskFlow.Infra.Persistence.Context
@@ -35,6 +36,16 @@ namespace TaskFlow.Infra.Persistence.Context
         public DbSet<SubTask> SubTasks => Set<SubTask>();
 
         public DbSet<UserRole> UserRoles => Set<UserRole>();
+
+        public DbSet<Team> Teams => Set<Team>();
+
+        public DbSet<TeamMember> TeamMembers => Set<TeamMember>();
+
+        public DbSet<OrganizationPermission> OrganizationPermissions => Set<OrganizationPermission>();
+
+        public DbSet<OrganizationRolePermission> OrganizationRolePermissions => Set<OrganizationRolePermission>();
+
+        public DbSet<TaskWorkLog> TaskWorkLogs => Set<TaskWorkLog>();
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             modelBuilder.ApplyConfigurationsFromAssembly(typeof(TaskFlowDbContext).Assembly);

@@ -1,4 +1,5 @@
 ﻿using TaskFlow.Domain.Common;
+using TaskFlow.Domain.DomainEvents.WorkManagement.Tasks;
 using TaskFlow.Domain.Entities.WorkManagement.SubTasks;
 using TaskFlow.Domain.Enums.WorkManagement;
 using TaskStatus = TaskFlow.Domain.Enums.WorkManagement.TaskStatus;
@@ -24,9 +25,23 @@ public class Task : AuditableEntity
     public DateTime? ActualCompletionDate { get; private set; }
 
     public int? ProjectId { get; private set; }
-    public int OrganizationId { get; private set; }
+
+    /// <summary>
+    /// Null for a personal task (Individual account).
+    /// Set for an organization task.
+    /// </summary>
+    public int? OrganizationId { get; private set; }
 
     public int CreatedByUserId { get; private set; }
+
+    /// <summary>
+    /// The member currently assigned to work on this task.
+    /// Only organization tasks can be assigned.
+    /// </summary>
+    public int? AssignedToUserId { get; private set; }
+
+    public bool IsPersonal =>
+        !OrganizationId.HasValue;
 
     public IReadOnlyCollection<SubTask> SubTasks =>
         _subTasks.AsReadOnly();
@@ -40,7 +55,7 @@ public class Task : AuditableEntity
      string description,
      DateTime startDate,
      TaskPriority priority,
-     int organizationId,
+     int? organizationId,
      int createdByUserId,
      DateTime? expectedCompletionDate = null,
      int? projectId = null)
@@ -49,10 +64,17 @@ public class Task : AuditableEntity
             throw new ArgumentException(
                 "Task title is required.");
 
-        if (organizationId <= 0)
+        if (organizationId.HasValue && organizationId <= 0)
             throw new ArgumentException(
-                "OrganizationId is required.",
+                "OrganizationId must be positive.",
                 nameof(organizationId));
+
+        // Projects only exist inside organizations, so a
+        // personal task can never belong to a project.
+        if (projectId.HasValue && !organizationId.HasValue)
+            throw new ArgumentException(
+                "A personal task cannot belong to a project.",
+                nameof(projectId));
 
         if (createdByUserId <= 0)
             throw new ArgumentException(
@@ -141,6 +163,69 @@ public class Task : AuditableEntity
         ActualCompletionDate = DateTime.UtcNow;
 
         MarkAsUpdated();
+
+        AddDomainEvent(
+            new TaskCompletedEvent(
+                Id,
+                AssignedToUserId));
+    }
+
+    /// <summary>
+    /// Assigns the task to an organization member. Personal
+    /// tasks cannot be assigned. Reassigning raises a new
+    /// TaskAssignedEvent carrying the previous assignee, so
+    /// assignment history is available for reports.
+    /// </summary>
+    public void Assign(
+        int assignedToUserId,
+        int assignedByUserId)
+    {
+        if (IsPersonal)
+            throw new InvalidOperationException(
+                "Personal tasks cannot be assigned.");
+
+        if (assignedToUserId <= 0)
+            throw new ArgumentException(
+                "AssignedToUserId is required.",
+                nameof(assignedToUserId));
+
+        if (Status == TaskStatus.Completed)
+            throw new InvalidOperationException(
+                "Completed task cannot be assigned.");
+
+        if (AssignedToUserId == assignedToUserId)
+            return;
+
+        var previousAssignedToUserId = AssignedToUserId;
+
+        AssignedToUserId = assignedToUserId;
+
+        MarkAsUpdated();
+
+        AddDomainEvent(
+            new TaskAssignedEvent(
+                Id,
+                assignedToUserId,
+                assignedByUserId,
+                previousAssignedToUserId));
+    }
+
+    public void Unassign(int unassignedByUserId)
+    {
+        if (!AssignedToUserId.HasValue)
+            return;
+
+        var previousAssignedToUserId = AssignedToUserId.Value;
+
+        AssignedToUserId = null;
+
+        MarkAsUpdated();
+
+        AddDomainEvent(
+            new TaskUnassignedEvent(
+                Id,
+                previousAssignedToUserId,
+                unassignedByUserId));
     }
 
     public void RecalculateStatus()
@@ -150,7 +235,15 @@ public class Task : AuditableEntity
 
         if (_subTasks.All(x => x.Status == TaskStatus.Completed))
         {
-            Status =TaskStatus.Completed;
+            if (Status != TaskStatus.Completed)
+            {
+                AddDomainEvent(
+                    new TaskCompletedEvent(
+                        Id,
+                        AssignedToUserId));
+            }
+
+            Status = TaskStatus.Completed;
             ActualCompletionDate = DateTime.UtcNow;
         }
         else

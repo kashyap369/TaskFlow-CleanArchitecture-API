@@ -4,10 +4,13 @@ using Microsoft.AspNetCore.Mvc;
 using TaskFlow.Application.Features.Organizations.Organization.Commands.DeleteOrganization;
 using TaskFlow.Application.Features.Organizations.Organization.Commands.CreateOrganization;
 using TaskFlow.Application.Features.Organizations.Organization.Commands.UpdateOraganization;
+using TaskFlow.Application.Features.Organizations.Organization.Queries.GetMyOrganizations;
+using TaskFlow.Application.Features.Organizations.Organization.Queries.GetOrganizationById;
 
 namespace TaskFlow.Api.Controllers.Organization
 {
-    [Authorize]
+    // Development stage: endpoints are open. Secure later with:
+    // [Authorize(Policy = Constants.AuthorizationPolicies.ManagerAndAbove)]
     [Route("api/[controller]")]
     [ApiController]
     public class OrganizationController : ControllerBase
@@ -54,6 +57,29 @@ namespace TaskFlow.Api.Controllers.Organization
             return NoContent();
         }
 
+        [HttpGet("mine")]
+        public async Task<IActionResult> GetMine(
+            CancellationToken cancellationToken)
+        {
+            var organizations =
+                await _mediator.Send(
+                    new GetMyOrganizationsQuery(),
+                    cancellationToken);
 
+            return Ok(organizations);
+        }
+
+        [HttpGet("{organizationId:int}")]
+        public async Task<IActionResult> GetById(
+            int organizationId,
+            CancellationToken cancellationToken)
+        {
+            var organization =
+                await _mediator.Send(
+                    new GetOrganizationByIdQuery(organizationId),
+                    cancellationToken);
+
+            return Ok(organization);
+        }
     }
 }

@@ -38,6 +38,10 @@ namespace TaskFlow.Application.Features.Identity.User.Validators.Commands.Regist
                 .Matches("[0-9]")
                 .WithMessage(
                     "Password must contain at least one number.");
+
+            RuleFor(x => x.AccountType)
+                .IsInEnum()
+                .WithMessage("Invalid account type.");
         }
     }
 }

@@ -28,16 +28,29 @@ namespace TaskFlow.Infra.Persistence.Repositories.WorkManagement
                     cancellationToken);
         }
         public async Task<TaskEntity?> GetByTitleAsync(
-    int organizationId,
+    int? organizationId,
+    int createdByUserId,
     string title,
     CancellationToken cancellationToken = default)
         {
             var normalizedTitle =
                 title.Trim().ToLower();
 
+            if (organizationId.HasValue)
+            {
+                return await _context.Tasks
+                    .FirstOrDefaultAsync(
+                        x => x.OrganizationId == organizationId
+                          && x.Title.ToLower() == normalizedTitle,
+                        cancellationToken);
+            }
+
+            // Personal tasks: titles only clash within the
+            // same user's personal workspace.
             return await _context.Tasks
                 .FirstOrDefaultAsync(
-                    x => x.OrganizationId == organizationId
+                    x => x.OrganizationId == null
+                      && x.CreatedByUserId == createdByUserId
                       && x.Title.ToLower() == normalizedTitle,
                     cancellationToken);
         }
@@ -68,6 +81,16 @@ namespace TaskFlow.Infra.Persistence.Repositories.WorkManagement
         {
             return await _context.Tasks
                 .Where(x => x.CreatedByUserId == userId)
+                .ToListAsync(cancellationToken);
+        }
+
+        public async Task<IReadOnlyList<TaskEntity>>
+            GetByAssignedUserIdAsync(
+                int userId,
+                CancellationToken cancellationToken = default)
+        {
+            return await _context.Tasks
+                .Where(x => x.AssignedToUserId == userId)
                 .ToListAsync(cancellationToken);
         }
 
