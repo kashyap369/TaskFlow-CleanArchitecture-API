@@ -1,7 +1,7 @@
 # TaskFlow — Claude Code Guide
 
 ## Summary
-TaskFlow is a Task Management System REST API (ASP.NET Core, PostgreSQL) with two account types: **Individual** users (personal tasks/subtasks + tracking reports) and **Organizations** (owner, custom roles with permissions, email invitations, teams, task assignment, projects, and a reporting dashboard — team/member/project reports, time tracking). Architecture: Clean Architecture, DDD, CQRS (MediatR), Domain Events, Repository Pattern (write side), Dapper (read side — planned, not yet implemented), FluentValidation, JWT auth with refresh-token rotation. An Angular frontend (localhost:4200) is the intended client. Product vision: docs/OVERVIEW.md; roadmap: docs/PHASES.md.
+TaskFlow is a Task Management System REST API (ASP.NET Core, PostgreSQL) with two account types: **Individual** users (personal tasks/subtasks + tracking reports) and **Organizations** (owner, custom roles with permissions, email invitations, teams, task assignment, projects, and a reporting dashboard — team/member/project reports, time tracking). Architecture: Clean Architecture, DDD, CQRS (MediatR), Domain Events, Repository Pattern (write side), Dapper (read side — implemented via `ISqlConnectionFactory`), FluentValidation, JWT auth with refresh-token rotation. An Angular frontend (localhost:4200) is the intended client. Product vision: docs/OVERVIEW.md; roadmap: docs/PHASES.md.
 
 ## Solution Layout
 - `TaskFlow.Api` — controllers (thin, MediatR only), middlewares (exception handling, request logging), auth policies, `CurrentUserService`, response envelopes
@@ -23,7 +23,7 @@ DB: PostgreSQL, connection string `DefaultConnection`. Seeds on startup: system 
 - Controllers stay thin: no business logic, only `_mediator.Send(...)`. Business rules live in Domain entities; orchestration in handlers.
 - Never trust IDs from request bodies for identity/ownership — derive the current user from the JWT via `ICurrentUserService`.
 - All writes go through repositories + `IUnitOfWork.SaveChangesAsync()`. Handlers never touch EF Core directly.
-- All reads (queries) should use Dapper, not EF Core (read side still to be built).
+- All reads (queries) use Dapper via `ISqlConnectionFactory`, not EF Core. Query record + handler live in one file under `Queries/{Name}/`; see docs/CONVENTIONS.md for the raw-SQL rules (quote identifiers, filter `IsDeleted`, UTC dates).
 - Entity state changes only via entity methods (e.g. `user.Suspend()`), never property setters. Raise domain events inside entity methods for significant business events.
 - Errors: throw the typed exceptions from `TaskFlow.Application/Exceptions` (NotFound/Conflict/Unauthorized/Forbidden/Business) with a SCREAMING_SNAKE code — the exception middleware maps them to HTTP responses.
 - Input validation: FluentValidation validator per command, wired automatically via `ValidationBehavior`.
