@@ -1,5 +1,6 @@
 ﻿using Dapper;
 using MediatR;
+using TaskFlow.Application.Common.Authorization;
 using TaskFlow.Application.Contracts.Persistence;
 using TaskFlow.Application.Features.Reporting.DTOs;
 
@@ -15,7 +16,7 @@ namespace TaskFlow.Application.Features.Reporting.Queries.GetTeamPerformanceRepo
         int OrganizationId,
         DateTime From,
         DateTime To
-    ) : IRequest<IReadOnlyList<TeamPerformanceReportDto>>;
+    ) : IRequest<IReadOnlyList<TeamPerformanceReportDto>>, IOrganizationScopedRequest;
 
     public sealed class GetTeamPerformanceReportQueryHandler
         : IRequestHandler<GetTeamPerformanceReportQuery, IReadOnlyList<TeamPerformanceReportDto>>

@@ -1,5 +1,6 @@
 ﻿using Dapper;
 using MediatR;
+using TaskFlow.Application.Common.Authorization;
 using TaskFlow.Application.Contracts.Persistence;
 using TaskFlow.Application.Features.WorkManagement.Tasks.DTOs.Queries;
 
@@ -7,7 +8,7 @@ namespace TaskFlow.Application.Features.WorkManagement.Tasks.Queries.GetProjectT
 {
     public sealed record GetProjectTasksQuery(
         int ProjectId
-    ) : IRequest<IReadOnlyList<TaskListItemDto>>;
+    ) : IRequest<IReadOnlyList<TaskListItemDto>>, IProjectScopedRequest;
 
     public sealed class GetProjectTasksQueryHandler
         : IRequestHandler<GetProjectTasksQuery, IReadOnlyList<TaskListItemDto>>

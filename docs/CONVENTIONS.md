@@ -24,6 +24,8 @@ Handler pattern:
 - Date params bound to `timestamptz` columns must be UTC-kind: `DateTime.SpecifyKind(x, DateTimeKind.Utc)`.
 - Reports live under `Features/Reporting/`.
 
+**Read-side authorization (IDOR guard).** A query that returns organization-scoped data must be access-checked. Do this by having the query record implement the matching marker interface from `Common/Authorization/AccessScopedRequests.cs` — `IOrganizationScopedRequest` (property `OrganizationId`), `IProjectScopedRequest` (`ProjectId`), `ITaskScopedRequest` (`TaskId`), `ITeamScopedRequest` (`TeamId`), `IRoleScopedRequest` (`OrganizationRoleId`), `IUserScopedRequest` (`UserId`), or `IMemberReportScopedRequest` (`UserId`). `AccessGuardBehavior` (a MediatR pipeline behavior) resolves the id to its organization and calls `IOrganizationAccessGuard`, throwing `ForbiddenException` if the current user is not the owner/active member. No handler code needed — just the marker. Current-user "my …" queries and the global permission catalog are intentionally unmarked. Commands are never marked; they enforce permissions in the handler via `IOrganizationPermissionChecker`.
+
 DTOs: `Features/{Module}/{Entity}/DTOs/Commands/{FeatureName}/{FeatureName}ResponseDto.cs` — plain class with `init`/settable properties. Commands themselves are records and serve as the request DTO (bound directly from the body in controllers).
 
 ## Naming

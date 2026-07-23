@@ -2,6 +2,12 @@
 
 > Append-only. 3–5 lines per session. Focus on gotchas, dead ends, and decisions — things git history doesn't capture.
 
+## 2026-07-23 (IDOR fix — read-side org scoping)
+- Closed the IDOR gap: any authenticated user could read another org's data by guessing ids. Added `IOrganizationAccessGuard` (Infra/EF: owner or active member; resolves project/task/team/role → org; personal task → creator; user profile → self/shared-org; member report → self/owner-of-shared-org) and a MediatR `AccessGuardBehavior` that runs the check when a query implements one of the marker interfaces in `Common/Authorization/AccessScopedRequests.cs`.
+- Chose the pipeline-behavior + marker-interface approach over editing 19 handlers: one line per query record, no handler changes, and it can't be forgotten as easily. Commands are NOT marked (they already enforce permissions).
+- Verified live with a second user: seeded/verified `jane@example.com` via a throwaway Npgsql console (psql isn't installed; `dotnet ef` can't run arbitrary SQL). Result — admin (owner) 200 on org 1; jane (non-member) 403 on org/dashboard/tasks/team/role; jane self-profile 200 but admin-profile 403; jane "my" queries 200.
+- Note: querying a non-existent org id now returns 403 (guard denies before the handler's 404) — intentional, avoids leaking existence. DB now contains test data (org "Acme Inc", a team, role, task; jane as a verified user).
+
 ## 2026-07-23 (Security pass — [Authorize])
 - Applied `[Authorize(Policy = AllRoles)]` to every controller (org/work/team/worklog/report/user); `AdminOnly` on `UserController.GetAll`; AuthController left anonymous (register/login/refresh/logout — logout only needs the refresh token and `IpAddress` never throws). Chose AllRoles (not ManagerAndAbove as the old comments suggested) because an org owner may hold only the "User" system role — real org authz lives in the handlers via `IOrganizationPermissionChecker`.
 - Verified: unauth → 401 on query/command/report endpoints; login open; admin reaches `/user/me` + AdminOnly list. Couldn't exercise the non-admin→403 path live (no verified non-admin user; psql not installed) — it's standard `RequireRole` behavior.

@@ -23,6 +23,12 @@ namespace TaskFlow.Application.DependencyInjection
                 typeof(IPipelineBehavior<,>),
                 typeof(ValidationBehavior<,>));
 
+            // Runs after validation; enforces read-side access
+            // for requests marked with the access-scoped interfaces.
+            services.AddTransient(
+                typeof(IPipelineBehavior<,>),
+                typeof(AccessGuardBehavior<,>));
+
             return services;
         }
     }

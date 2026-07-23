@@ -1,5 +1,6 @@
 ﻿using Dapper;
 using MediatR;
+using TaskFlow.Application.Common.Authorization;
 using TaskFlow.Application.Contracts.Persistence;
 using TaskFlow.Application.Features.Reporting.DTOs;
 
@@ -7,7 +8,7 @@ namespace TaskFlow.Application.Features.Reporting.Queries.GetDashboardSummary
 {
     public sealed record GetDashboardSummaryQuery(
         int OrganizationId
-    ) : IRequest<DashboardSummaryDto>;
+    ) : IRequest<DashboardSummaryDto>, IOrganizationScopedRequest;
 
     public sealed class GetDashboardSummaryQueryHandler
         : IRequestHandler<GetDashboardSummaryQuery, DashboardSummaryDto>

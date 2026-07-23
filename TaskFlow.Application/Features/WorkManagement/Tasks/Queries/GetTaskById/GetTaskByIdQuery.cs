@@ -1,5 +1,6 @@
 ﻿using Dapper;
 using MediatR;
+using TaskFlow.Application.Common.Authorization;
 using TaskFlow.Application.Contracts.Persistence;
 using TaskFlow.Application.Exceptions;
 using TaskFlow.Application.Features.WorkManagement.SubTasks.DTOs.Queries;
@@ -9,7 +10,7 @@ namespace TaskFlow.Application.Features.WorkManagement.Tasks.Queries.GetTaskById
 {
     public sealed record GetTaskByIdQuery(
         int TaskId
-    ) : IRequest<TaskDetailDto>;
+    ) : IRequest<TaskDetailDto>, ITaskScopedRequest;
 
     public sealed class GetTaskByIdQueryHandler
         : IRequestHandler<GetTaskByIdQuery, TaskDetailDto>

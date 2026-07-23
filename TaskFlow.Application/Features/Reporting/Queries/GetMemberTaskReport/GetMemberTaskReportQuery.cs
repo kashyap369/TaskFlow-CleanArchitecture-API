@@ -1,5 +1,6 @@
 ﻿using Dapper;
 using MediatR;
+using TaskFlow.Application.Common.Authorization;
 using TaskFlow.Application.Contracts.Persistence;
 using TaskFlow.Application.Exceptions;
 using TaskFlow.Application.Features.Reporting.DTOs;
@@ -14,7 +15,7 @@ namespace TaskFlow.Application.Features.Reporting.Queries.GetMemberTaskReport
         int UserId,
         DateTime From,
         DateTime To
-    ) : IRequest<MemberTaskReportDto>;
+    ) : IRequest<MemberTaskReportDto>, IMemberReportScopedRequest;
 
     public sealed class GetMemberTaskReportQueryHandler
         : IRequestHandler<GetMemberTaskReportQuery, MemberTaskReportDto>

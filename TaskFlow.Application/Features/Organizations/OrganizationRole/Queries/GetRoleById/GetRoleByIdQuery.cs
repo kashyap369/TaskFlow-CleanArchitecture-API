@@ -1,5 +1,6 @@
 ﻿using Dapper;
 using MediatR;
+using TaskFlow.Application.Common.Authorization;
 using TaskFlow.Application.Contracts.Persistence;
 using TaskFlow.Application.Exceptions;
 using TaskFlow.Application.Features.Organizations.OrganizationRole.DTOs.Queries;
@@ -8,7 +9,7 @@ namespace TaskFlow.Application.Features.Organizations.OrganizationRole.Queries.G
 {
     public sealed record GetRoleByIdQuery(
         int OrganizationRoleId
-    ) : IRequest<OrganizationRoleDetailDto>;
+    ) : IRequest<OrganizationRoleDetailDto>, IRoleScopedRequest;
 
     public sealed class GetRoleByIdQueryHandler
         : IRequestHandler<GetRoleByIdQuery, OrganizationRoleDetailDto>

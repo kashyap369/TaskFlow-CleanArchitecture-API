@@ -2,6 +2,11 @@
 
 > Keep the Current Status section up to date at the end of every session.
 
+## Current Status (2026-07-23, IDOR fix)
+- ✅ **Read-side org scoping (IDOR) resolved.** New `IOrganizationAccessGuard` (Infra, EF) + `AccessGuardBehavior` (MediatR pipeline). Read queries implement a marker interface (`IOrganizationScopedRequest`/`IProjectScopedRequest`/`ITaskScopedRequest`/`ITeamScopedRequest`/`IRoleScopedRequest`/`IUserScopedRequest`/`IMemberReportScopedRequest`); the behavior resolves the id to an organization and verifies the current user is the owner or an active member before the handler runs. Personal tasks → creator only; user profile → self or shared org; member report → self or owner of a shared org.
+- Marked on all 19 org/project/task/team/role/user/report read queries; the "my …" queries and the permission catalog stay unmarked (already self-scoped or public). Commands are NOT marked — they keep their own `IOrganizationPermissionChecker` checks.
+- Verified live: owner (admin) → 200 on org 1; non-member (jane) → 403 on org 1 org/dashboard/tasks/team/role; jane sees her own profile (200) but not admin's (403); jane's own "my" queries → 200.
+
 ## Current Status (2026-07-23, security pass)
 - ✅ **`[Authorize]` applied to every controller** (closes the Phase 2 leftover). All controllers require `AuthorizationPolicies.AllRoles` (any authenticated user) — fine-grained org authorization already runs in the handlers via `IOrganizationPermissionChecker`. `UserController.GetAll` (list all users) is `AdminOnly`. AuthController (register/login/refresh/logout) stays anonymous.
   - Verified: unauthenticated requests → 401 across query/command/report endpoints; login stays open; admin token reaches `/user/me` and the AdminOnly user list.

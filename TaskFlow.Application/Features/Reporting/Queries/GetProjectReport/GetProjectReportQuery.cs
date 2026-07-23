@@ -1,5 +1,6 @@
 ﻿using Dapper;
 using MediatR;
+using TaskFlow.Application.Common.Authorization;
 using TaskFlow.Application.Contracts.Persistence;
 using TaskFlow.Application.Exceptions;
 using TaskFlow.Application.Features.Reporting.DTOs;
@@ -12,7 +13,7 @@ namespace TaskFlow.Application.Features.Reporting.Queries.GetProjectReport
     /// </summary>
     public sealed record GetProjectReportQuery(
         int ProjectId
-    ) : IRequest<ProjectReportDto>;
+    ) : IRequest<ProjectReportDto>, IProjectScopedRequest;
 
     public sealed class GetProjectReportQueryHandler
         : IRequestHandler<GetProjectReportQuery, ProjectReportDto>

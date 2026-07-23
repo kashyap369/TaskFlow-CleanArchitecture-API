@@ -51,6 +51,7 @@ namespace TaskFlow.Infra.DependencyInjection
             services.AddScoped<IDomainEventHandler<UserRegisteredEvent>, UserRegisteredEventHandler>();
             services.AddScoped<IDomainEventHandler<OrganizationMemberInvitedEvent>, OrganizationMemberInvitedEventHandler>();
             services.AddScoped<IOrganizationPermissionChecker, OrganizationPermissionChecker>();
+            services.AddScoped<IOrganizationAccessGuard, OrganizationAccessGuard>();
 
             // Read side (Dapper): a connection factory the query
             // handlers use to run raw SQL straight into DTOs.

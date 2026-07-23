@@ -1,5 +1,6 @@
 ﻿using Dapper;
 using MediatR;
+using TaskFlow.Application.Common.Authorization;
 using TaskFlow.Application.Contracts.Persistence;
 using TaskFlow.Application.Features.Organizations.OrganizationMember.DTOs.Queries;
 
@@ -7,7 +8,7 @@ namespace TaskFlow.Application.Features.Organizations.OrganizationMember.Queries
 {
     public sealed record GetOrganizationMembersQuery(
         int OrganizationId
-    ) : IRequest<IReadOnlyList<OrganizationMemberDto>>;
+    ) : IRequest<IReadOnlyList<OrganizationMemberDto>>, IOrganizationScopedRequest;
 
     public sealed class GetOrganizationMembersQueryHandler
         : IRequestHandler<GetOrganizationMembersQuery, IReadOnlyList<OrganizationMemberDto>>

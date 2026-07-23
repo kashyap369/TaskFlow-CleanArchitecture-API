@@ -1,5 +1,6 @@
 ﻿using Dapper;
 using MediatR;
+using TaskFlow.Application.Common.Authorization;
 using TaskFlow.Application.Contracts.Persistence;
 using TaskFlow.Application.Exceptions;
 using TaskFlow.Application.Features.Identity.User.DTOs.Queries;
@@ -8,7 +9,7 @@ namespace TaskFlow.Application.Features.Identity.User.Queries.GetUserById
 {
     public sealed record GetUserByIdQuery(
         int UserId
-    ) : IRequest<UserDetailDto>;
+    ) : IRequest<UserDetailDto>, IUserScopedRequest;
 
     public sealed class GetUserByIdQueryHandler
         : IRequestHandler<GetUserByIdQuery, UserDetailDto>

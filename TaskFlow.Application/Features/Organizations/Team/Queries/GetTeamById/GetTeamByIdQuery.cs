@@ -1,5 +1,6 @@
 ﻿using Dapper;
 using MediatR;
+using TaskFlow.Application.Common.Authorization;
 using TaskFlow.Application.Contracts.Persistence;
 using TaskFlow.Application.Exceptions;
 using TaskFlow.Application.Features.Organizations.Team.DTOs.Queries;
@@ -8,7 +9,7 @@ namespace TaskFlow.Application.Features.Organizations.Team.Queries.GetTeamById
 {
     public sealed record GetTeamByIdQuery(
         int TeamId
-    ) : IRequest<TeamDetailDto>;
+    ) : IRequest<TeamDetailDto>, ITeamScopedRequest;
 
     public sealed class GetTeamByIdQueryHandler
         : IRequestHandler<GetTeamByIdQuery, TeamDetailDto>

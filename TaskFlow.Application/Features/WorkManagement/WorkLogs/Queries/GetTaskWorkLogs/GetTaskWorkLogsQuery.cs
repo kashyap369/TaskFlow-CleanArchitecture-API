@@ -1,5 +1,6 @@
 ﻿using Dapper;
 using MediatR;
+using TaskFlow.Application.Common.Authorization;
 using TaskFlow.Application.Contracts.Persistence;
 using TaskFlow.Application.Features.WorkManagement.WorkLogs.DTOs.Queries;
 
@@ -7,7 +8,7 @@ namespace TaskFlow.Application.Features.WorkManagement.WorkLogs.Queries.GetTaskW
 {
     public sealed record GetTaskWorkLogsQuery(
         int TaskId
-    ) : IRequest<IReadOnlyList<WorkLogDto>>;
+    ) : IRequest<IReadOnlyList<WorkLogDto>>, ITaskScopedRequest;
 
     public sealed class GetTaskWorkLogsQueryHandler
         : IRequestHandler<GetTaskWorkLogsQuery, IReadOnlyList<WorkLogDto>>

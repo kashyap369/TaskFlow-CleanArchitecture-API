@@ -1,5 +1,6 @@
 ﻿using Dapper;
 using MediatR;
+using TaskFlow.Application.Common.Authorization;
 using TaskFlow.Application.Contracts.Persistence;
 using TaskFlow.Application.Features.WorkManagement.SubTasks.DTOs.Queries;
 
@@ -7,7 +8,7 @@ namespace TaskFlow.Application.Features.WorkManagement.SubTasks.Queries.GetTaskS
 {
     public sealed record GetTaskSubTasksQuery(
         int TaskId
-    ) : IRequest<IReadOnlyList<SubTaskDto>>;
+    ) : IRequest<IReadOnlyList<SubTaskDto>>, ITaskScopedRequest;
 
     public sealed class GetTaskSubTasksQueryHandler
         : IRequestHandler<GetTaskSubTasksQuery, IReadOnlyList<SubTaskDto>>
