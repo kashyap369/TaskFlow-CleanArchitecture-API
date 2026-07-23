@@ -35,38 +35,31 @@ Domain model (DDD entities, value objects, domain events), commands/handlers/val
 JWT bearer auth, refresh-token rotation with reuse detection, logout, role policies (Admin/Manager/User), seeders, current user from token.
 Leftover: apply `[Authorize]` to Organization/WorkManagement controllers (deliberately open during dev).
 
-## Phase 3 — Account Types & Individual Experience
-- Add `AccountType` (enum exists) to `User` + registration flow: Individual vs Organization signup.
-- Individual workspace rules: personal tasks/subtasks not tied to an organization (Task.OrganizationId currently required — needs to become optional or use a personal-workspace concept).
-- Email verification endpoint flow (entity method exists, no endpoint/token yet).
-- Invitation emails actually sent on InviteUser (email infra exists, not wired to invitations).
+## Phase 3 — Account Types & Individual Experience ✅ (one leftover)
+- ✅ `AccountType` on `User` + registration flow (Individual vs Organization).
+- ✅ Personal tasks: `Task.OrganizationId` now nullable; `GetMyPersonalTasks` query.
+- ✅ Invitation emails wired (`OrganizationMemberInvitedEvent` → email handler).
+- ⏭️ Leftover: email verification endpoint flow (entity method exists, no endpoint/token yet).
 
-## Phase 4 — Read Side Foundation (Dapper)
-- Implement `DapperContext` (currently an empty stub) + query conventions (`Features/{Module}/{Entity}/Queries/{Name}/`).
-- Basic queries: get-by-id and lists for users, organizations, members, roles, invitations, projects, tasks, subtasks (org-scoped, paginated, filtered).
-- Adopt `ApiResponse<T>` envelope consistently across all controllers.
-- Turn on `[Authorize]` policies everywhere (closes Phase 2 leftover).
+## Phase 4 — Read Side Foundation (Dapper) ✅ (leftovers)
+- ✅ `ISqlConnectionFactory` + `SqlConnectionFactory` (replaced the empty `DapperContext` stub); ~25 queries across all modules under `Features/{Module}/{Entity}/Queries/{Name}/`.
+- ⏭️ Leftover: pagination/filtering on list queries; adopt `ApiResponse<T>` envelope consistently across all controllers.
+- ⏭️ Leftover: turn on `[Authorize]` policies everywhere (also closes Phase 2 leftover).
 
-## Phase 5 — Teams & Task Assignment
-- `Team` entity (per organization) + member↔team membership; e.g. Developer Team, Designer Team.
-- Task assignment: assign org tasks/project tasks to members (role-wise/team-wise filtering when assigning).
-- Assignment lifecycle events (assigned/reassigned/unassigned) for later reporting.
+## Phase 5 — Teams & Task Assignment ✅
+- ✅ `Team` + `TeamMember`; create/update/delete/add-member/remove-member.
+- ✅ Task assign/unassign with domain events (assigned/unassigned/completed); assignee must be an active org member.
 
-## Phase 6 — Permissions
-- Implement `OrganizationPermission` (currently an empty stub): permission catalog (create-project, assign-task, invite-member, manage-roles, ...), attached to org roles.
-- Permission checks in handlers (e.g. only permitted roles create projects) — org-level authorization distinct from system-role policies.
+## Phase 6 — Permissions ✅
+- ✅ `OrganizationPermission` catalog + `OrganizationRolePermission`; grant/revoke on roles; seeded catalog.
+- ✅ `IOrganizationPermissionChecker` enforced in handlers (owner bypasses; else role must hold the permission).
 
-## Phase 7 — Time & Tracking
-- Capture durations: task started→completed timestamps already exist (StartDate/ActualCompletionDate); add explicit time-entry or work-session tracking per member per task.
-- Foundation data for duration-based reports.
+## Phase 7 — Time & Tracking ✅
+- ✅ `TaskWorkLog` (live timer via start/stop + manual entry); per-user/per-task queries with computed durations.
 
-## Phase 8 — Reporting & Dashboard (headline feature)
-Dapper-powered aggregate queries:
-- Team performance: which team did which tasks, in what duration
-- Member & team detail reports: weekly / monthly / yearly
-- Task reports: created vs completed, overdue, by status/priority
-- Project reports: progress, member workload, timeline
-- Dashboard summary endpoints for the Angular frontend charts
+## Phase 8 — Reporting & Dashboard (headline feature) ✅
+- ✅ Dapper aggregate queries: dashboard summary, member task report, team performance, project report (progress + per-member workload). Weekly/monthly/yearly via From/To window.
+- ⏭️ Possible extensions: more report cuts (by status/priority, timelines), export.
 
 ## Backlog (unscheduled)
 - Due-date reminders + notifications (in-app/email)
