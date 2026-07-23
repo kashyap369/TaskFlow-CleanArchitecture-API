@@ -1,13 +1,14 @@
 ﻿using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using TaskFlow.Api.Constants;
 using TaskFlow.Application.Features.Identity.User.Queries.GetCurrentUserProfile;
 using TaskFlow.Application.Features.Identity.User.Queries.GetUserById;
 using TaskFlow.Application.Features.Identity.User.Queries.GetUsers;
 
 namespace TaskFlow.Api.Controllers.Identity
 {
-    // Development stage: endpoints are open. Secure later with:
-    // [Authorize(Policy = Constants.AuthorizationPolicies.AllRoles)]
+    [Authorize(Policy = AuthorizationPolicies.AllRoles)]
     [Route("api/[controller]")]
     [ApiController]
     public class UserController : ControllerBase
@@ -45,6 +46,8 @@ namespace TaskFlow.Api.Controllers.Identity
             return Ok(user);
         }
 
+        // Listing every user is an administrative operation.
+        [Authorize(Policy = AuthorizationPolicies.AdminOnly)]
         [HttpGet]
         public async Task<IActionResult> GetAll(
             CancellationToken cancellationToken)

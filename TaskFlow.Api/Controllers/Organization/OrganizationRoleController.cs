@@ -1,6 +1,7 @@
 ﻿using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using TaskFlow.Api.Constants;
 using TaskFlow.Application.Features.Organizations.OrganizationRole.Commands.CreateRole;
 using TaskFlow.Application.Features.Organizations.OrganizationRole.Commands.DeleteRole;
 using TaskFlow.Application.Features.Organizations.OrganizationRole.Commands.GrantPermission;
@@ -12,8 +13,9 @@ using TaskFlow.Application.Features.Organizations.OrganizationRole.Queries.GetRo
 
 namespace TaskFlow.Api.Controllers.Organization
 {
-    // Development stage: endpoints are open. Secure later with:
-    // [Authorize(Policy = Constants.AuthorizationPolicies.AdminOnly)]
+    // Any authenticated user; the ManageRoles org permission is
+    // enforced inside the grant/revoke/mutation handlers.
+    [Authorize(Policy = AuthorizationPolicies.AllRoles)]
     [Route("api/[controller]")]
     [ApiController]
     public class OrganizationRoleController : ControllerBase

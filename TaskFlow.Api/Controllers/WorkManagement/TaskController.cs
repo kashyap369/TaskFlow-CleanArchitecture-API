@@ -1,6 +1,7 @@
 ﻿using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using TaskFlow.Api.Constants;
 using TaskFlow.Application.Features.WorkManagement.Tasks.Commands.AssignTask;
 using TaskFlow.Application.Features.WorkManagement.Tasks.Commands.CompleteTask;
 using TaskFlow.Application.Features.WorkManagement.Tasks.Commands.CreateTask;
@@ -16,8 +17,7 @@ using TaskFlow.Application.Features.WorkManagement.Tasks.Queries.GetTaskById;
 
 namespace TaskFlow.Api.Controllers.WorkManagement
 {
-    // Development stage: endpoints are open. Secure later with:
-    // [Authorize(Policy = Constants.AuthorizationPolicies.AllRoles)]
+    [Authorize(Policy = AuthorizationPolicies.AllRoles)]
     [Route("api/[controller]")]
     [ApiController]
     public class TaskController : ControllerBase

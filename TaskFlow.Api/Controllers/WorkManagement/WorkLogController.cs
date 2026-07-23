@@ -1,5 +1,7 @@
 ﻿using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using TaskFlow.Api.Constants;
 using TaskFlow.Application.Features.WorkManagement.WorkLogs.Commands.DeleteWorkLog;
 using TaskFlow.Application.Features.WorkManagement.WorkLogs.Commands.LogManualWork;
 using TaskFlow.Application.Features.WorkManagement.WorkLogs.Commands.StartWorkLog;
@@ -9,8 +11,7 @@ using TaskFlow.Application.Features.WorkManagement.WorkLogs.Queries.GetTaskWorkL
 
 namespace TaskFlow.Api.Controllers.WorkManagement
 {
-    // Development stage: endpoints are open. Secure later with:
-    // [Authorize(Policy = Constants.AuthorizationPolicies.AllRoles)]
+    [Authorize(Policy = AuthorizationPolicies.AllRoles)]
     [Route("api/[controller]")]
     [ApiController]
     public class WorkLogController : ControllerBase

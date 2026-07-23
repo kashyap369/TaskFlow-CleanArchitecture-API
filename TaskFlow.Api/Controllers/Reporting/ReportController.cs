@@ -1,5 +1,7 @@
 ﻿using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using TaskFlow.Api.Constants;
 using TaskFlow.Application.Features.Reporting.Queries.GetDashboardSummary;
 using TaskFlow.Application.Features.Reporting.Queries.GetMemberTaskReport;
 using TaskFlow.Application.Features.Reporting.Queries.GetProjectReport;
@@ -7,8 +9,7 @@ using TaskFlow.Application.Features.Reporting.Queries.GetTeamPerformanceReport;
 
 namespace TaskFlow.Api.Controllers.Reporting
 {
-    // Development stage: endpoints are open. Secure later with:
-    // [Authorize(Policy = Constants.AuthorizationPolicies.ManagerAndAbove)]
+    [Authorize(Policy = AuthorizationPolicies.AllRoles)]
     [Route("api/[controller]")]
     [ApiController]
     public class ReportController : ControllerBase

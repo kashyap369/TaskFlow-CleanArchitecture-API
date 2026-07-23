@@ -1,6 +1,7 @@
 ﻿using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using TaskFlow.Api.Constants;
 using TaskFlow.Application.Features.WorkManagement.SubTasks.Commands.CompleteSubTask;
 using TaskFlow.Application.Features.WorkManagement.SubTasks.Commands.CreateSubTask;
 using TaskFlow.Application.Features.WorkManagement.SubTasks.Commands.DeleteSubTask;
@@ -10,8 +11,7 @@ using TaskFlow.Application.Features.WorkManagement.SubTasks.Queries.GetTaskSubTa
 
 namespace TaskFlow.Api.Controllers.WorkManagement
 {
-    // Development stage: endpoints are open. Secure later with:
-    // [Authorize(Policy = Constants.AuthorizationPolicies.AllRoles)]
+    [Authorize(Policy = AuthorizationPolicies.AllRoles)]
     [Route("api/[controller]")]
     [ApiController]
     public class SubTaskController : ControllerBase

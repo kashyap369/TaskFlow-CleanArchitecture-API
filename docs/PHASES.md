@@ -2,6 +2,12 @@
 
 > Keep the Current Status section up to date at the end of every session.
 
+## Current Status (2026-07-23, security pass)
+- ✅ **`[Authorize]` applied to every controller** (closes the Phase 2 leftover). All controllers require `AuthorizationPolicies.AllRoles` (any authenticated user) — fine-grained org authorization already runs in the handlers via `IOrganizationPermissionChecker`. `UserController.GetAll` (list all users) is `AdminOnly`. AuthController (register/login/refresh/logout) stays anonymous.
+  - Verified: unauthenticated requests → 401 across query/command/report endpoints; login stays open; admin token reaches `/user/me` and the AdminOnly user list.
+- ⚠️ **Known gap → do next: read-side org scoping (IDOR).** Read queries that take an `organizationId`/`projectId`/`userId` (e.g. `GET /report/dashboard/{orgId}`, `GET /organization/{id}`, `GET /task/organization/{orgId}`) do NOT yet verify the caller belongs to that org. Any authenticated user can read another org's data by guessing IDs. Fix: check membership/ownership in the read handlers (reuse `IOrganizationPermissionChecker` or add a membership check). This is the top remaining security item.
+- ⏭️ Also open: pagination/filtering on list queries; `ApiResponse<T>` envelope consistency; email verification endpoint; tests.
+
 ## Current Status (2026-07-23, later)
 - ✅ **Application layer complete — write side + read side (Dapper).**
   - Write: registration takes `AccountType`; teams (create/update/delete/add-member/remove-member); task assign/unassign; role grant/revoke permission; work logs (start/stop/manual/delete); invitation email handler. Org-permission enforcement via new `IOrganizationPermissionChecker` (owner bypasses; else role must have the permission).
@@ -31,9 +37,9 @@
 ## Phase 1 — Core Write Side ✅
 Domain model (DDD entities, value objects, domain events), commands/handlers/validators for Identity, Organizations, WorkManagement. EF Core persistence, soft deletes, exception middleware, request logging, welcome email on registration.
 
-## Phase 2 — Security ✅ (one leftover)
-JWT bearer auth, refresh-token rotation with reuse detection, logout, role policies (Admin/Manager/User), seeders, current user from token.
-Leftover: apply `[Authorize]` to Organization/WorkManagement controllers (deliberately open during dev).
+## Phase 2 — Security ✅
+JWT bearer auth, refresh-token rotation with reuse detection, logout, role policies (Admin/Manager/User), seeders, current user from token. `[Authorize]` now applied to every controller (AllRoles; AdminOnly on the user list; auth endpoints anonymous).
+Remaining security hardening tracked at top: read-side org scoping (IDOR).
 
 ## Phase 3 — Account Types & Individual Experience ✅ (one leftover)
 - ✅ `AccountType` on `User` + registration flow (Individual vs Organization).

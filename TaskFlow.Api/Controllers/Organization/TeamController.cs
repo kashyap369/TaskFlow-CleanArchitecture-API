@@ -1,5 +1,7 @@
 ﻿using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using TaskFlow.Api.Constants;
 using TaskFlow.Application.Features.Organizations.Team.Commands.AddTeamMember;
 using TaskFlow.Application.Features.Organizations.Team.Commands.CreateTeam;
 using TaskFlow.Application.Features.Organizations.Team.Commands.DeleteTeam;
@@ -10,10 +12,9 @@ using TaskFlow.Application.Features.Organizations.Team.Queries.GetTeamById;
 
 namespace TaskFlow.Api.Controllers.Organization
 {
-    // Development stage: endpoints are open. Secure later with:
-    // [Authorize(Policy = Constants.AuthorizationPolicies.AllRoles)]
-    // Org-level permission (ManageTeams) is already enforced in
-    // the command handlers via IOrganizationPermissionChecker.
+    // Any authenticated user; the ManageTeams org permission is
+    // enforced in the command handlers via IOrganizationPermissionChecker.
+    [Authorize(Policy = AuthorizationPolicies.AllRoles)]
     [Route("api/[controller]")]
     [ApiController]
     public class TeamController : ControllerBase

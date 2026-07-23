@@ -1,6 +1,7 @@
 ﻿using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using TaskFlow.Api.Constants;
 using TaskFlow.Application.Features.Organizations.OrganizationInvitation.Commands.AcceptInvitation;
 using TaskFlow.Application.Features.Organizations.OrganizationInvitation.Commands.CancelInvitation;
 using TaskFlow.Application.Features.Organizations.OrganizationInvitation.Commands.InviteUser;
@@ -10,8 +11,10 @@ using TaskFlow.Application.Features.Organizations.OrganizationInvitation.Queries
 
 namespace TaskFlow.Api.Controllers.Organization
 {
-    // Development stage: endpoints are open. Secure later with:
-    // [Authorize(Policy = Constants.AuthorizationPolicies.ManagerAndAbove)]
+    // Any authenticated user; invite is gated by the InviteMember
+    // org permission in the handler, and accept/reject/cancel act
+    // on the current user's own invitations.
+    [Authorize(Policy = AuthorizationPolicies.AllRoles)]
     [Route("api/[controller]")]
     [ApiController]
     public class OrganizationInvitationController : ControllerBase

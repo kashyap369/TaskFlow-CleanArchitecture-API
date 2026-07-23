@@ -1,6 +1,7 @@
 ﻿using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using TaskFlow.Api.Constants;
 using TaskFlow.Application.Features.Organizations.OrganizationMember.Commands.ActivateMember;
 using TaskFlow.Application.Features.Organizations.OrganizationMember.Commands.ChangeMemberRole;
 using TaskFlow.Application.Features.Organizations.OrganizationMember.Commands.DeactivateMember;
@@ -9,8 +10,9 @@ using TaskFlow.Application.Features.Organizations.OrganizationMember.Queries.Get
 
 namespace TaskFlow.Api.Controllers.Organization
 {
-    // Development stage: endpoints are open. Secure later with:
-    // [Authorize(Policy = Constants.AuthorizationPolicies.ManagerAndAbove)]
+    // Any authenticated user; org-level authorization is enforced
+    // inside the handlers.
+    [Authorize(Policy = AuthorizationPolicies.AllRoles)]
     [Route("api/[controller]")]
     [ApiController]
     public class OrganizationMemberController : ControllerBase

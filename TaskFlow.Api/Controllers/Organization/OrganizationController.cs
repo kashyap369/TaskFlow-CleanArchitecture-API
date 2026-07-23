@@ -1,6 +1,7 @@
 ﻿using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using TaskFlow.Api.Constants;
 using TaskFlow.Application.Features.Organizations.Organization.Commands.DeleteOrganization;
 using TaskFlow.Application.Features.Organizations.Organization.Commands.CreateOrganization;
 using TaskFlow.Application.Features.Organizations.Organization.Commands.UpdateOraganization;
@@ -9,8 +10,9 @@ using TaskFlow.Application.Features.Organizations.Organization.Queries.GetOrgani
 
 namespace TaskFlow.Api.Controllers.Organization
 {
-    // Development stage: endpoints are open. Secure later with:
-    // [Authorize(Policy = Constants.AuthorizationPolicies.ManagerAndAbove)]
+    // Any authenticated user; org-level authorization (ownership /
+    // org permissions) is enforced inside the handlers.
+    [Authorize(Policy = AuthorizationPolicies.AllRoles)]
     [Route("api/[controller]")]
     [ApiController]
     public class OrganizationController : ControllerBase

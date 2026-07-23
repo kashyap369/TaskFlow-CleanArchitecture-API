@@ -1,6 +1,7 @@
 ﻿using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using TaskFlow.Api.Constants;
 using TaskFlow.Application.Features.WorkManagement.Projects.Commands.CreateProject;
 using TaskFlow.Application.Features.WorkManagement.Projects.Commands.DeleteProject;
 using TaskFlow.Application.Features.WorkManagement.Projects.Commands.UpdateProject;
@@ -9,8 +10,7 @@ using TaskFlow.Application.Features.WorkManagement.Projects.Queries.GetProjectBy
 
 namespace TaskFlow.Api.Controllers.WorkManagement
 {
-    // Development stage: endpoints are open. Secure later with:
-    // [Authorize(Policy = Constants.AuthorizationPolicies.ManagerAndAbove)]
+    [Authorize(Policy = AuthorizationPolicies.AllRoles)]
     [Route("api/[controller]")]
     [ApiController]
     public class ProjectController : ControllerBase
