@@ -38,5 +38,11 @@ A strong dashboard backed by the Dapper read side, focused on:
 - Recurring tasks (for individuals especially)
 
 ## Where the Code Stands vs This Vision
-Already built (write side): users + JWT/refresh auth, organizations, org roles, members, invitations, projects, tasks, subtasks, task lifecycle.
-Not built yet: `AccountType` on User/registration, teams, task assignment, real permissions (`OrganizationPermission` is an empty stub), time tracking, the entire read/reporting side (Dapper stub), invitation emails, dashboards. See [PHASES.md](PHASES.md) for the plan.
+The full vision is implemented and verified end-to-end:
+- **Both account types** (Individual / Organization) with registration; personal tasks (nullable org).
+- **Organizations**: orgs, custom roles with a **permission** catalog + grant/revoke, members, **email invitations**, and **teams**.
+- **Work management**: projects, tasks (with **assignment** to members), subtasks, task lifecycle, and **work logs** (time tracking — live timer + manual).
+- **Reporting**: Dapper-powered dashboard summary + member / team / project reports.
+- **Security**: JWT + refresh-token rotation, `[Authorize]` on all controllers, org-permission checks on writes, and read-side org scoping (IDOR guard).
+
+Remaining (polish, not features): pagination/filtering on lists, `ApiResponse<T>` envelope consistency, email-verification endpoint, and automated tests. See [PHASES.md](PHASES.md).

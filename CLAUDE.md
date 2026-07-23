@@ -9,7 +9,7 @@ TaskFlow is a Task Management System REST API (ASP.NET Core, PostgreSQL) with tw
 - `TaskFlow.Domain` — entities (rich, behavior-first), value objects, domain events, enums, repository interfaces, constants. Depends on nothing.
 - `TaskFlow.Infra` — EF Core (Npgsql) persistence, repositories, UnitOfWork, domain event dispatcher, JWT/password security, SMTP email, seeders, migrations
 
-Modules: **Identity** (users, roles, auth), **Organizations** (orgs, members, org roles, invitations), **WorkManagement** (projects, tasks, subtasks).
+Modules: **Identity** (users, roles, auth), **Organizations** (orgs, members, org roles + permissions, invitations, teams), **WorkManagement** (projects, tasks, subtasks, work logs / time tracking), **Reporting** (dashboard + member/team/project reports).
 
 ## Commands
 ```
@@ -28,6 +28,7 @@ DB: PostgreSQL, connection string `DefaultConnection`. Seeds on startup: system 
 - Errors: throw the typed exceptions from `TaskFlow.Application/Exceptions` (NotFound/Conflict/Unauthorized/Forbidden/Business) with a SCREAMING_SNAKE code — the exception middleware maps them to HTTP responses.
 - Input validation: FluentValidation validator per command, wired automatically via `ValidationBehavior`.
 - Deletes are soft deletes (`AuditableEntity.SoftDelete()`); a global query filter hides deleted rows.
+- **Authorization has three layers** (see docs/ARCHITECTURE.md): (1) every controller has `[Authorize]` — new controllers must too; auth endpoints stay anonymous. (2) Write commands that touch org-permission-sensitive actions call `IOrganizationPermissionChecker` (owner bypasses; else role must hold the permission from `OrganizationPermissionNames`). (3) Read queries returning org-scoped data implement an access-scope marker interface (`Application/Common/Authorization`) so `AccessGuardBehavior` enforces owner/member access — do this for every new org-scoped query.
 
 ## Docs
 - [docs/OVERVIEW.md](docs/OVERVIEW.md) — what the API is, who it's for, domain concepts

@@ -55,7 +55,7 @@ DTOs: `Features/{Module}/{Entity}/DTOs/Commands/{FeatureName}/{FeatureName}Respo
 - Thin: inject `IMediator` only; body-bind the command; return `Ok(...)` for creates/reads, `NoContent()` for updates/deletes; pass `CancellationToken` through.
 - Sub-actions as verbs in the route: `PUT api/task/{taskId:int}/start`, `/complete`.
 - Response envelope `ApiResponse<T>` (see Api/Models/Responses) — Auth uses it; newer/other controllers should adopt it too when touched.
-- Authorization: `[Authorize(Policy = AuthorizationPolicies.X)]` using constants, never inline strings. (Org/WorkManagement controllers deliberately open during dev — see comments in each.)
+- Authorization: `[Authorize(Policy = AuthorizationPolicies.X)]` using constants, never inline strings. Every controller has `[Authorize]` (AllRoles by default; AdminOnly for admin-only actions); a new controller must add one. Auth endpoints (register/login/refresh/logout) stay anonymous.
 
 ## Handler Rules
 

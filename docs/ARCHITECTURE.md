@@ -10,8 +10,8 @@ TaskFlow.Infra implements Domain/Application contracts (referenced only by Api f
 Dependency rule: Domain depends on nothing; Application depends only on Domain; Infra depends on Application + Domain; Api depends on Application + Infra (composition root).
 
 DI is composed via two extension methods called from `Program.cs`:
-- `AddApplication()` ([Application/DependencyInjection/DependencyRegistration.cs](../TaskFlow.Application/DependencyInjection/DependencyRegistration.cs)) — MediatR, FluentValidation validators, `ValidationBehavior` pipeline
-- `AddInfrastructure(config)` ([Infra/DependencyInjection/DependencyRegistration.cs](../TaskFlow.Infra/DependencyInjection/DependencyRegistration.cs)) — DbContext, repositories, UnitOfWork, JWT auth, email, domain event handlers. **Every new repository/domain-event-handler must be registered here.**
+- `AddApplication()` ([Application/DependencyInjection/DependencyRegistration.cs](../TaskFlow.Application/DependencyInjection/DependencyRegistration.cs)) — MediatR, FluentValidation validators, and two pipeline behaviors in order: `ValidationBehavior` then `AccessGuardBehavior` (read-side authorization).
+- `AddInfrastructure(config)` ([Infra/DependencyInjection/DependencyRegistration.cs](../TaskFlow.Infra/DependencyInjection/DependencyRegistration.cs)) — DbContext, repositories, UnitOfWork, JWT auth, email, domain event handlers, `ISqlConnectionFactory` (Dapper), `IOrganizationPermissionChecker`, `IOrganizationAccessGuard`. **Every new repository / domain-event-handler / security service must be registered here.**
 
 ## Write Path (Commands)
 
@@ -26,16 +26,23 @@ Controller → MediatR → ValidationBehavior (FluentValidation) → CommandHand
 - `Remove()` performs a **soft delete** via `AuditableEntity.SoftDelete()`.
 - Handlers depend on interfaces only; `IUnitOfWork.SaveChangesAsync()` commits.
 
-## Read Path (Queries) — planned, not implemented yet
+## Read Path (Queries) — Dapper
 
-Intended design: `Query → Dapper → raw SQL → DTO` (no EF Core, no repositories).
-Current state: `Infra/Dapper/DapperContext.cs` is an empty placeholder; no Queries folders exist anywhere. When building reads, create `Features/{Module}/{Entity}/Queries/{Name}/` mirroring the Commands layout.
+```
+Controller → MediatR → ValidationBehavior → AccessGuardBehavior (read authz)
+  → QueryHandler → ISqlConnectionFactory.Create() → Dapper raw SQL → DTO
+```
+
+- `ISqlConnectionFactory` ([Infra/Dapper/SqlConnectionFactory.cs](../TaskFlow.Infra/Dapper/SqlConnectionFactory.cs)) hands out Npgsql connections. Query handlers use Dapper directly — no EF Core, no repositories on reads.
+- Query record + handler live in one file under `Features/{Module}/{Entity}/Queries/{Name}/`; DTOs under `.../DTOs/Queries/`. Reports live under `Features/Reporting/`.
+- Raw SQL rules (Dapper bypasses EF): quote every identifier (`"Users"`, `"FirstName"`), alias columns to DTO property names, always filter `"IsDeleted" = FALSE` (the EF soft-delete filter does not apply), and pass `timestamptz` params as `DateTime.SpecifyKind(x, DateTimeKind.Utc)`. See CONVENTIONS.md.
+- **Read-side authorization**: a query that returns organization-scoped data implements a marker interface (`IOrganizationScopedRequest`, `IProjectScopedRequest`, `ITaskScopedRequest`, `ITeamScopedRequest`, `IRoleScopedRequest`, `IUserScopedRequest`, `IMemberReportScopedRequest` in `Application/Common/Authorization`). `AccessGuardBehavior` resolves the id to its org and calls `IOrganizationAccessGuard` (owner or active member), throwing 403 otherwise — closing IDOR. "My …" queries and the permission catalog are intentionally unmarked.
 
 ## Domain Layer
 
 - `BaseEntity` — int Id + domain-event collection (`AddDomainEvent`).
 - `AuditableEntity : BaseEntity` — CreatedAt/UpdatedAt/IsDeleted/DeletedAt, `MarkAsUpdated()`, `SoftDelete()`, `Restore()`. A global EF query filter (`TaskFlowDbContext.ApplySoftDeleteQueryFilter`) hides soft-deleted rows for all `AuditableEntity` types.
-- Aggregate roots are marked with `IAggregateRoot` (marker interface): `User`, `SystemRole`, `Organization`.
+- Aggregate roots are marked with `IAggregateRoot` (marker interface): `User`, `SystemRole`, `Organization`, `Team`, `OrganizationPermission`, `TaskWorkLog`.
 - Entities are behavior-first: private setters, protected parameterless ctor (for EF), guard clauses in ctor, named business methods (`User.Register()`, `Task.Start()`, `Organization.Suspend()`).
 - Value objects: `Email` (normalized lowercase, validated), `PhoneNumber` (10–15 digits), `FullName`. Stored as owned values; repositories compare via `x.Email.Value == email.Value`.
 
@@ -54,7 +61,11 @@ Current state: `Infra/Dapper/DapperContext.cs` is an empty placeholder; no Queri
 - `ICurrentUserService` (implemented in Api) exposes `UserId`, `Email`, `IpAddress` from the JWT/connection — handlers use this, never request-body IDs.
 - Policies in `Api/Constants/AuthorizationPolicies` + `Api/Extensions/ServiceCollectionExtensions.AddAuthorizationPolicies()`: `AdminOnly`, `ManagerAndAbove`, `AllRoles`, mapping to system roles Admin/Manager/User (`Domain/Constants/SystemRoleNames`).
 - Login flow enforces user status (PendingVerification / Suspended / Inactive blocked with specific error codes).
-- ⚠️ Organization and WorkManagement controllers are currently **unauthenticated by design** (dev stage) — each carries a comment with the intended `[Authorize(Policy = ...)]`.
+- **Controller authorization**: every controller carries `[Authorize(Policy = AllRoles)]` (any authenticated user); `UserController.GetAll` is `AdminOnly`; AuthController (register/login/refresh/logout) is anonymous. New controllers must add `[Authorize]`.
+- **Three layers of authorization**, distinct and complementary:
+  1. *System-role policies* (`[Authorize]` on controllers) — is the caller authenticated / an admin?
+  2. *Org permissions* on write commands — `IOrganizationPermissionChecker` ([Infra/Security](../TaskFlow.Infra/Security/OrganizationPermissionChecker.cs)): owner bypasses, else the caller's org role must hold the named permission (`Domain/Constants/OrganizationPermissionNames`).
+  3. *Read-side org scoping* on queries — `IOrganizationAccessGuard` via `AccessGuardBehavior` (see Read Path): the caller must own or actively belong to the org that owns the resource.
 
 ## API Surface & Error Handling
 
@@ -72,7 +83,8 @@ Current state: `Infra/Dapper/DapperContext.cs` is an empty placeholder; no Queri
 - Seeders (`Infra/Seeder/`): RoleSeeder (Admin/Manager/User system roles) then UserSeeder (admin@taskflow.com / Admin@123, verified, Admin role) — run from Program.cs on every startup, idempotent.
 
 ## Known Placeholders / Loose Ends
-- `Infra/Dapper/DapperContext.cs` — empty stub (read side not built)
 - `Domain/Common/Result.cs` — empty stub (Result pattern not adopted; exceptions used instead)
 - `Domain/Exceptions/BadRequestException.cs` — defined but the middleware handles Application-layer exceptions; prefer those
 - Email verification: `User.VerifyEmail()` exists but no endpoint/token flow yet (seeder calls it directly)
+- List queries are unpaginated/unfiltered; `ApiResponse<T>` envelope is only used by AuthController — both flagged in PHASES.md
+- No automated tests yet
