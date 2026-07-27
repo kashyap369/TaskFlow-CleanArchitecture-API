@@ -13,17 +13,20 @@ namespace TaskFlow.Application.Features.WorkManagement.WorkLogs.Commands.StartWo
         private readonly ITaskRepository _taskRepository;
         private readonly ITaskWorkLogRepository _taskWorkLogRepository;
         private readonly ICurrentUserService _currentUserService;
+        private readonly IOrganizationAccessGuard _accessGuard;
         private readonly IUnitOfWork _unitOfWork;
 
         public StartWorkLogCommandHandler(
             ITaskRepository taskRepository,
             ITaskWorkLogRepository taskWorkLogRepository,
             ICurrentUserService currentUserService,
+            IOrganizationAccessGuard accessGuard,
             IUnitOfWork unitOfWork)
         {
             _taskRepository = taskRepository;
             _taskWorkLogRepository = taskWorkLogRepository;
             _currentUserService = currentUserService;
+            _accessGuard = accessGuard;
             _unitOfWork = unitOfWork;
         }
 
@@ -31,6 +34,12 @@ namespace TaskFlow.Application.Features.WorkManagement.WorkLogs.Commands.StartWo
             StartWorkLogCommand request,
             CancellationToken cancellationToken)
         {
+            // You may only log time against a task you can see:
+            // org task -> owner/active member; personal task -> its creator.
+            await _accessGuard.EnsureTaskAsync(
+                request.TaskId,
+                cancellationToken);
+
             var taskExists =
                 await _taskRepository.ExistsAsync(
                     request.TaskId,

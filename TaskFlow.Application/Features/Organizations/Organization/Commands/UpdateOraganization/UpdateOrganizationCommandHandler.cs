@@ -1,4 +1,5 @@
 ﻿using MediatR;
+using TaskFlow.Application.Contracts.Security;
 using TaskFlow.Application.Exceptions;
 using TaskFlow.Domain.Interfaces.Organizations;
 using TaskFlow.Domain.Interfaces.Persistence;
@@ -9,13 +10,16 @@ namespace TaskFlow.Application.Features.Organizations.Organization.Commands.Upda
         : IRequestHandler<UpdateOrganizationCommand>
     {
         private readonly IOrganizationRepository _organizationRepository;
+        private readonly IOrganizationAccessGuard _accessGuard;
         private readonly IUnitOfWork _unitOfWork;
 
         public UpdateOrganizationCommandHandler(
             IOrganizationRepository organizationRepository,
+            IOrganizationAccessGuard accessGuard,
             IUnitOfWork unitOfWork)
         {
             _organizationRepository = organizationRepository;
+            _accessGuard = accessGuard;
             _unitOfWork = unitOfWork;
         }
 
@@ -23,6 +27,14 @@ namespace TaskFlow.Application.Features.Organizations.Organization.Commands.Upda
             UpdateOrganizationCommand request,
             CancellationToken cancellationToken)
         {
+            // Owner-only. This command carries no scoped-request
+            // marker (those cover reads), so without this call the
+            // handler checked existence and nothing else — any
+            // authenticated user could rename any organization.
+            await _accessGuard.EnsureOrganizationOwnerAsync(
+                request.OrganizationId,
+                cancellationToken);
+
             var organization =
                 await _organizationRepository.GetByIdAsync(
                     request.OrganizationId,

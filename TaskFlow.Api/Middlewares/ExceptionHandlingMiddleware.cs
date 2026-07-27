@@ -82,6 +82,25 @@ namespace TaskFlow.Api.Middlewares
                     ex.Message,
                     FailureReason.BusinessRuleViolation);
             }
+            // Domain invariants guard themselves with ArgumentException /
+            // InvalidOperationException (e.g. "Personal tasks cannot be
+            // assigned.", "End time cannot be in the future."). Those are
+            // caller mistakes, not server faults — map them to 400 rather
+            // than letting them fall through as a 500.
+            catch (Exception ex) when (
+                ex is ArgumentException or InvalidOperationException)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Domain rule violated.");
+
+                await WriteErrorResponseAsync(
+                    context,
+                    HttpStatusCode.BadRequest,
+                    "DOMAIN_RULE_VIOLATION",
+                    ex.Message,
+                    FailureReason.BusinessRuleViolation);
+            }
             catch (Exception ex)
             {
                 _logger.LogError(

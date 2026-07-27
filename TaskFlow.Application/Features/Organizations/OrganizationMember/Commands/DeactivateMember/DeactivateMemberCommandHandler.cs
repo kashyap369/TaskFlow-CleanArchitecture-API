@@ -1,5 +1,7 @@
 ﻿using MediatR;
+using TaskFlow.Application.Contracts.Security;
 using TaskFlow.Application.Exceptions;
+using TaskFlow.Domain.Constants;
 using TaskFlow.Domain.Interfaces.Organizations;
 using TaskFlow.Domain.Interfaces.Persistence;
 
@@ -11,15 +13,29 @@ namespace TaskFlow.Application.Features.Organizations.OrganizationMember.Command
         private readonly IOrganizationMemberRepository
             _organizationMemberRepository;
 
+        private readonly IOrganizationPermissionChecker
+            _permissionChecker;
+
+        private readonly ICurrentUserService
+            _currentUserService;
+
         private readonly IUnitOfWork
             _unitOfWork;
 
         public DeactivateMemberCommandHandler(
             IOrganizationMemberRepository organizationMemberRepository,
+            IOrganizationPermissionChecker permissionChecker,
+            ICurrentUserService currentUserService,
             IUnitOfWork unitOfWork)
         {
             _organizationMemberRepository =
                 organizationMemberRepository;
+
+            _permissionChecker =
+                permissionChecker;
+
+            _currentUserService =
+                currentUserService;
 
             _unitOfWork =
                 unitOfWork;
@@ -29,6 +45,13 @@ namespace TaskFlow.Application.Features.Organizations.OrganizationMember.Command
             DeactivateMemberCommand request,
             CancellationToken cancellationToken)
         {
+            // Phase 10: this handler previously enforced nothing.
+            await _permissionChecker.EnsurePermissionAsync(
+                request.OrganizationId,
+                _currentUserService.UserId,
+                OrganizationPermissionNames.ManageMembers,
+                cancellationToken);
+
             var member =
                 await _organizationMemberRepository
                     .GetMemberAsync(

@@ -35,6 +35,15 @@ public class Task : AuditableEntity
     public int CreatedByUserId { get; private set; }
 
     /// <summary>
+    /// The team responsible for this task, so tasks (not just
+    /// reports) can be viewed per team. Optional: a task may
+    /// belong to an organization without belonging to a team.
+    /// Always null for a personal task — teams only exist inside
+    /// organizations.
+    /// </summary>
+    public int? TeamId { get; private set; }
+
+    /// <summary>
     /// The member currently assigned to work on this task.
     /// Only organization tasks can be assigned.
     /// </summary>
@@ -58,7 +67,8 @@ public class Task : AuditableEntity
      int? organizationId,
      int createdByUserId,
      DateTime? expectedCompletionDate = null,
-     int? projectId = null)
+     int? projectId = null,
+     int? teamId = null)
     {
         if (string.IsNullOrWhiteSpace(title))
             throw new ArgumentException(
@@ -76,6 +86,12 @@ public class Task : AuditableEntity
                 "A personal task cannot belong to a project.",
                 nameof(projectId));
 
+        // Same rule for teams — they are an organization concept.
+        if (teamId.HasValue && !organizationId.HasValue)
+            throw new ArgumentException(
+                "A personal task cannot belong to a team.",
+                nameof(teamId));
+
         if (createdByUserId <= 0)
             throw new ArgumentException(
                 "CreatedByUserId is required.",
@@ -89,8 +105,35 @@ public class Task : AuditableEntity
         ProjectId = projectId;
         OrganizationId = organizationId;
         CreatedByUserId = createdByUserId;
+        TeamId = teamId;
 
         Status = TaskStatus.Todo;
+    }
+
+    /// <summary>
+    /// Moves the task to a team, or clears the team when
+    /// <paramref name="teamId"/> is null. Personal tasks cannot
+    /// belong to a team. The caller is responsible for checking
+    /// that the team is in the same organization — the entity
+    /// has no way to know.
+    /// </summary>
+    public void AssignToTeam(int? teamId)
+    {
+        if (teamId.HasValue && IsPersonal)
+            throw new InvalidOperationException(
+                "Personal tasks cannot belong to a team.");
+
+        if (teamId.HasValue && teamId <= 0)
+            throw new ArgumentException(
+                "TeamId must be positive.",
+                nameof(teamId));
+
+        if (TeamId == teamId)
+            return;
+
+        TeamId = teamId;
+
+        MarkAsUpdated();
     }
 
     public void Start()
@@ -168,6 +211,33 @@ public class Task : AuditableEntity
             new TaskCompletedEvent(
                 Id,
                 AssignedToUserId));
+    }
+
+    /// <summary>
+    /// Reopens a completed task, so the documented lifecycle
+    /// (Todo → InProgress → Completed, reopen) is real for tasks
+    /// and not only for subtasks. Mirrors
+    /// <see cref="SubTask.Reopen"/>. A task that has subtasks has
+    /// its status owned by them, so this defers to
+    /// <see cref="RecalculateStatus"/> rather than guessing.
+    /// </summary>
+    public void Reopen()
+    {
+        if (Status != TaskStatus.Completed)
+            return;
+
+        ActualCompletionDate = null;
+
+        if (_subTasks.Any())
+        {
+            RecalculateStatus();
+
+            return;
+        }
+
+        Status = TaskStatus.Todo;
+
+        MarkAsUpdated();
     }
 
     /// <summary>

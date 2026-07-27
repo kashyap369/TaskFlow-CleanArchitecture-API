@@ -3,6 +3,7 @@ using System.Reflection;
 using TaskFlow.Domain.Common;
 using TaskFlow.Domain.Entities.Identity;
 using TaskFlow.Domain.Entities.Organization;
+using TaskFlow.Domain.Entities.Platform;
 using TaskFlow.Domain.Entities.WorkManagement.Projects;
 using TaskFlow.Domain.Entities.WorkManagement.SubTasks;
 using TaskFlow.Domain.Entities.WorkManagement.WorkLogs;
@@ -46,6 +47,9 @@ namespace TaskFlow.Infra.Persistence.Context
         public DbSet<OrganizationRolePermission> OrganizationRolePermissions => Set<OrganizationRolePermission>();
 
         public DbSet<TaskWorkLog> TaskWorkLogs => Set<TaskWorkLog>();
+
+        public DbSet<PlatformSetting> PlatformSettings => Set<PlatformSetting>();
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             modelBuilder.ApplyConfigurationsFromAssembly(typeof(TaskFlowDbContext).Assembly);

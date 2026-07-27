@@ -16,6 +16,7 @@ using TaskFlow.Domain.DomainEvents.Organizations;
 using TaskFlow.Domain.Interfaces.Identity.Users;
 using TaskFlow.Domain.Interfaces.Organizations;
 using TaskFlow.Domain.Interfaces.Persistence;
+using TaskFlow.Domain.Interfaces.Platform;
 using TaskFlow.Domain.Interfaces.WorkManagement;
 using TaskFlow.Infra.DomainEvents.Dispatchers;
 using TaskFlow.Infra.Email;
@@ -24,6 +25,7 @@ using TaskFlow.Infra.Persistence;
 using TaskFlow.Infra.Persistence.Context;
 using TaskFlow.Infra.Persistence.Repositories.Identity.Users;
 using TaskFlow.Infra.Persistence.Repositories.Organizations;
+using TaskFlow.Infra.Persistence.Repositories.Platform;
 using TaskFlow.Infra.Persistence.Repositories.WorkManagement;
 using TaskFlow.Infra.Security;
 
@@ -52,6 +54,10 @@ namespace TaskFlow.Infra.DependencyInjection
             services.AddScoped<IDomainEventHandler<OrganizationMemberInvitedEvent>, OrganizationMemberInvitedEventHandler>();
             services.AddScoped<IOrganizationPermissionChecker, OrganizationPermissionChecker>();
             services.AddScoped<IOrganizationAccessGuard, OrganizationAccessGuard>();
+            // Stateless (HMAC) — no per-request state, so a singleton is fine.
+            services.AddSingleton<
+                IEmailVerificationTokenService,
+                EmailVerificationTokenService>();
 
             // Read side (Dapper): a connection factory the query
             // handlers use to run raw SQL straight into DTOs.
@@ -100,6 +106,10 @@ namespace TaskFlow.Infra.DependencyInjection
             services.AddScoped<
                 ITaskWorkLogRepository,
                 TaskWorkLogRepository>();
+
+            services.AddScoped<
+                IPlatformSettingRepository,
+                PlatformSettingRepository>();
 
             services.AddScoped<SmtpEmailSender>();
 

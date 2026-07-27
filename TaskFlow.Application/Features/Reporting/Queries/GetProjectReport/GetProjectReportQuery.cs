@@ -47,12 +47,22 @@ namespace TaskFlow.Application.Features.Reporting.Queries.GetProjectReport
                      FROM "TaskWorkLogs" wl
                      JOIN "Tasks" t2 ON t2."Id" = wl."TaskId"
                      WHERE t2."ProjectId" = p."Id" AND wl."IsDeleted" = FALSE)
-                        AS "TrackedHours"
+                        AS "TrackedHours",
+                    -- Timeline: the project's own planned window, then
+                    -- the actual span its tasks occupied. MIN/MAX are
+                    -- over the same LEFT JOIN, so a project with no
+                    -- tasks yields NULLs rather than dropping out.
+                    p."StartDate"               AS "StartDate",
+                    p."ExpectedCompletionDate"  AS "ExpectedCompletionDate",
+                    p."ActualCompletionDate"    AS "ActualCompletionDate",
+                    MIN(t."StartDate")          AS "FirstTaskStartDate",
+                    MAX(t."ActualCompletionDate") AS "LastTaskCompletionDate"
                 FROM "Projects" p
                 LEFT JOIN "Tasks" t
                     ON t."ProjectId" = p."Id" AND t."IsDeleted" = FALSE
                 WHERE p."Id" = @ProjectId AND p."IsDeleted" = FALSE
-                GROUP BY p."Id", p."Title";
+                GROUP BY p."Id", p."Title", p."StartDate",
+                         p."ExpectedCompletionDate", p."ActualCompletionDate";
                 """;
 
             const string workloadSql = """

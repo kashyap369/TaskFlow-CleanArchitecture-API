@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using TaskFlow.Application.Contracts.Security;
 using TaskFlow.Application.Exceptions;
+using TaskFlow.Domain.Constants;
 
 namespace TaskFlow.Api.Services
 {
@@ -67,6 +68,20 @@ namespace TaskFlow.Api.Services
                 return string.IsNullOrWhiteSpace(ipAddress)
                     ? "unknown"
                     : ipAddress;
+            }
+        }
+
+        public bool IsAdmin
+        {
+            get
+            {
+                // Never throws: an unauthenticated request is simply
+                // "not an admin". The [Authorize] layer has already
+                // rejected it long before a handler can ask.
+                return _httpContextAccessor.HttpContext?
+                    .User
+                    .IsInRole(SystemRoleNames.Admin)
+                    ?? false;
             }
         }
     }

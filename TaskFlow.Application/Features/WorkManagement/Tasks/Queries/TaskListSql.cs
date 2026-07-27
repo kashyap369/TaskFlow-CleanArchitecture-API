@@ -4,6 +4,12 @@
     /// Shared SELECT for the task list queries. Each query
     /// appends its own WHERE/ORDER BY. Sub-task counts come from
     /// correlated sub-queries; status 3 = Completed.
+    ///
+    /// The Teams join is a LEFT JOIN because <c>TeamId</c> is
+    /// optional — an inner join would silently drop every task
+    /// that has no team, i.e. all of them before Phase 11.
+    /// It is aliased <c>tm</c>; queries appending a WHERE use the
+    /// <c>t.</c> prefix and are unaffected.
     /// </summary>
     internal static class TaskListSql
     {
@@ -18,6 +24,8 @@
                 t."ActualCompletionDate"   AS "ActualCompletionDate",
                 t."ProjectId"              AS "ProjectId",
                 t."OrganizationId"         AS "OrganizationId",
+                t."TeamId"                 AS "TeamId",
+                tm."Name"                  AS "TeamName",
                 t."CreatedByUserId"        AS "CreatedByUserId",
                 t."AssignedToUserId"       AS "AssignedToUserId",
                 (
@@ -30,6 +38,9 @@
                       AND s."Status" = 3
                 )                          AS "CompletedSubTaskCount"
             FROM "Tasks" t
+            LEFT JOIN "Teams" tm
+                   ON tm."Id" = t."TeamId"
+                  AND tm."IsDeleted" = FALSE
             """;
     }
 }

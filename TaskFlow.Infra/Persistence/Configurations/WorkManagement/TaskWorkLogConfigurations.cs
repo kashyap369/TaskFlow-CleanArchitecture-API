@@ -29,8 +29,10 @@ namespace TaskFlow.Infra.Persistence.Configurations.WorkManagement
 
             builder.Property(x => x.EndedAt);
 
+            // Optional: a timer started without a note must not violate NOT NULL.
             builder.Property(x => x.Notes)
-                .HasMaxLength(1000);
+                .HasMaxLength(1000)
+                .IsRequired(false);
 
             builder.Property(x => x.CreatedAt)
                 .IsRequired();

@@ -5,6 +5,7 @@ using TaskFlow.Domain.Constants;
 using TaskFlow.Domain.Entities.Identity;
 using TaskFlow.Domain.Interfaces.Identity.Users;
 using TaskFlow.Domain.Interfaces.Persistence;
+using TaskFlow.Domain.Interfaces.Platform;
 using TaskFlow.Domain.ValueObjects;
 
 namespace TaskFlow.Application.Features.Identity.User.Commands.RegisterUser
@@ -15,6 +16,7 @@ namespace TaskFlow.Application.Features.Identity.User.Commands.RegisterUser
         private readonly IUserRepository _userRepository;
         private readonly ISystemRoleRepository _systemRoleRepository;
         private readonly IUserRoleRepository _userRoleRepository;
+        private readonly IPlatformSettingRepository _platformSettingRepository;
         private readonly IUnitOfWork _unitOfWork;
         private readonly IPasswordHasher _passwordHasher;
 
@@ -22,12 +24,14 @@ namespace TaskFlow.Application.Features.Identity.User.Commands.RegisterUser
             IUserRepository userRepository,
             ISystemRoleRepository systemRoleRepository,
             IUserRoleRepository userRoleRepository,
+            IPlatformSettingRepository platformSettingRepository,
             IUnitOfWork unitOfWork,
             IPasswordHasher passwordHasher)
         {
             _userRepository = userRepository;
             _systemRoleRepository = systemRoleRepository;
             _userRoleRepository = userRoleRepository;
+            _platformSettingRepository = platformSettingRepository;
             _unitOfWork = unitOfWork;
             _passwordHasher = passwordHasher;
         }
@@ -36,6 +40,23 @@ namespace TaskFlow.Application.Features.Identity.User.Commands.RegisterUser
             RegisterUserCommand request,
             CancellationToken cancellationToken)
         {
+            // Honour the admin's RegistrationOpen switch. Checked
+            // first, so a closed platform never touches the database.
+            // A missing settings row (seeder never ran) leaves
+            // registration open — failing open matches the behaviour
+            // from before the setting existed.
+            var platformSettings =
+                await _platformSettingRepository.GetAsync(
+                    cancellationToken);
+
+            if (platformSettings is not null &&
+                !platformSettings.RegistrationOpen)
+            {
+                throw new ForbiddenException(
+                    "REGISTRATION_CLOSED",
+                    "New account registration is currently closed.");
+            }
+
             var email = new Email(
                 request.Email);
 

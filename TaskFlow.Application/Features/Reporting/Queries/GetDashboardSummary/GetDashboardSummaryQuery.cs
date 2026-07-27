@@ -65,7 +65,20 @@ namespace TaskFlow.Application.Features.Reporting.Queries.GetDashboardSummary
                      FROM "TaskWorkLogs" wl
                      JOIN "Tasks" t ON t."Id" = wl."TaskId"
                      WHERE t."OrganizationId" = @OrganizationId AND wl."IsDeleted" = FALSE)
-                        AS "TotalTrackedHours";
+                        AS "TotalTrackedHours",
+                    -- Priority breakdown: 1 Low, 2 Medium, 3 High, 4 Critical.
+                    (SELECT COUNT(*) FROM "Tasks"
+                     WHERE "OrganizationId" = @OrganizationId AND "IsDeleted" = FALSE AND "Priority" = 1)
+                        AS "LowPriorityTasks",
+                    (SELECT COUNT(*) FROM "Tasks"
+                     WHERE "OrganizationId" = @OrganizationId AND "IsDeleted" = FALSE AND "Priority" = 2)
+                        AS "MediumPriorityTasks",
+                    (SELECT COUNT(*) FROM "Tasks"
+                     WHERE "OrganizationId" = @OrganizationId AND "IsDeleted" = FALSE AND "Priority" = 3)
+                        AS "HighPriorityTasks",
+                    (SELECT COUNT(*) FROM "Tasks"
+                     WHERE "OrganizationId" = @OrganizationId AND "IsDeleted" = FALSE AND "Priority" = 4)
+                        AS "CriticalPriorityTasks";
                 """;
 
             using var connection = _sqlConnectionFactory.Create();

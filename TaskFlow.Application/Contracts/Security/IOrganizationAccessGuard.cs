@@ -1,10 +1,18 @@
 namespace TaskFlow.Application.Contracts.Security
 {
     /// <summary>
-    /// Read-side authorization. Ensures the current user is
-    /// allowed to see a resource before a query returns it —
-    /// closing IDOR gaps where any authenticated user could
-    /// read another organization's data by guessing ids.
+    /// Resource authorization. Ensures the current user is allowed
+    /// to touch a resource — closing IDOR gaps where any
+    /// authenticated user could reach another organization's data
+    /// by guessing ids.
+    ///
+    /// Used on <b>both sides</b>: reads go through
+    /// <c>AccessGuardBehavior</c> (a query implements a marker
+    /// interface), while the task / subtask / work-log <b>command</b>
+    /// handlers call <see cref="EnsureTaskAsync"/> directly. Before
+    /// Phase 9 those commands enforced nothing at all, so any
+    /// authenticated user could start, complete or delete any task
+    /// by id — and personal tasks would have inherited that hole.
     ///
     /// Access rule for organization data: the current user must
     /// be the organization owner or an active member. Project /
@@ -17,6 +25,19 @@ namespace TaskFlow.Application.Contracts.Security
     public interface IOrganizationAccessGuard
     {
         Task EnsureOrganizationAsync(
+            int organizationId,
+            CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Stricter than <see cref="EnsureOrganizationAsync"/>:
+        /// the current user must be the organization <b>owner</b>,
+        /// not merely an active member. Used by the organization
+        /// update / delete commands, which have no business being
+        /// reachable by every member — before Phase 10 they had
+        /// no authorization at all, so any authenticated user could
+        /// rename or delete any organization by id.
+        /// </summary>
+        Task EnsureOrganizationOwnerAsync(
             int organizationId,
             CancellationToken cancellationToken = default);
 

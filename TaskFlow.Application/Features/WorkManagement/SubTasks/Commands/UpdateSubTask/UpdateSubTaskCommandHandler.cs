@@ -1,4 +1,5 @@
 ﻿using MediatR;
+using TaskFlow.Application.Contracts.Security;
 using TaskFlow.Application.Exceptions;
 using TaskFlow.Domain.Interfaces.Persistence;
 using TaskFlow.Domain.Interfaces.WorkManagement;
@@ -9,13 +10,16 @@ namespace TaskFlow.Application.Features.WorkManagement.SubTasks.Commands.UpdateS
         : IRequestHandler<UpdateSubTaskCommand>
     {
         private readonly ISubTaskRepository _subTaskRepository;
+        private readonly IOrganizationAccessGuard _accessGuard;
         private readonly IUnitOfWork _unitOfWork;
 
         public UpdateSubTaskCommandHandler(
             ISubTaskRepository subTaskRepository,
+            IOrganizationAccessGuard accessGuard,
             IUnitOfWork unitOfWork)
         {
             _subTaskRepository = subTaskRepository;
+            _accessGuard = accessGuard;
             _unitOfWork = unitOfWork;
         }
 
@@ -34,6 +38,12 @@ namespace TaskFlow.Application.Features.WorkManagement.SubTasks.Commands.UpdateS
                     "SUBTASK_NOT_FOUND",
                     "SubTask not found.");
             }
+
+            // The parent task decides who may touch this subtask:
+            // org task -> owner/active member; personal task -> its creator.
+            await _accessGuard.EnsureTaskAsync(
+                subTask.TaskId,
+                cancellationToken);
 
             var existingSubTask =
                 await _subTaskRepository.GetByTitleAsync(

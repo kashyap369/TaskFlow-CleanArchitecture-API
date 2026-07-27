@@ -15,5 +15,16 @@ namespace TaskFlow.Api.Extensions
         {
             return app.UseMiddleware<RequestLoggingMiddleware>();
         }
+
+        /// <summary>
+        /// Must be registered <b>after</b> <c>UseAuthentication</c> —
+        /// the middleware exempts admins, and the role claim is only
+        /// populated once authentication has run.
+        /// </summary>
+        public static IApplicationBuilder UseMaintenanceMode(
+            this IApplicationBuilder app)
+        {
+            return app.UseMiddleware<MaintenanceModeMiddleware>();
+        }
     }
 }

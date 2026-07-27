@@ -39,6 +39,8 @@ namespace TaskFlow.Application.Features.WorkManagement.Tasks.Queries.GetTaskById
                     t."ActualCompletionDate"   AS "ActualCompletionDate",
                     t."ProjectId"              AS "ProjectId",
                     t."OrganizationId"         AS "OrganizationId",
+                    t."TeamId"                 AS "TeamId",
+                    tm."Name"                  AS "TeamName",
                     t."CreatedByUserId"        AS "CreatedByUserId",
                     t."AssignedToUserId"       AS "AssignedToUserId",
                     CASE
@@ -48,6 +50,9 @@ namespace TaskFlow.Application.Features.WorkManagement.Tasks.Queries.GetTaskById
                 FROM "Tasks" t
                 LEFT JOIN "Users" a
                     ON a."Id" = t."AssignedToUserId"
+                LEFT JOIN "Teams" tm
+                    ON tm."Id" = t."TeamId"
+                   AND tm."IsDeleted" = FALSE
                 WHERE t."Id" = @TaskId
                   AND t."IsDeleted" = FALSE;
                 """;

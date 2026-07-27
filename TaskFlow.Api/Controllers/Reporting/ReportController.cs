@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using TaskFlow.Api.Constants;
 using TaskFlow.Application.Features.Reporting.Queries.GetDashboardSummary;
 using TaskFlow.Application.Features.Reporting.Queries.GetMemberTaskReport;
+using TaskFlow.Application.Features.Reporting.Queries.GetMyPersonalTaskReport;
 using TaskFlow.Application.Features.Reporting.Queries.GetProjectReport;
 using TaskFlow.Application.Features.Reporting.Queries.GetTeamPerformanceReport;
 
@@ -33,6 +34,25 @@ namespace TaskFlow.Api.Controllers.Reporting
                     cancellationToken);
 
             return Ok(summary);
+        }
+
+        /// <summary>
+        /// Personal tracking report for the signed-in user — their own
+        /// personal (non-organization) tasks over a window. Weekly / monthly /
+        /// yearly are just different From/To values.
+        /// </summary>
+        [HttpGet("me")]
+        public async Task<IActionResult> MyPersonalReport(
+            [FromQuery] DateTime from,
+            [FromQuery] DateTime to,
+            CancellationToken cancellationToken)
+        {
+            var report =
+                await _mediator.Send(
+                    new GetMyPersonalTaskReportQuery(from, to),
+                    cancellationToken);
+
+            return Ok(report);
         }
 
         [HttpGet("member/{userId:int}")]

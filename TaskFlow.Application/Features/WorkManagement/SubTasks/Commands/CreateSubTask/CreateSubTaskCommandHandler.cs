@@ -1,4 +1,5 @@
 ﻿using MediatR;
+using TaskFlow.Application.Contracts.Security;
 using TaskFlow.Application.Exceptions;
 using TaskFlow.Domain.Interfaces.Persistence;
 using TaskFlow.Domain.Interfaces.WorkManagement;
@@ -13,15 +14,18 @@ namespace TaskFlow.Application.Features.WorkManagement.SubTasks.Commands.CreateS
     {
         private readonly ITaskRepository _taskRepository;
         private readonly ISubTaskRepository _subTaskRepository;
+        private readonly IOrganizationAccessGuard _accessGuard;
         private readonly IUnitOfWork _unitOfWork;
 
         public CreateSubTaskCommandHandler(
             ITaskRepository taskRepository,
             ISubTaskRepository subTaskRepository,
+            IOrganizationAccessGuard accessGuard,
             IUnitOfWork unitOfWork)
         {
             _taskRepository = taskRepository;
             _subTaskRepository = subTaskRepository;
+            _accessGuard = accessGuard;
             _unitOfWork = unitOfWork;
         }
 
@@ -29,6 +33,12 @@ namespace TaskFlow.Application.Features.WorkManagement.SubTasks.Commands.CreateS
             CreateSubTaskCommand request,
             CancellationToken cancellationToken)
         {
+            // The parent task decides who may add to it: org task ->
+            // owner/active member; personal task -> its creator.
+            await _accessGuard.EnsureTaskAsync(
+                request.TaskId,
+                cancellationToken);
+
             var task =
                 await _taskRepository.GetByIdAsync(
                     request.TaskId,

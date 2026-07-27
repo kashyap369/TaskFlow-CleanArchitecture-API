@@ -70,14 +70,27 @@ namespace TaskFlow.Api.Controllers.Organization
             return NoContent();
         }
 
+        /// <summary>
+        /// The organization's members. Both filters are optional:
+        /// <c>?organizationRoleId=</c> narrows to one org role (this is
+        /// what makes assignment "optionally filtered role-wise"), and
+        /// <c>?activeOnly=true</c> drops deactivated members — what an
+        /// assignee picker wants. Omitting both returns every member,
+        /// exactly as before.
+        /// </summary>
         [HttpGet("organization/{organizationId:int}")]
         public async Task<IActionResult> GetByOrganization(
             int organizationId,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            [FromQuery] int? organizationRoleId = null,
+            [FromQuery] bool activeOnly = false)
         {
             var members =
                 await _mediator.Send(
-                    new GetOrganizationMembersQuery(organizationId),
+                    new GetOrganizationMembersQuery(
+                        organizationId,
+                        organizationRoleId,
+                        activeOnly),
                     cancellationToken);
 
             return Ok(members);

@@ -7,6 +7,7 @@ using TaskFlow.Infra.Persistence.Context;
 using TaskFlow.Infra.Seeder.Identity.Role;
 using TaskFlow.Infra.Seeder.Identity.User;
 using TaskFlow.Infra.Seeder.Organization.Permission;
+using TaskFlow.Infra.Seeder.Platform;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -90,6 +91,11 @@ app.UseCors("AngularPolicy");
 
 app.UseAuthentication();
 
+// After UseAuthentication so the admin bypass can read the role
+// claim; before UseAuthorization so a held-off request never
+// reaches a controller.
+app.UseMaintenanceMode();
+
 app.UseAuthorization();
 
 app.MapControllers();
@@ -116,6 +122,10 @@ using (var scope = app.Services.CreateScope())
     // OrganizationPermissionNames so roles can be granted
     // permissions by id.
     await OrganizationPermissionSeeder.SeedAsync(context);
+
+    // Platform settings singleton. Inserts only when the table is
+    // empty, so an admin's saved values survive every restart.
+    await PlatformSettingSeeder.SeedAsync(context);
 }
 
 app.Run();

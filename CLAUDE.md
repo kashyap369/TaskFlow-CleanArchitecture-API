@@ -31,6 +31,9 @@ DB: PostgreSQL, connection string `DefaultConnection`. Seeds on startup: system 
 - **Authorization has three layers** (see docs/ARCHITECTURE.md): (1) every controller has `[Authorize]` — new controllers must too; auth endpoints stay anonymous. (2) Write commands that touch org-permission-sensitive actions call `IOrganizationPermissionChecker` (owner bypasses; else role must hold the permission from `OrganizationPermissionNames`). (3) Read queries returning org-scoped data implement an access-scope marker interface (`Application/Common/Authorization`) so `AccessGuardBehavior` enforces owner/member access — do this for every new org-scoped query.
 
 ## Docs
+- [docs/ProjectCompletion.md](docs/ProjectCompletion.md) — **API ⇄ UI parity ledger: the one doc covering
+  *both* projects.** Which features exist on each side, which endpoints the frontend consumes, what's
+  blocking whom. **Read it first** to see whether a task belongs to this repo or the frontend.
 - [docs/OVERVIEW.md](docs/OVERVIEW.md) — what the API is, who it's for, domain concepts
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — layers, request flow, auth, domain events, persistence
 - [docs/CONVENTIONS.md](docs/CONVENTIONS.md) — naming patterns + new-endpoint checklist
@@ -38,4 +41,7 @@ DB: PostgreSQL, connection string `DefaultConnection`. Seeds on startup: system 
 - [docs/SESSIONS.md](docs/SESSIONS.md) — session log: gotchas, dead ends, decisions
 
 ## Session Habit
-At the end of each working session: update PHASES.md status and append a short entry to SESSIONS.md.
+At the end of each working session: update PHASES.md status, append a short entry to SESSIONS.md, **and
+update [docs/ProjectCompletion.md](docs/ProjectCompletion.md)** if the work changed the API surface or
+closed something the frontend was blocked on (add a Changelog row + fix the affected parity rows).
+Nothing fails when that ledger drifts — it only stays true if it's updated deliberately.

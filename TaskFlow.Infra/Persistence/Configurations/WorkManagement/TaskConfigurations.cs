@@ -48,6 +48,10 @@ namespace TaskFlow.Infra.Persistence.Configurations.WorkManagement
 
             builder.Property(x => x.ProjectId);
 
+            // Nullable: a task need not belong to a team, and a
+            // personal task never can.
+            builder.Property(x => x.TeamId);
+
             builder.Property(x => x.CreatedAt)
                 .IsRequired();
 
@@ -61,6 +65,9 @@ namespace TaskFlow.Infra.Persistence.Configurations.WorkManagement
             builder.HasIndex(x => x.CreatedByUserId);
 
             builder.HasIndex(x => x.AssignedToUserId);
+
+            // Backs GET /team/{teamId}/tasks.
+            builder.HasIndex(x => x.TeamId);
 
             builder.HasIndex(x => x.Priority);
 

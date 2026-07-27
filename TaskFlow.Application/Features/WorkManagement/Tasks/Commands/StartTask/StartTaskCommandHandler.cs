@@ -1,4 +1,5 @@
 ﻿using MediatR;
+using TaskFlow.Application.Contracts.Security;
 using TaskFlow.Application.Exceptions;
 using TaskFlow.Domain.Interfaces.Persistence;
 using TaskFlow.Domain.Interfaces.WorkManagement;
@@ -9,13 +10,16 @@ namespace TaskFlow.Application.Features.WorkManagement.Tasks.Commands.StartTask
         : IRequestHandler<StartTaskCommand>
     {
         private readonly ITaskRepository _taskRepository;
+        private readonly IOrganizationAccessGuard _accessGuard;
         private readonly IUnitOfWork _unitOfWork;
 
         public StartTaskCommandHandler(
             ITaskRepository taskRepository,
+            IOrganizationAccessGuard accessGuard,
             IUnitOfWork unitOfWork)
         {
             _taskRepository = taskRepository;
+            _accessGuard = accessGuard;
             _unitOfWork = unitOfWork;
         }
 
@@ -23,6 +27,12 @@ namespace TaskFlow.Application.Features.WorkManagement.Tasks.Commands.StartTask
             StartTaskCommand request,
             CancellationToken cancellationToken)
         {
+            // Org task -> owner/active member; personal task -> its creator.
+            // Throws NotFound when the task does not exist.
+            await _accessGuard.EnsureTaskAsync(
+                request.TaskId,
+                cancellationToken);
+
             var task =
                 await _taskRepository.GetByIdAsync(
                     request.TaskId,

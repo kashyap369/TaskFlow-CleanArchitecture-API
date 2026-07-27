@@ -9,6 +9,7 @@ using TaskFlow.Application.Features.Organizations.Team.Commands.RemoveTeamMember
 using TaskFlow.Application.Features.Organizations.Team.Commands.UpdateTeam;
 using TaskFlow.Application.Features.Organizations.Team.Queries.GetOrganizationTeams;
 using TaskFlow.Application.Features.Organizations.Team.Queries.GetTeamById;
+using TaskFlow.Application.Features.WorkManagement.Tasks.Queries.GetTeamTasks;
 
 namespace TaskFlow.Api.Controllers.Organization
 {
@@ -110,6 +111,24 @@ namespace TaskFlow.Api.Controllers.Organization
                     cancellationToken);
 
             return Ok(team);
+        }
+
+        /// <summary>
+        /// The tasks this team is responsible for — the other half of
+        /// "tasks and reports can be viewed per team". Teams grouped
+        /// only people until Phase 11 added <c>Task.TeamId</c>.
+        /// </summary>
+        [HttpGet("{teamId:int}/tasks")]
+        public async Task<IActionResult> GetTasks(
+            int teamId,
+            CancellationToken cancellationToken)
+        {
+            var tasks =
+                await _mediator.Send(
+                    new GetTeamTasksQuery(teamId),
+                    cancellationToken);
+
+            return Ok(tasks);
         }
     }
 }

@@ -1,6 +1,117 @@
 # TaskFlow — Session Log
 
 > Append-only. 3–5 lines per session. Focus on gotchas, dead ends, and decisions — things git history doesn't capture.
+>
+> **▶ Next session: the BACKEND IS FEATURE-COMPLETE** (**82 endpoints**). Phases 10–13 closed every
+> §3.0 vision gap and every open defect (§4.2/§4.3/§4.3b/§4.4). Organization, Reporting, Admin and
+> Individual are all at **100%** on the API. **Remaining work is entirely frontend** — see the client's
+> `docs/PHASES.md` Phases 24–29. Backend backlog left (non-blocking): automated tests, pagination,
+> `ApiResponse<T>` consistency, forgot-password, Docker/CI.
+> Cross-project status: [ProjectCompletion.md](ProjectCompletion.md).
+
+## 2026-07-26 (Phases 10–13 — Organization / Reporting / Admin to 100%)
+- **Fixing one security hole uncovered a bigger one.** §4.3 said org update/delete had no
+  authorization. While adding the owner check I looked at the neighbouring member commands and found
+  **all four** (`Remove`/`Deactivate`/`Activate`/`ChangeMemberRole`) enforced *nothing* — any
+  authenticated user could deactivate or remove any member of any org. It was live: the seeded admin,
+  who belongs to no organization, could act on org 2's members. Logged as §4.3b. **Third time this
+  family has appeared** (§4.1b in Phase 9 was the first). The tell is structural: when a command
+  handler doesn't take `IOrganizationAccessGuard` or `IOrganizationPermissionChecker` in its
+  constructor, it almost certainly enforces nothing — grep constructors, not method bodies.
+- **`ChangeMemberRole` validated that the role existed but not that it belonged to the same
+  organization.** A role id from another org was accepted, silently importing that org's permission
+  set. Existence checks are not scope checks.
+- **Owner-only needed a new guard method.** `EnsureOrganizationAsync` permits owner *or active member*
+  — right for reading tasks, far too weak for renaming or deleting an entire workspace. Added
+  `EnsureOrganizationOwnerAsync` rather than reusing the loose one.
+- **The admin bypass is deliberately narrow.** §4.2 is fixed by short-circuiting `EnsureUserAsync` for
+  a platform admin — *user profiles only*. It would have been one line to bypass
+  `EnsureOrganizationAsync` too and turn the admin role into a skeleton key over every org's data.
+  Didn't. `GET /user` was already AdminOnly, so this only makes the detail agree with the list.
+- **Team assignment is its own route, not a field on `UpdateTaskCommand`.** This project has already
+  been bitten twice by "the list DTO lacks the field, so saving the edit form blanks it" (task
+  description, organization description). `PUT /task/{id}/team/{teamId}` + `DELETE /task/{id}/team`
+  cannot be triggered by accident, and it matches how assign/unassign already work.
+- **`TaskListSql` needed a LEFT JOIN, not a join.** `TeamId` is optional, so an inner join would have
+  silently dropped every task without a team — which, before this phase, was all of them.
+- **A setting nothing reads is worse than no setting**, because the UI implies it works. So
+  `RegistrationOpen` is enforced in `RegisterUserCommandHandler` and `MaintenanceMode` in real
+  middleware. Both **fail open** when the settings row is missing, matching pre-existing behaviour.
+- **Maintenance mode needs escape hatches or it's a footgun.** `/api/auth/*` stays open and admins pass
+  through everything — otherwise an admin flips the switch and locks themselves out of the very screen
+  that turns it off. Both hatches verified live before trusting the feature.
+- **`$pid` is read-only in PowerShell.** A verification script silently sent the *shell's* PID as a
+  task id and produced two baffling 404s. Not an API bug — but worth knowing before debugging one.
+
+## 2026-07-26 (Phase 9 completed — verification, reopen, and a NOT NULL bug the UI found)
+- **The workspace worked but the *account lifecycle* didn't.** Auditing against OVERVIEW turned up two
+  gaps nobody had listed: a completed task **couldn't be reopened** (`SubTask.Reopen()` existed,
+  `Task` had none) and a **newly registered account could never sign in** — PendingVerification with no
+  verification endpoint anywhere. The second one meant the Individual account was unreachable for a
+  real user no matter how good the workspace was. Audit the promises, not just the endpoints.
+- **Email verification with no schema change.** Used a **stateless HMAC token**
+  (`userId.expiry.signature`, keyed with the JWT secret, 48h) instead of a token column — no migration,
+  can't be forged, expires itself, and verifying twice is a no-op because `User.VerifyEmail()` already
+  returns early. `UserRegisteredEventHandler` resolves the user **by email**: the event is raised inside
+  `Register()` before the row exists, so it can't carry the id. Resend always returns 200 — replying
+  "no such user" would make it an account-enumeration oracle.
+- **🚨 The new UI immediately found a real bug: `TaskWorkLogs.Notes` was NOT NULL** while the domain
+  wrote `notes?.Trim()`. Starting a timer without a note **500'd**. The org portal never hit it because
+  its form always sent a string. **A non-nullable CLR `string` silently becomes a NOT NULL column** —
+  exactly the earlier `RefreshToken.RevokedByIp` bug. Fixed: `string?` + `IsRequired(false)` + migration
+  `MakeWorkLogNotesNullable`. Worth grepping the remaining entities for the same shape.
+- **Reopen defers to the subtasks.** `Task.Reopen()` clears `ActualCompletionDate`, then calls
+  `RecalculateStatus()` if the task has subtasks rather than forcing Todo — otherwise a task whose
+  subtasks are all complete would flip to Todo and immediately disagree with its own children.
+- Verified live end to end, twice: through the API, then through the browser as a **brand-new account
+  created via the real sign-up form**.
+
+## 2026-07-26 (Phase 9 SHIPPED — Individual account: personal workspace)
+- **The whole feature was one nullable parameter plus a security fix.** `CreateTaskCommand.OrganizationId`
+  `int` → `int?` was the only functional blocker; Domain, the DB column, `GetByTitleAsync`,
+  `EnsureTaskAsync` and the read queries were already written for personal tasks. **No migration, no
+  domain change, no schema change.** Survey the full stack before estimating.
+- **9.0 first, and it earned its place.** 11 command handlers (task ×4, subtask ×5, work-log ×2) had
+  **zero** authorization; `CreateTask` didn't even check you belonged to the org you were creating in.
+  Proved it live: as a user in no organization, start/complete/delete/subtask/worklog/update against
+  another org's task now all return **403** — every one succeeded before. Had personal tasks shipped
+  first, that hole would have covered private data.
+- **Reused `EnsureTaskAsync` rather than writing a write-side guard.** It already encoded exactly the
+  right rule (org task → owner/active member; personal task → creator only). Called it directly in the
+  handlers instead of marking commands for `AccessGuardBehavior`, keeping the documented "commands
+  enforce their own permissions" convention and leaving the behavior read-only.
+- **Two routes, one command.** `POST /task` now 400s (`ORGANIZATION_ID_REQUIRED`) instead of silently
+  creating a personal task when the client omits the org id — that would have been invisible data
+  corruption. `POST /task/personal` takes a request record with no OrganizationId/ProjectId *by
+  construction*, so the trap can't be reintroduced.
+- **Gotcha for the frontend:** `GET /worklog/mine` **requires** `?from&to`. Omitting them binds
+  `0001-01-01` and returns `[]` rather than erroring — it looks like "no data" when it's "no window".
+  Same for `/report/me`. Cost me a confused minute during verification.
+- Verified end-to-end then **restored seed state** (org 2 back to its 2 tasks, all test rows deleted).
+
+## 2026-07-26 (Planned Phase 9 — Individual account; audited OVERVIEW as a spec)
+- **`OVERVIEW.md` was claiming a vision that isn't built.** It said the vision was "implemented and
+  verified end-to-end" and listed "personal tasks (nullable org)" as done. Audited it line by line:
+  **Organization ~85%, Reporting ~70%, Individual ~0%.** Corrected the file. An OVERVIEW that overstates
+  is worse than none — it's the doc a new session reads first to decide what's left.
+- **Surveyed before planning, and the survey changed the plan's size.** Domain (`OrganizationId` is
+  `int?`, `IsPersonal`, `Assign()` refuses personal), the **DB column (already nullable — no migration)**,
+  `TaskRepository.GetByTitleAsync` (already branches on null org), `EnsureTaskAsync` (personal → creator
+  only) and the read queries are **all already built**. The Individual account is blocked by exactly one
+  thing: `CreateTaskCommand.OrganizationId` being non-nullable. Trace the full stack before estimating —
+  this looked like a feature and is closer to a parameter change.
+- **🚨 Found a bigger problem while surveying:** `DeleteTask`, `StartTask`, `CompleteTask`,
+  `CreateSubTask` and `StartWorkLog` handlers enforce **nothing at all** — no ownership, no org check, no
+  permission. Any authenticated user can delete any task by id. `AccessGuardBehavior` doesn't cover it
+  because it only inspects *reads*; the "commands enforce their own permissions" convention held for the
+  org-permission-gated handlers but was never applied to these. Scheduled as **Phase 9.0, ahead of the
+  feature** — shipping personal tasks onto an unguarded write side would mean private data anyone can
+  mutate.
+- **Decision: two routes, one command.** `POST /task` keeps requiring an org (400 without); a new
+  `POST /task/personal` rejects org/project. A single nullable field would let a client bug that drops
+  `organizationId` silently create a *personal* task instead of failing — invisible data corruption.
+- Cross-project status now lives in **[ProjectCompletion.md](ProjectCompletion.md)** (API ⇄ UI parity
+  ledger); update it whenever the API surface changes.
 
 ## 2026-07-23 (IDOR fix — read-side org scoping)
 - Closed the IDOR gap: any authenticated user could read another org's data by guessing ids. Added `IOrganizationAccessGuard` (Infra/EF: owner or active member; resolves project/task/team/role → org; personal task → creator; user profile → self/shared-org; member report → self/owner-of-shared-org) and a MediatR `AccessGuardBehavior` that runs the check when a query implements one of the marker interfaces in `Common/Authorization/AccessScopedRequests.cs`.

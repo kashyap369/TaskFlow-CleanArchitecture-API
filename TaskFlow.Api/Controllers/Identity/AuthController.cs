@@ -5,6 +5,8 @@ using TaskFlow.Application.Features.Identity.User.Commands.LoginUser;
 using TaskFlow.Application.Features.Identity.User.Commands.LogoutUser;
 using TaskFlow.Application.Features.Identity.User.Commands.RefreshUserToken;
 using TaskFlow.Application.Features.Identity.User.Commands.RegisterUser;
+using TaskFlow.Application.Features.Identity.User.Commands.ResendVerificationEmail;
+using TaskFlow.Application.Features.Identity.User.Commands.VerifyEmail;
 using TaskFlow.Application.Features.Identity.User.DTOs.Commands.LoginUser;
 
 namespace TaskFlow.Api.Controllers.Identity
@@ -32,6 +34,51 @@ namespace TaskFlow.Api.Controllers.Identity
                 {
                     Message = "User registered successfully.",
                     Data = userId
+                });
+        }
+
+        /// <summary>
+        /// Completes registration. A new account is PendingVerification and
+        /// cannot sign in until this is called with the token from the
+        /// welcome email. Idempotent — clicking the link twice still succeeds.
+        /// </summary>
+        [HttpPost("verify-email")]
+        public async Task<IActionResult> VerifyEmail(
+            VerifyEmailCommand command,
+            CancellationToken cancellationToken)
+        {
+            await _mediator.Send(
+                command,
+                cancellationToken);
+
+            return Ok(
+                new ApiResponse<object>
+                {
+                    Message = "Email verified. You can sign in now.",
+                    Data = null
+                });
+        }
+
+        /// <summary>
+        /// Sends a fresh verification link. Always reports success, even for
+        /// an unknown or already-verified address — otherwise it would be an
+        /// account-enumeration oracle.
+        /// </summary>
+        [HttpPost("resend-verification")]
+        public async Task<IActionResult> ResendVerification(
+            ResendVerificationEmailCommand command,
+            CancellationToken cancellationToken)
+        {
+            await _mediator.Send(
+                command,
+                cancellationToken);
+
+            return Ok(
+                new ApiResponse<object>
+                {
+                    Message =
+                        "If that address needs verifying, a new link is on its way.",
+                    Data = null
                 });
         }
 

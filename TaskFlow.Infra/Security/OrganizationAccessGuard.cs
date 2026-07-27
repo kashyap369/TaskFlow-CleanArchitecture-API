@@ -136,6 +136,43 @@ namespace TaskFlow.Infra.Security
                 organizationId.Value, cancellationToken);
         }
 
+        public async Task EnsureOrganizationOwnerAsync(
+            int organizationId,
+            CancellationToken cancellationToken = default)
+        {
+            var userId = _currentUserService.UserId;
+
+            var organizationExists =
+                await _context.Organizations
+                    .AsNoTracking()
+                    .AnyAsync(
+                        o => o.Id == organizationId,
+                        cancellationToken);
+
+            if (!organizationExists)
+            {
+                throw new NotFoundException(
+                    "ORGANIZATION_NOT_FOUND",
+                    "Organization not found.");
+            }
+
+            var isOwner =
+                await _context.Organizations
+                    .AsNoTracking()
+                    .AnyAsync(
+                        o => o.Id == organizationId
+                          && o.OwnerUserId == userId,
+                        cancellationToken);
+
+            if (!isOwner)
+            {
+                throw new ForbiddenException(
+                    "NOT_ORGANIZATION_OWNER",
+                    "Only the organization owner can perform " +
+                    "this action.");
+            }
+        }
+
         public async Task EnsureUserAsync(
             int targetUserId,
             CancellationToken cancellationToken = default)
@@ -143,6 +180,14 @@ namespace TaskFlow.Infra.Security
             var userId = _currentUserService.UserId;
 
             if (targetUserId == userId)
+                return;
+
+            // A platform admin can open any user profile. Without
+            // this, the AdminOnly user *list* and the org-scoped
+            // user *detail* disagreed: the seeded admin belongs to
+            // no organization, so it could list every account but
+            // open none.
+            if (_currentUserService.IsAdmin)
                 return;
 
             // Visible if the two users share an organization

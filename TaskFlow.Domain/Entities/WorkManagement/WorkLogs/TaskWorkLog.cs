@@ -20,7 +20,8 @@ namespace TaskFlow.Domain.Entities.WorkManagement.WorkLogs
 
         public DateTime? EndedAt { get; private set; }
 
-        public string Notes { get; private set; }
+        /// <summary>Optional — a timer can be started with no note at all.</summary>
+        public string? Notes { get; private set; }
 
         public bool IsRunning =>
             !EndedAt.HasValue;
@@ -39,7 +40,7 @@ namespace TaskFlow.Domain.Entities.WorkManagement.WorkLogs
             int userId,
             DateTime startedAt,
             DateTime? endedAt,
-            string notes)
+            string? notes)
         {
             if (taskId <= 0)
                 throw new ArgumentException(
@@ -64,7 +65,7 @@ namespace TaskFlow.Domain.Entities.WorkManagement.WorkLogs
         public static TaskWorkLog StartNew(
             int taskId,
             int userId,
-            string notes = null)
+            string? notes = null)
         {
             return new TaskWorkLog(
                 taskId,
@@ -100,7 +101,7 @@ namespace TaskFlow.Domain.Entities.WorkManagement.WorkLogs
                 notes);
         }
 
-        public void Stop(string notes = null)
+        public void Stop(string? notes = null)
         {
             if (!IsRunning)
                 return;
@@ -113,7 +114,7 @@ namespace TaskFlow.Domain.Entities.WorkManagement.WorkLogs
             MarkAsUpdated();
         }
 
-        public void UpdateNotes(string notes)
+        public void UpdateNotes(string? notes)
         {
             Notes = notes?.Trim();
 

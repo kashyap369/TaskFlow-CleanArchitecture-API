@@ -15,6 +15,8 @@ namespace TaskFlow.Application.Features.WorkManagement.Tasks.DTOs.Queries
         public DateTime? ActualCompletionDate { get; init; }
         public int? ProjectId { get; init; }
         public int? OrganizationId { get; init; }
+        public int? TeamId { get; init; }
+        public string? TeamName { get; init; }
         public int CreatedByUserId { get; init; }
         public int? AssignedToUserId { get; init; }
         public int SubTaskCount { get; init; }
@@ -33,6 +35,8 @@ namespace TaskFlow.Application.Features.WorkManagement.Tasks.DTOs.Queries
         public DateTime? ActualCompletionDate { get; init; }
         public int? ProjectId { get; init; }
         public int? OrganizationId { get; init; }
+        public int? TeamId { get; init; }
+        public string? TeamName { get; init; }
         public int CreatedByUserId { get; init; }
         public int? AssignedToUserId { get; init; }
         public string? AssignedToFullName { get; init; }
