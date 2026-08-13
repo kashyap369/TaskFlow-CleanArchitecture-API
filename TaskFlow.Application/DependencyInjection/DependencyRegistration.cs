@@ -2,6 +2,8 @@
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
 using TaskFlow.Application.Behaviors;
+using TaskFlow.Application.Contracts.Security;
+using TaskFlow.Application.Features.Identity.User.Services;
 
 namespace TaskFlow.Application.DependencyInjection
 {
@@ -28,6 +30,10 @@ namespace TaskFlow.Application.DependencyInjection
             services.AddTransient(
                 typeof(IPipelineBehavior<,>),
                 typeof(AccessGuardBehavior<,>));
+
+            services.AddScoped<IAuthSessionIssuer, AuthSessionIssuer>();
+            services.AddScoped<OneTimeCodeRequestService>();
+            services.AddScoped<OneTimeCodeVerifier>();
 
             return services;
         }

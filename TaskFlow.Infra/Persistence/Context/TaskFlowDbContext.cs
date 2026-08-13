@@ -32,6 +32,7 @@ namespace TaskFlow.Infra.Persistence.Context
         public DbSet<SystemRole> SystemRoles => Set<SystemRole>();
 
         public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+        public DbSet<OneTimeCode> OneTimeCodes => Set<OneTimeCode>();
         public DbSet<Task> Tasks => Set<Task>();
 
         public DbSet<SubTask> SubTasks => Set<SubTask>();

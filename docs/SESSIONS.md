@@ -9,6 +9,18 @@
 > `ApiResponse<T>` consistency, forgot-password, Docker/CI.
 > Cross-project status: [ProjectCompletion.md](ProjectCompletion.md).
 
+## 2026-08-14 (Account recovery and passwordless login)
+- Added persisted, purpose-scoped one-time codes for password reset and email-code login. Only an
+  HMAC-SHA256 digest is stored; comparisons are fixed-time; codes expire in 10 minutes, are single
+  use, lock after five failures, and enforce a 60-second resend cooldown.
+- Request endpoints always return the same response for unknown, ineligible, and eligible accounts;
+  SMTP failures are logged but do not become an account-enumeration signal. Four auth endpoints also
+  have a shared per-IP rate-limit policy.
+- Both login methods now share `IAuthSessionIssuer`, so JWT claims, refresh tokens, login audit time,
+  and role behavior cannot drift. Password reset revokes every active refresh token.
+- Migration `AddOneTimeCodes` was generated and applied locally. Build succeeds; pre-existing nullable
+  warnings remain. Local API boot is blocked by missing ObjectStorage development configuration.
+
 ## 2026-07-26 (Phases 10–13 — Organization / Reporting / Admin to 100%)
 - **Fixing one security hole uncovered a bigger one.** §4.3 said org update/delete had no
   authorization. While adding the owner check I looked at the neighbouring member commands and found

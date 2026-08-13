@@ -58,12 +58,12 @@ has been exercised against a running API — not that the code compiles.
 | **Version status** | **Feature-complete.** Both account types + Organization/Reporting/Admin at 100% | **All three portals complete** (session Phases 26–29, 2026-07-26) |
 | **Endpoints** | **82** exposed (13 controllers; excludes the Angular-template `WeatherForecastController`) | **80 consumed.** The only 2 left are the deliberate skips below — **nothing is unconsumed for want of a screen** |
 | **Quality gates** | `dotnet build` **0 warnings / 0 errors** · **no automated tests** (backlog) | `ng lint` **0 errors** · `ng build` ✅ · **204/204** unit tests · WCAG AA on all 42 token pairings · **no E2E** |
-| **Biggest gap** | **None blocking.** Automated tests, pagination, `ApiResponse<T>` consistency, forgot-password | Calendar page, CSV/PDF export, per-member trend charts, E2E tests (V1-GAPS §3) |
+| **Biggest gap** | **None blocking.** Automated tests, pagination, `ApiResponse<T>` consistency | Calendar page, CSV/PDF export, per-member trend charts, E2E tests (V1-GAPS §3) |
 | **Vision coverage** (§3.0) | **Organization 100% · Reporting 100% · Individual 100%** | **All three portals complete** — Organization, Individual and Admin |
 
 > **2026-07-26 — the two sides are now in sync.** Backend Phases 10–13 closed every ⛔/⚠️/⬜ row, and
 > frontend Phases 26–29 consumed the six endpoints they added. **What remains on either side is
-> optional polish, not parity:** forgot-password on the API, V1-GAPS §3 on the UI.
+> optional polish, not parity:** V1-GAPS §3 on the UI.
 
 ### The 2 unconsumed endpoints — deliberate, not a gap
 
@@ -345,8 +345,7 @@ assigning a personal task returns **400 `TASK_NOT_ASSIGNABLE`**, not 500.
 | Admin org list + platform settings | ✅ Phase 13 |
 
 **Remaining backend backlog — none of it blocks the frontend:** automated tests (still zero),
-pagination on list endpoints, `ApiResponse<T>` envelope consistency, forgot-password endpoints,
-Docker/CI.
+pagination on list endpoints, `ApiResponse<T>` envelope consistency, Docker/CI.
 
 **The whole remaining project is frontend work.** Start with V1-GAPS §3 (CSV export, calendar, trend
 charts — never needed the API), then frontend Phases 26–29 to surface the 6 new endpoints.
@@ -365,6 +364,7 @@ Docker + CI/CD.
 
 | Date | Side | Change |
 |---|---|---|
+| 2026-08-14 | **Both** | **Account recovery and passwordless sign-in shipped end to end.** Four auth endpoints add generic, rate-limited code requests plus reset/login verification; persisted codes are hashed, expiring, single-use and attempt-limited. Password reset revokes active refresh tokens. Angular adds email-code mode to personal/organization/admin sign-in and a responsive forgot-password flow. Endpoints **82 → 86**, consumed **80 → 84**. |
 | 2026-07-26 | UI | **Frontend Phases 26–29 shipped — the two sides are in sync.** Consumed all six endpoints backend Phases 11–13 added: **Admin → Organizations** and **Admin → Platform Settings** pages (Phase 27), **team-scoped tasks + role/active-filtered assignment** (Phase 28), and **priority breakdown + project timeline + per-team task drill-down** in reporting (Phase 29). Phase 26 deleted the admin drawer's now-dead "denied state" and restored the honest member-removal copy. Endpoints consumed **74 → 80 of 82** (re-derived; the 2 left are the standing deliberate skips). Tests **179 → 195**. |
 | 2026-07-26 | UI | ⚠️ **Maintenance mode exposed a two-request lie in sign-in.** `POST /auth/login` is exempt from the maintenance middleware but the following `GET /user/me` is not — so a non-admin authenticated **successfully** and was then shown *"Check your credentials and try again."* Fixed in `AuthFacade`. Also: a 503 `MAINTENANCE_MODE` now raises a sticky banner at the app root instead of one toast per failed request, since it describes a platform state rather than a request failure. **No API change needed.** |
 | 2026-07-26 | API | **Phases 10–13 shipped — the backend is feature-complete.** Organization, Reporting and Admin all reach **100%**. Endpoints **76 → 82**; one additive migration (`AddTaskTeamAndPlatformSettings`). Closes §4.2, §4.3, §4.4 and the newly-found §4.3b. Adds `Task.TeamId` + `GET /team/{id}/tasks`, role/active filters on the member list, priority breakdown + project timeline + per-team task lists in reports, and `GET /admin/organizations` + `GET`/`PUT /admin/settings`. **Every remaining item in this project is now frontend work.** |

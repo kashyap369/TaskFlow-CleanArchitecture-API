@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
+using System.Threading.RateLimiting;
 using TaskFlow.Api.Extensions;
 using TaskFlow.Api.Services;
 using TaskFlow.Application.Contracts.Security;
@@ -17,6 +18,21 @@ var builder = WebApplication.CreateBuilder(args);
 // Services
 
 builder.Services.AddControllers();
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddPolicy("auth-code", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+});
 
 builder.Services.AddEndpointsApiExplorer();
 
@@ -108,6 +124,7 @@ if (app.Environment.IsDevelopment())
 app.UseForwardedHeaders();
 app.UseHttpsRedirection();
 app.UseCors("AngularPolicy");
+app.UseRateLimiter();
 
 app.UseAuthentication();
 

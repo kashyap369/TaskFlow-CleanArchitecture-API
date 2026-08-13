@@ -54,6 +54,7 @@ namespace TaskFlow.Infra.DependencyInjection
             services.AddScoped<IPasswordHasher, PasswordHasher>();
             services.AddScoped<IUserRepository, UserRepository>();
             services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
+            services.AddScoped<IOneTimeCodeRepository, OneTimeCodeRepository>();
             services.AddScoped<ISystemRoleRepository, SystemRoleRepository>();
             services.AddScoped<IUserRoleRepository, UserRoleRepository>();
             services.AddScoped<IDomainEventHandler<UserRegisteredEvent>, UserRegisteredEventHandler>();
@@ -64,6 +65,14 @@ namespace TaskFlow.Infra.DependencyInjection
             services.AddSingleton<
                 IEmailVerificationTokenService,
                 EmailVerificationTokenService>();
+            services
+                .AddOptions<OneTimeCodeSettings>()
+                .Bind(configuration.GetSection("OneTimeCodeSettings"))
+                .Validate(
+                    settings => settings.SecretKey.Length >= 32,
+                    "OneTimeCodeSettings:SecretKey must contain at least 32 characters.")
+                .ValidateOnStart();
+            services.AddSingleton<IOneTimeCodeProtector, OneTimeCodeProtector>();
 
             // Read side (Dapper): a connection factory the query
             // handlers use to run raw SQL straight into DTOs.

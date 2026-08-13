@@ -53,5 +53,11 @@ namespace TaskFlow.Infra.Persistence.Repositories.Identity.Users
         {
             _context.RefreshTokens.Update(refreshToken);
         }
+
+        public void UpdateRange(
+            IEnumerable<RefreshToken> refreshTokens)
+        {
+            _context.RefreshTokens.UpdateRange(refreshTokens);
+        }
     }
 }

@@ -18,5 +18,8 @@ namespace TaskFlow.Domain.Interfaces.Identity.Users
 
         void Update(
             RefreshToken refreshToken);
+
+        void UpdateRange(
+            IEnumerable<RefreshToken> refreshTokens);
     }
 }

@@ -1,10 +1,15 @@
 ﻿using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using TaskFlow.Api.Models.Responses;
 using TaskFlow.Application.Features.Identity.User.Commands.LoginUser;
+using TaskFlow.Application.Features.Identity.User.Commands.LoginWithCode;
 using TaskFlow.Application.Features.Identity.User.Commands.LogoutUser;
 using TaskFlow.Application.Features.Identity.User.Commands.RefreshUserToken;
 using TaskFlow.Application.Features.Identity.User.Commands.RegisterUser;
+using TaskFlow.Application.Features.Identity.User.Commands.RequestLoginCode;
+using TaskFlow.Application.Features.Identity.User.Commands.RequestPasswordReset;
+using TaskFlow.Application.Features.Identity.User.Commands.ResetPassword;
 using TaskFlow.Application.Features.Identity.User.Commands.ResendVerificationEmail;
 using TaskFlow.Application.Features.Identity.User.Commands.VerifyEmail;
 using TaskFlow.Application.Features.Identity.User.DTOs.Commands.LoginUser;
@@ -94,6 +99,73 @@ namespace TaskFlow.Api.Controllers.Identity
                     Message = "Login successful.",
                     Data = result
                 });
+        }
+
+        /// <summary>
+        /// Sends a single-use sign-in code when the address belongs to an
+        /// active, verified account. The response never reveals whether it did.
+        /// </summary>
+        [HttpPost("login-code/request")]
+        [EnableRateLimiting("auth-code")]
+        public async Task<IActionResult> RequestLoginCode(
+            RequestLoginCodeCommand command,
+            CancellationToken cancellationToken)
+        {
+            await _mediator.Send(command, cancellationToken);
+
+            return Ok(new ApiResponse<object>
+            {
+                Message = "If the account is eligible, a sign-in code is on its way.",
+                Data = null
+            });
+        }
+
+        [HttpPost("login-code/verify")]
+        [EnableRateLimiting("auth-code")]
+        public async Task<IActionResult> LoginWithCode(
+            LoginWithCodeCommand command,
+            CancellationToken cancellationToken)
+        {
+            var result = await _mediator.Send(command, cancellationToken);
+
+            return Ok(new ApiResponse<LoginUserResponseDto>
+            {
+                Message = "Login successful.",
+                Data = result
+            });
+        }
+
+        /// <summary>
+        /// Starts password recovery without disclosing account existence.
+        /// </summary>
+        [HttpPost("password/forgot")]
+        [EnableRateLimiting("auth-code")]
+        public async Task<IActionResult> ForgotPassword(
+            RequestPasswordResetCommand command,
+            CancellationToken cancellationToken)
+        {
+            await _mediator.Send(command, cancellationToken);
+
+            return Ok(new ApiResponse<object>
+            {
+                Message = "If an account exists for that address, a reset code is on its way.",
+                Data = null
+            });
+        }
+
+        [HttpPost("password/reset")]
+        [EnableRateLimiting("auth-code")]
+        public async Task<IActionResult> ResetPassword(
+            ResetPasswordCommand command,
+            CancellationToken cancellationToken)
+        {
+            await _mediator.Send(command, cancellationToken);
+
+            return Ok(new ApiResponse<object>
+            {
+                Message = "Password reset successfully. Sign in with your new password.",
+                Data = null
+            });
         }
 
         [HttpPost("refresh")]

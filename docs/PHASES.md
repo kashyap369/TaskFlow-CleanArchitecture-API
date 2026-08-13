@@ -2,6 +2,17 @@
 
 > Keep the Current Status section up to date at the end of every session.
 
+## ✅ Phase 14 — Account recovery & passwordless sign-in (2026-08-14)
+
+- Added four public auth endpoints: `POST /auth/password/forgot`, `POST /auth/password/reset`,
+  `POST /auth/login-code/request`, and `POST /auth/login-code/verify`.
+- One shared `OneTimeCode` lifecycle supports reset and login purposes with HMAC-SHA256 hashes,
+  cryptographically generated six-digit codes, 10-minute expiry, single use, five-attempt lockout,
+  60-second resend cooldown, generic request responses, and per-IP API rate limiting.
+- Password reset revokes all active refresh tokens. Passwordless sign-in uses the same JWT, role,
+  account-status checks, and portal-routing response as password sign-in.
+- Migration `AddOneTimeCodes` generated and applied locally. API endpoint count **82 → 86**.
+
 ## ▶ NEXT SESSION — START HERE (2026-07-26)
 
 **Phases 10–13 are DONE — the backend is feature-complete.** Organization, Reporting and Admin are
@@ -18,7 +29,7 @@ frontend's `docs/PHASES.md` Phases 24–29:
 - **27, 28, 29** are unblocked by Phases 13, 11 and 12 respectively; the endpoints are live and tested.
 
 Backend backlog that remains is all non-blocking: automated tests (still none), pagination on list
-endpoints, `ApiResponse<T>` envelope consistency, forgot-password, Docker/CI.
+endpoints, `ApiResponse<T>` envelope consistency, Docker/CI.
 
 ## Current Status (2026-07-23, IDOR fix)
 - ✅ **Read-side org scoping (IDOR) resolved.** New `IOrganizationAccessGuard` (Infra, EF) + `AccessGuardBehavior` (MediatR pipeline). Read queries implement a marker interface (`IOrganizationScopedRequest`/`IProjectScopedRequest`/`ITaskScopedRequest`/`ITeamScopedRequest`/`IRoleScopedRequest`/`IUserScopedRequest`/`IMemberReportScopedRequest`); the behavior resolves the id to an organization and verifies the current user is the owner or an active member before the handler runs. Personal tasks → creator only; user profile → self or shared org; member report → self or owner of a shared org.
