@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using TaskFlow.Application.Contracts.Configuration;
 using TaskFlow.Application.Contracts.Email;
 using TaskFlow.Application.Contracts.Security;
@@ -23,17 +24,20 @@ namespace TaskFlow.Application.DomainEvents.Identity.User
         private readonly IUserRepository _userRepository;
         private readonly IEmailVerificationTokenService _tokenService;
         private readonly IClientUrlProvider _clientUrlProvider;
+        private readonly ILogger<UserRegisteredEventHandler> _logger;
 
         public UserRegisteredEventHandler(
             IEmailService emailService,
             IUserRepository userRepository,
             IEmailVerificationTokenService tokenService,
-            IClientUrlProvider clientUrlProvider)
+            IClientUrlProvider clientUrlProvider,
+            ILogger<UserRegisteredEventHandler> logger)
         {
             _emailService = emailService;
             _userRepository = userRepository;
             _tokenService = tokenService;
             _clientUrlProvider = clientUrlProvider;
+            _logger = logger;
         }
 
         public async Task HandleAsync(
@@ -85,11 +89,32 @@ namespace TaskFlow.Application.DomainEvents.Identity.User
                     "{{CurrentYear}}",
                     DateTime.UtcNow.Year.ToString());
 
-            await _emailService.SendAsync(
-                domainEvent.Email,
-                "Verify your TaskFlow account",
-                template,
-                cancellationToken);
+            try
+            {
+                await _emailService.SendAsync(
+                    domainEvent.Email,
+                    "Verify your TaskFlow account",
+                    template,
+                    cancellationToken);
+            }
+            catch (OperationCanceledException)
+                when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                // The user has already been persisted when domain events are
+                // dispatched. Email delivery must therefore not abort the
+                // remainder of registration (most importantly, assignment of
+                // the default User role) and leave a half-created account.
+                // The pending user can request another verification email once
+                // the mail provider is available again.
+                _logger.LogError(
+                    exception,
+                    "Could not send the verification email for newly registered user {Email}.",
+                    domainEvent.Email);
+            }
         }
     }
 }
