@@ -88,6 +88,13 @@ var allowedOrigins =
         .Get<string[]>()
     ?? ["http://localhost:4200"];
 
+// Keep the canonical production client reachable while older deployments
+// are migrated away from the historical `tasflow` hostname typo.
+allowedOrigins = allowedOrigins
+    .Append("https://taskflow.inksphere.space")
+    .Distinct(StringComparer.OrdinalIgnoreCase)
+    .ToArray();
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AngularPolicy", policy =>
