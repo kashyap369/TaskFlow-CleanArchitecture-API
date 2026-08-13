@@ -68,6 +68,13 @@ namespace TaskFlow.Infra.DependencyInjection
             services
                 .AddOptions<OneTimeCodeSettings>()
                 .Bind(configuration.GetSection("OneTimeCodeSettings"))
+                .PostConfigure(settings =>
+                {
+                    if (string.IsNullOrWhiteSpace(settings.SecretKey))
+                    {
+                        settings.SecretKey = configuration["JwtSettings:SecretKey"] ?? string.Empty;
+                    }
+                })
                 .Validate(
                     settings => settings.SecretKey.Length >= 32,
                     "OneTimeCodeSettings:SecretKey must contain at least 32 characters.")
