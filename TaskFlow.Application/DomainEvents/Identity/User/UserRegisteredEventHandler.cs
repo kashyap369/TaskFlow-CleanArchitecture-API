@@ -1,3 +1,4 @@
+using TaskFlow.Application.Contracts.Configuration;
 using TaskFlow.Application.Contracts.Email;
 using TaskFlow.Application.Contracts.Security;
 using TaskFlow.Domain.DomainEvents.Identity.User;
@@ -18,20 +19,21 @@ namespace TaskFlow.Application.DomainEvents.Identity.User
         /// Where the Angular client is served from. Matches the API's CORS
         /// origin (http, not https — the dev server is plain HTTP).
         /// </summary>
-        private const string ClientBaseUrl = "http://localhost:4200";
-
         private readonly IEmailService _emailService;
         private readonly IUserRepository _userRepository;
         private readonly IEmailVerificationTokenService _tokenService;
+        private readonly IClientUrlProvider _clientUrlProvider;
 
         public UserRegisteredEventHandler(
             IEmailService emailService,
             IUserRepository userRepository,
-            IEmailVerificationTokenService tokenService)
+            IEmailVerificationTokenService tokenService,
+            IClientUrlProvider clientUrlProvider)
         {
             _emailService = emailService;
             _userRepository = userRepository;
             _tokenService = tokenService;
+            _clientUrlProvider = clientUrlProvider;
         }
 
         public async Task HandleAsync(
@@ -48,8 +50,8 @@ namespace TaskFlow.Application.DomainEvents.Identity.User
 
             var verifyUrl =
                 user is null
-                    ? $"{ClientBaseUrl}/auth/login"
-                    : $"{ClientBaseUrl}/auth/verify-email?token="
+                    ? $"{_clientUrlProvider.BaseUrl}/auth/login"
+                    : $"{_clientUrlProvider.BaseUrl}/auth/verify-email?token="
                       + Uri.EscapeDataString(
                           _tokenService.Generate(user.Id));
 

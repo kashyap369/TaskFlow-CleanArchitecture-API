@@ -4,10 +4,14 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
+using Amazon.Runtime;
+using Amazon.S3;
 using System.Text;
 using TaskFlow.Application.Contracts.Email;
+using TaskFlow.Application.Contracts.Configuration;
 using TaskFlow.Application.Contracts.Persistence;
 using TaskFlow.Application.Contracts.Security;
+using TaskFlow.Application.Contracts.Storage;
 using TaskFlow.Application.DomainEvents;
 using TaskFlow.Application.DomainEvents.Identity.User;
 using TaskFlow.Application.DomainEvents.Organizations;
@@ -19,6 +23,7 @@ using TaskFlow.Domain.Interfaces.Persistence;
 using TaskFlow.Domain.Interfaces.Platform;
 using TaskFlow.Domain.Interfaces.WorkManagement;
 using TaskFlow.Infra.DomainEvents.Dispatchers;
+using TaskFlow.Infra.Configuration;
 using TaskFlow.Infra.Email;
 using TaskFlow.Infra.Email.Smtp;
 using TaskFlow.Infra.Persistence;
@@ -28,6 +33,7 @@ using TaskFlow.Infra.Persistence.Repositories.Organizations;
 using TaskFlow.Infra.Persistence.Repositories.Platform;
 using TaskFlow.Infra.Persistence.Repositories.WorkManagement;
 using TaskFlow.Infra.Security;
+using TaskFlow.Infra.Storage;
 
 namespace TaskFlow.Infra.DependencyInjection
 {
@@ -65,6 +71,48 @@ namespace TaskFlow.Infra.DependencyInjection
 
             services.Configure<JwtSettings>(configuration.GetSection("JwtSettings"));
             services.Configure<EmailSettings>(configuration.GetSection("EmailSettings"));
+            services
+                .AddOptions<ClientSettings>()
+                .Bind(configuration.GetSection("ClientSettings"))
+                .Validate(
+                    settings => Uri.TryCreate(settings.BaseUrl, UriKind.Absolute, out _),
+                    "ClientSettings:BaseUrl must be an absolute URL.")
+                .ValidateOnStart();
+            services.AddSingleton<IClientUrlProvider, ClientUrlProvider>();
+            services
+                .AddOptions<ObjectStorageSettings>()
+                .Bind(configuration.GetSection("ObjectStorage"))
+                .Validate(
+                    settings => Uri.TryCreate(settings.Endpoint, UriKind.Absolute, out _),
+                    "ObjectStorage:Endpoint must be an absolute URL.")
+                .Validate(
+                    settings =>
+                        !string.IsNullOrWhiteSpace(settings.AccessKey) &&
+                        !string.IsNullOrWhiteSpace(settings.SecretKey) &&
+                        !string.IsNullOrWhiteSpace(settings.Bucket),
+                    "Object storage credentials and bucket are required.")
+                .ValidateOnStart();
+            services.AddSingleton<IAmazonS3>(serviceProvider =>
+            {
+                var settings = serviceProvider
+                    .GetRequiredService<Microsoft.Extensions.Options.IOptions<ObjectStorageSettings>>()
+                    .Value;
+
+                var credentials = new BasicAWSCredentials(
+                    settings.AccessKey,
+                    settings.SecretKey);
+
+                return new AmazonS3Client(
+                    credentials,
+                    new AmazonS3Config
+                    {
+                        ServiceURL = settings.Endpoint,
+                        ForcePathStyle = settings.ForcePathStyle,
+                        UseHttp = !settings.UseSsl,
+                        AuthenticationRegion = "us-east-1"
+                    });
+            });
+            services.AddSingleton<IObjectStorage, S3ObjectStorage>();
             // Register the organization repositories
             services.AddScoped<
     IOrganizationRepository,

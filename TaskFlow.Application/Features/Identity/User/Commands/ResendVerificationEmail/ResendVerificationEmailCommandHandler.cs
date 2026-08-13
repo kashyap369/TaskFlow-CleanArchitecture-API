@@ -1,4 +1,5 @@
 using MediatR;
+using TaskFlow.Application.Contracts.Configuration;
 using TaskFlow.Application.Contracts.Email;
 using TaskFlow.Application.Contracts.Security;
 using TaskFlow.Domain.Interfaces.Identity.Users;
@@ -9,20 +10,21 @@ namespace TaskFlow.Application.Features.Identity.User.Commands.ResendVerificatio
     public sealed class ResendVerificationEmailCommandHandler
         : IRequestHandler<ResendVerificationEmailCommand>
     {
-        private const string ClientBaseUrl = "http://localhost:4200";
-
         private readonly IUserRepository _userRepository;
         private readonly IEmailVerificationTokenService _tokenService;
         private readonly IEmailService _emailService;
+        private readonly IClientUrlProvider _clientUrlProvider;
 
         public ResendVerificationEmailCommandHandler(
             IUserRepository userRepository,
             IEmailVerificationTokenService tokenService,
-            IEmailService emailService)
+            IEmailService emailService,
+            IClientUrlProvider clientUrlProvider)
         {
             _userRepository = userRepository;
             _tokenService = tokenService;
             _emailService = emailService;
+            _clientUrlProvider = clientUrlProvider;
         }
 
         public async Task Handle(
@@ -42,7 +44,7 @@ namespace TaskFlow.Application.Features.Identity.User.Commands.ResendVerificatio
             }
 
             var verifyUrl =
-                $"{ClientBaseUrl}/auth/verify-email?token="
+                $"{_clientUrlProvider.BaseUrl}/auth/verify-email?token="
                 + Uri.EscapeDataString(
                     _tokenService.Generate(user.Id));
 

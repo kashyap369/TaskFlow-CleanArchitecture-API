@@ -1,0 +1,10 @@
+.git
+.github
+.vs
+**/bin
+**/obj
+**/appsettings.json
+**/appsettings.Development.json
+.tmp-*
+docs
+*.docx

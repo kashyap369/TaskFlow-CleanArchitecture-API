@@ -1,6 +1,9 @@
+using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.EntityFrameworkCore;
 using TaskFlow.Api.Extensions;
 using TaskFlow.Api.Services;
 using TaskFlow.Application.Contracts.Security;
+using TaskFlow.Application.Contracts.Storage;
 using TaskFlow.Application.DependencyInjection;
 using TaskFlow.Infra.DependencyInjection;
 using TaskFlow.Infra.Persistence.Context;
@@ -16,6 +19,8 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 
 builder.Services.AddEndpointsApiExplorer();
+
+builder.Services.AddHealthChecks();
 
 // Swagger with a Bearer token input, so protected
 // endpoints can be tested from the Swagger UI.
@@ -61,15 +66,29 @@ builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 // ManagerAndAbove, ...) — see ServiceCollectionExtensions.
 
 builder.Services.AddAuthorizationPolicies();
+var allowedOrigins =
+    builder.Configuration
+        .GetSection("Cors:AllowedOrigins")
+        .Get<string[]>()
+    ?? ["http://localhost:4200"];
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AngularPolicy", policy =>
     {
         policy
-            .WithOrigins("http://localhost:4200")
+            .WithOrigins(allowedOrigins)
             .AllowAnyHeader()
             .AllowAnyMethod();
     });
+});
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders =
+        ForwardedHeaders.XForwardedFor |
+        ForwardedHeaders.XForwardedProto;
+    options.KnownIPNetworks.Clear();
+    options.KnownProxies.Clear();
 });
 var app = builder.Build();
 
@@ -86,6 +105,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.UseForwardedHeaders();
 app.UseHttpsRedirection();
 app.UseCors("AngularPolicy");
 
@@ -99,6 +119,14 @@ app.UseMaintenanceMode();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHealthChecks("/health");
+
+app.MapGet(
+    "/health/ready",
+    async (TaskFlowDbContext context, CancellationToken cancellationToken) =>
+        await context.Database.CanConnectAsync(cancellationToken)
+            ? Results.Ok(new { status = "ready" })
+            : Results.StatusCode(StatusCodes.Status503ServiceUnavailable));
 
 using (var scope = app.Services.CreateScope())
 {
@@ -106,9 +134,17 @@ using (var scope = app.Services.CreateScope())
         scope.ServiceProvider
             .GetRequiredService<TaskFlowDbContext>();
 
+    await context.Database.MigrateAsync();
+
     var passwordHasher =
         scope.ServiceProvider
             .GetRequiredService<IPasswordHasher>();
+
+    var objectStorage =
+        scope.ServiceProvider
+            .GetRequiredService<IObjectStorage>();
+
+    await objectStorage.EnsureBucketExistsAsync();
 
     // Roles first, because the user seeder assigns
     // the Admin role to the seeded admin user.

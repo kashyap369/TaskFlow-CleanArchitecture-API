@@ -1,4 +1,5 @@
 ﻿using TaskFlow.Application.Contracts.Email;
+using TaskFlow.Application.Contracts.Configuration;
 using TaskFlow.Domain.DomainEvents.Organizations;
 using TaskFlow.Domain.Interfaces.Organizations;
 
@@ -15,13 +16,16 @@ namespace TaskFlow.Application.DomainEvents.Organizations
     {
         private readonly IEmailService _emailService;
         private readonly IOrganizationRepository _organizationRepository;
+        private readonly IClientUrlProvider _clientUrlProvider;
 
         public OrganizationMemberInvitedEventHandler(
             IEmailService emailService,
-            IOrganizationRepository organizationRepository)
+            IOrganizationRepository organizationRepository,
+            IClientUrlProvider clientUrlProvider)
         {
             _emailService = emailService;
             _organizationRepository = organizationRepository;
+            _clientUrlProvider = clientUrlProvider;
         }
 
         public async Task HandleAsync(
@@ -56,7 +60,7 @@ namespace TaskFlow.Application.DomainEvents.Organizations
                     domainEvent.Email)
                 .Replace(
                     "{{AcceptUrl}}",
-                    "https://localhost:4200/invitations")
+                    $"{_clientUrlProvider.BaseUrl}/member/invitations")
                 .Replace(
                     "{{CurrentYear}}",
                     DateTime.UtcNow.Year.ToString());
