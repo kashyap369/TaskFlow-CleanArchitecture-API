@@ -10,8 +10,8 @@
 > | **Frontend** | `D:\Projects\TMS\TaskFlowUI\TaskFlowApp` — Angular 20, standalone + signals, Atomic Design, multi-portal |
 > | **Dev URLs** | API `https://localhost:7086/api` · UI `http://localhost:4200` (CORS allows only this origin) |
 >
-> **Last verified:** 2026-07-26, after frontend Phases 26–29 (endpoint counts re-derived from the
-> controllers and the frontend `API` map: **82 exposed, 80 consumed**).
+> **Last verified:** 2026-08-15, after project-write authorization and Individual joined-workspace
+> access. Endpoint counts are unchanged by this fix.
 
 ---
 
@@ -174,7 +174,7 @@ a running API.
 
 | Feature | Endpoints | API | UI | Live | Notes |
 |---|---|:--:|:--:|:--:|---|
-| Projects CRUD + detail | 5 on `/project` | ✅ | ✅ | ✅ | List + detail page; create/edit share one drawer |
+| Projects CRUD + detail | 5 on `/project` | ✅ | ✅ | ✅ | Create requires `CreateProject`; update/delete require `ManageProjects`. Individual members can enter joined organization workspaces from their personal portal. |
 | Tasks CRUD + detail | `POST` `PUT` `DELETE` `GET /{id}` | ✅ | ✅ | ✅ | `TaskListItem` has no `description` — edit fetches the detail first |
 | Task lists (org / project) | `GET /task/organization/{id}`, `/project/{id}` | ✅ | ✅ | ✅ | |
 | Task lifecycle | `PUT /{id}/start`, `/complete`, `/reopen` | ✅ | ✅ | ✅ | **Reopen added in Phase 9** — completes the documented Todo→InProgress→Completed→reopen cycle |
@@ -364,6 +364,7 @@ Docker + CI/CD.
 
 | Date | Side | Change |
 |---|---|---|
+| 2026-08-15 | **Both** | **Closed project-write authorization and completed Individual membership UX.** `CreateProject` now protects creation and `ManageProjects` protects update/delete through the standard organization permission checker. Individual accounts keep the personal portal as home but can enter organizations they own or joined, switch back to personal work, and see new memberships immediately after accepting invitations. No endpoints or migration added. Backend build and frontend lint/build pass; 16 focused browser regressions are green. |
 | 2026-08-14 | **Both** | **Account recovery and passwordless sign-in shipped end to end.** Four auth endpoints add generic, rate-limited code requests plus reset/login verification; persisted codes are hashed, expiring, single-use and attempt-limited. Password reset revokes active refresh tokens. Angular adds email-code mode to personal/organization/admin sign-in and a responsive forgot-password flow. Endpoints **82 → 86**, consumed **80 → 84**. |
 | 2026-07-26 | UI | **Frontend Phases 26–29 shipped — the two sides are in sync.** Consumed all six endpoints backend Phases 11–13 added: **Admin → Organizations** and **Admin → Platform Settings** pages (Phase 27), **team-scoped tasks + role/active-filtered assignment** (Phase 28), and **priority breakdown + project timeline + per-team task drill-down** in reporting (Phase 29). Phase 26 deleted the admin drawer's now-dead "denied state" and restored the honest member-removal copy. Endpoints consumed **74 → 80 of 82** (re-derived; the 2 left are the standing deliberate skips). Tests **179 → 195**. |
 | 2026-07-26 | UI | ⚠️ **Maintenance mode exposed a two-request lie in sign-in.** `POST /auth/login` is exempt from the maintenance middleware but the following `GET /user/me` is not — so a non-admin authenticated **successfully** and was then shown *"Check your credentials and try again."* Fixed in `AuthFacade`. Also: a 503 `MAINTENANCE_MODE` now raises a sticky banner at the app root instead of one toast per failed request, since it describes a platform state rather than a request failure. **No API change needed.** |

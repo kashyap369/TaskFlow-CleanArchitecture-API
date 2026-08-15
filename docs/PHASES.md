@@ -2,6 +2,17 @@
 
 > Keep the Current Status section up to date at the end of every session.
 
+## ✅ Phase 15 — Project authorization and joined-workspace access (2026-08-15)
+
+- Secured project creation with `CreateProject` and project update/delete with `ManageProjects`.
+  Organization owners retain the existing permission-checker bypass; other callers must be active
+  members whose organization role carries the required permission.
+- Closed the direct-API path that allowed any authenticated system user to create, edit, or delete
+  projects by supplying a known organization/project ID.
+- The Angular client now lets Individual accounts enter organizations they have joined while keeping
+  the personal portal as their default workspace. No endpoint or database migration was required.
+- `dotnet build` succeeds; the solution's pre-existing nullability warnings remain.
+
 ## ✅ Phase 14 — Account recovery & passwordless sign-in (2026-08-14)
 
 - Added four public auth endpoints: `POST /auth/password/forgot`, `POST /auth/password/reset`,

@@ -1,6 +1,7 @@
 ﻿using MediatR;
 using TaskFlow.Application.Contracts.Security;
 using TaskFlow.Application.Exceptions;
+using TaskFlow.Domain.Constants;
 using TaskFlow.Domain.Entities.WorkManagement.Projects;
 using TaskFlow.Domain.Interfaces.Identity.Users;
 using TaskFlow.Domain.Interfaces.Organizations;
@@ -15,6 +16,7 @@ namespace TaskFlow.Application.Features.WorkManagement.Projects.Commands.CreateP
         private readonly IProjectRepository _projectRepository;
         private readonly IOrganizationRepository _organizationRepository;
         private readonly IUserRepository _userRepository;
+        private readonly IOrganizationPermissionChecker _permissionChecker;
         private readonly ICurrentUserService _currentUserService;
         private readonly IUnitOfWork _unitOfWork;
 
@@ -22,12 +24,14 @@ namespace TaskFlow.Application.Features.WorkManagement.Projects.Commands.CreateP
             IProjectRepository projectRepository,
             IOrganizationRepository organizationRepository,
             IUserRepository userRepository,
+            IOrganizationPermissionChecker permissionChecker,
             ICurrentUserService currentUserService,
             IUnitOfWork unitOfWork)
         {
             _projectRepository = projectRepository;
             _organizationRepository = organizationRepository;
             _userRepository = userRepository;
+            _permissionChecker = permissionChecker;
             _currentUserService = currentUserService;
             _unitOfWork = unitOfWork;
         }
@@ -64,6 +68,12 @@ namespace TaskFlow.Application.Features.WorkManagement.Projects.Commands.CreateP
                     "USER_NOT_FOUND",
                     "User not found.");
             }
+
+            await _permissionChecker.EnsurePermissionAsync(
+                request.OrganizationId,
+                createdByUserId,
+                OrganizationPermissionNames.CreateProject,
+                cancellationToken);
 
             var projectExists =
                 await _projectRepository.ExistsByNameAsync(

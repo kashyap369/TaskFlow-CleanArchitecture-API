@@ -1,5 +1,7 @@
 ﻿using MediatR;
+using TaskFlow.Application.Contracts.Security;
 using TaskFlow.Application.Exceptions;
+using TaskFlow.Domain.Constants;
 using TaskFlow.Domain.Interfaces.Persistence;
 using TaskFlow.Domain.Interfaces.WorkManagement;
 
@@ -8,13 +10,19 @@ namespace TaskFlow.Application.Features.WorkManagement.Projects.Commands.UpdateP
     public sealed class UpdateProjectCommandHandler : IRequestHandler<UpdateProjectCommand>
     {
         private readonly IProjectRepository _projectRepository;
+        private readonly IOrganizationPermissionChecker _permissionChecker;
+        private readonly ICurrentUserService _currentUserService;
         private readonly IUnitOfWork _unitOfWork;
 
         public UpdateProjectCommandHandler(
             IProjectRepository projectRepository,
+            IOrganizationPermissionChecker permissionChecker,
+            ICurrentUserService currentUserService,
             IUnitOfWork unitOfWork)
         {
             _projectRepository = projectRepository;
+            _permissionChecker = permissionChecker;
+            _currentUserService = currentUserService;
             _unitOfWork = unitOfWork;
         }
 
@@ -33,6 +41,12 @@ namespace TaskFlow.Application.Features.WorkManagement.Projects.Commands.UpdateP
                     "PROJECT_NOT_FOUND",
                     "Project not found.");
             }
+
+            await _permissionChecker.EnsurePermissionAsync(
+                project.OrganizationId,
+                _currentUserService.UserId,
+                OrganizationPermissionNames.ManageProjects,
+                cancellationToken);
 
             var existingProject =
                 await _projectRepository.GetByNameAsync(

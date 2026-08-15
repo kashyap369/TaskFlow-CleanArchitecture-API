@@ -9,6 +9,19 @@
 > `ApiResponse<T>` consistency, forgot-password, Docker/CI.
 > Cross-project status: [ProjectCompletion.md](ProjectCompletion.md).
 
+## 2026-08-15 (Project authorization + Individual organization access)
+- Project create/update/delete handlers were the exception to the command-side authorization rule:
+  they accepted every authenticated system role and never checked organization membership or the
+  project permission catalog. Creation now requires `CreateProject`; update/delete require
+  `ManageProjects`, with the standard owner bypass.
+- Individual accounts already became real organization members after accepting an invitation, but
+  the Angular portal guard treated account type as exclusive and made those memberships unusable.
+  Individual accounts now retain `/member` as home while being allowed into joined `/organization`
+  workspaces, with explicit switches in both layouts and membership refresh after acceptance.
+- Backend build, frontend lint/build, and all 16 focused browser regressions pass. A broader run
+  passed 215/215 specs after excluding the four-test public-header spec whose real navigation
+  deliberately triggers Karma's existing full-page-reload disconnect.
+
 ## 2026-08-14 (Account recovery and passwordless login)
 - Added persisted, purpose-scoped one-time codes for password reset and email-code login. Only an
   HMAC-SHA256 digest is stored; comparisons are fixed-time; codes expire in 10 minutes, are single
