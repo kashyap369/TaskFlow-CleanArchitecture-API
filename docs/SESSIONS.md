@@ -9,6 +9,18 @@
 > `ApiResponse<T>` consistency, forgot-password, Docker/CI.
 > Cross-project status: [ProjectCompletion.md](ProjectCompletion.md).
 
+## 2026-08-15 (Private personal projects + Docker-free development)
+
+- Added nullable project organization ownership with a creator/title partial unique index and two
+  personal-project endpoints. Project access now branches cleanly: organization membership/permission
+  for organization projects, exact creator match for personal projects.
+- Personal task creation accepts an optional project only when both are organization-free and owned by
+  the caller. The existing task-scoped guard keeps subtasks and work logs private as well.
+- Applied `AddPrivatePersonalProjects` to the configured development database. Live project → task →
+  subtask tests passed; a second valid user and an admin both received 403 across ownership boundaries.
+- Added a development-only local filesystem object-storage provider. Production continues to select S3;
+  local API + Angular now run directly without Docker.
+
 ## 2026-08-15 (Project authorization + Individual organization access)
 - Project create/update/delete handlers were the exception to the command-side authorization rule:
   they accepted every authenticated system role and never checked organization membership or the

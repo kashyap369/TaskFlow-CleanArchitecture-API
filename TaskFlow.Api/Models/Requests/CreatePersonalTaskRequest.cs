@@ -4,8 +4,9 @@ namespace TaskFlow.Api.Models.Requests
 {
     /// <summary>
     /// Body for <c>POST /api/task/personal</c>. Deliberately has no
-    /// OrganizationId and no ProjectId: a personal task belongs to the
-    /// signed-in user alone, and projects only exist inside organizations.
+    /// OrganizationId: a personal task belongs to the signed-in user alone.
+    /// ProjectId is optional and, when present, must name that same user's
+    /// private personal project.
     /// The creator is taken from the JWT, never from the body.
     /// </summary>
     public sealed record CreatePersonalTaskRequest(
@@ -13,5 +14,6 @@ namespace TaskFlow.Api.Models.Requests
         string Description,
         DateTime StartDate,
         TaskPriority Priority,
-        DateTime? ExpectedCompletionDate);
+        DateTime? ExpectedCompletionDate,
+        int? ProjectId);
 }

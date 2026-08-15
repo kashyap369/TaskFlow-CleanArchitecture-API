@@ -3,9 +3,11 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using TaskFlow.Api.Constants;
 using TaskFlow.Application.Features.WorkManagement.Projects.Commands.CreateProject;
+using TaskFlow.Application.Features.WorkManagement.Projects.Commands.CreatePersonalProject;
 using TaskFlow.Application.Features.WorkManagement.Projects.Commands.DeleteProject;
 using TaskFlow.Application.Features.WorkManagement.Projects.Commands.UpdateProject;
 using TaskFlow.Application.Features.WorkManagement.Projects.Queries.GetOrganizationProjects;
+using TaskFlow.Application.Features.WorkManagement.Projects.Queries.GetMyPersonalProjects;
 using TaskFlow.Application.Features.WorkManagement.Projects.Queries.GetProjectById;
 
 namespace TaskFlow.Api.Controllers.WorkManagement
@@ -32,6 +34,16 @@ namespace TaskFlow.Api.Controllers.WorkManagement
                 await _mediator.Send(
                     command,
                     cancellationToken);
+
+            return Ok(projectId);
+        }
+
+        [HttpPost("personal")]
+        public async Task<IActionResult> CreatePersonalProject(
+            CreatePersonalProjectCommand command,
+            CancellationToken cancellationToken)
+        {
+            var projectId = await _mediator.Send(command, cancellationToken);
 
             return Ok(projectId);
         }
@@ -81,6 +93,17 @@ namespace TaskFlow.Api.Controllers.WorkManagement
                 await _mediator.Send(
                     new GetOrganizationProjectsQuery(organizationId),
                     cancellationToken);
+
+            return Ok(projects);
+        }
+
+        [HttpGet("mine/personal")]
+        public async Task<IActionResult> GetMinePersonal(
+            CancellationToken cancellationToken)
+        {
+            var projects = await _mediator.Send(
+                new GetMyPersonalProjectsQuery(),
+                cancellationToken);
 
             return Ok(projects);
         }

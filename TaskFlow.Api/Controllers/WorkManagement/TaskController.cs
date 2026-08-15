@@ -70,8 +70,8 @@ namespace TaskFlow.Api.Controllers.WorkManagement
 
         /// <summary>
         /// Creates a <b>personal</b> task for the signed-in user (Individual
-        /// account). The task has no organization and no project; the creator
-        /// is taken from the JWT.
+        /// account). The task has no organization and may optionally belong to
+        /// a private project owned by the same user. The creator comes from the JWT.
         /// </summary>
         [HttpPost("personal")]
         public async Task<IActionResult> CreatePersonalTask(
@@ -87,7 +87,7 @@ namespace TaskFlow.Api.Controllers.WorkManagement
                         request.Priority,
                         OrganizationId: null,
                         request.ExpectedCompletionDate,
-                        ProjectId: null),
+                        request.ProjectId),
                     cancellationToken);
 
             return Ok(taskId);

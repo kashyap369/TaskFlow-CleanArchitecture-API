@@ -11,17 +11,20 @@ namespace TaskFlow.Application.Features.WorkManagement.Projects.Commands.UpdateP
     {
         private readonly IProjectRepository _projectRepository;
         private readonly IOrganizationPermissionChecker _permissionChecker;
+        private readonly IOrganizationAccessGuard _accessGuard;
         private readonly ICurrentUserService _currentUserService;
         private readonly IUnitOfWork _unitOfWork;
 
         public UpdateProjectCommandHandler(
             IProjectRepository projectRepository,
             IOrganizationPermissionChecker permissionChecker,
+            IOrganizationAccessGuard accessGuard,
             ICurrentUserService currentUserService,
             IUnitOfWork unitOfWork)
         {
             _projectRepository = projectRepository;
             _permissionChecker = permissionChecker;
+            _accessGuard = accessGuard;
             _currentUserService = currentUserService;
             _unitOfWork = unitOfWork;
         }
@@ -30,6 +33,10 @@ namespace TaskFlow.Application.Features.WorkManagement.Projects.Commands.UpdateP
             UpdateProjectCommand request,
             CancellationToken cancellationToken)
         {
+            await _accessGuard.EnsureProjectAsync(
+                request.ProjectId,
+                cancellationToken);
+
             var project =
                 await _projectRepository.GetByIdAsync(
                     request.ProjectId,
@@ -42,17 +49,25 @@ namespace TaskFlow.Application.Features.WorkManagement.Projects.Commands.UpdateP
                     "Project not found.");
             }
 
-            await _permissionChecker.EnsurePermissionAsync(
-                project.OrganizationId,
-                _currentUserService.UserId,
-                OrganizationPermissionNames.ManageProjects,
-                cancellationToken);
+            if (project.OrganizationId is int organizationId)
+            {
+                await _permissionChecker.EnsurePermissionAsync(
+                    organizationId,
+                    _currentUserService.UserId,
+                    OrganizationPermissionNames.ManageProjects,
+                    cancellationToken);
+            }
 
             var existingProject =
-                await _projectRepository.GetByNameAsync(
-                    project.OrganizationId,
-                    request.Title,
-                    cancellationToken);
+                project.OrganizationId is int scopedOrganizationId
+                    ? await _projectRepository.GetByNameAsync(
+                        scopedOrganizationId,
+                        request.Title,
+                        cancellationToken)
+                    : await _projectRepository.GetPersonalByNameAsync(
+                        _currentUserService.UserId,
+                        request.Title,
+                        cancellationToken);
 
             if (existingProject is not null &&
                 existingProject.Id != project.Id)

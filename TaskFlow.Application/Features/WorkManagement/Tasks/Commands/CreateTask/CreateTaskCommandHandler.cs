@@ -70,14 +70,6 @@ namespace TaskFlow.Application.Features.WorkManagement.Tasks.Commands.CreateTask
                     request.OrganizationId.Value,
                     cancellationToken);
             }
-            else if (request.ProjectId.HasValue)
-            {
-                // Defence in depth: the validator rejects this too, but
-                // the domain would otherwise throw ArgumentException.
-                throw new ConflictException(
-                    "PROJECT_REQUIRES_ORGANIZATION",
-                    "A personal task cannot belong to a project.");
-            }
             else if (request.TeamId.HasValue)
             {
                 // Same rule for teams — they are an organization concept.
@@ -122,6 +114,14 @@ namespace TaskFlow.Application.Features.WorkManagement.Tasks.Commands.CreateTask
                     throw new ConflictException(
                         "PROJECT_ORGANIZATION_MISMATCH",
                         "Project does not belong to the organization.");
+                }
+
+                if (!request.OrganizationId.HasValue &&
+                    project.CreatedByUserId != createdByUserId)
+                {
+                    throw new ForbiddenException(
+                        "ACCESS_DENIED",
+                        "You do not have access to this personal project.");
                 }
             }
 

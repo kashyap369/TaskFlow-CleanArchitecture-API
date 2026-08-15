@@ -27,8 +27,8 @@ namespace TaskFlow.Infra.Persistence.Configurations.WorkManagement
                 .HasConversion<int>()
                 .IsRequired();
 
-            builder.Property(x => x.OrganizationId)
-                .IsRequired();
+            // Nullable: private Individual projects have no organization.
+            builder.Property(x => x.OrganizationId);
 
             builder.Property(x => x.CreatedByUserId)
                 .IsRequired();
@@ -59,6 +59,15 @@ namespace TaskFlow.Infra.Persistence.Configurations.WorkManagement
                 x.OrganizationId,
                 x.Title
             })
+            .IsUnique();
+
+            builder.HasIndex(x => new
+            {
+                x.CreatedByUserId,
+                x.Title
+            })
+            .HasDatabaseName("IX_Projects_PersonalCreator_Title")
+            .HasFilter("\"OrganizationId\" IS NULL AND \"IsDeleted\" = FALSE")
             .IsUnique();
 
             builder.HasIndex(x => new

@@ -79,14 +79,9 @@ public class Task : AuditableEntity
                 "OrganizationId must be positive.",
                 nameof(organizationId));
 
-        // Projects only exist inside organizations, so a
-        // personal task can never belong to a project.
-        if (projectId.HasValue && !organizationId.HasValue)
-            throw new ArgumentException(
-                "A personal task cannot belong to a project.",
-                nameof(projectId));
-
-        // Same rule for teams — they are an organization concept.
+        // Teams are an organization concept. Projects may now be either
+        // organization-scoped or private to an Individual account; the command
+        // handler validates that the task and project have the same scope.
         if (teamId.HasValue && !organizationId.HasValue)
             throw new ArgumentException(
                 "A personal task cannot belong to a team.",

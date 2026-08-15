@@ -16,6 +16,10 @@ namespace TaskFlow.Domain.Interfaces.WorkManagement
             int userId,
             CancellationToken cancellationToken = default);
 
+        Task<IReadOnlyList<Project>> GetPersonalByCreatedByUserIdAsync(
+            int userId,
+            CancellationToken cancellationToken = default);
+
         Task<bool> ExistsAsync(
             int id,
             CancellationToken cancellationToken = default);
@@ -24,10 +28,21 @@ namespace TaskFlow.Domain.Interfaces.WorkManagement
             int organizationId,
             string title,
             CancellationToken cancellationToken = default);
+
+        Task<bool> ExistsPersonalByNameAsync(
+            int userId,
+            string title,
+            CancellationToken cancellationToken = default);
+
         Task<Project?> GetByNameAsync(
-    int organizationId,
-    string title,
-    CancellationToken cancellationToken = default);
+            int organizationId,
+            string title,
+            CancellationToken cancellationToken = default);
+
+        Task<Project?> GetPersonalByNameAsync(
+            int userId,
+            string title,
+            CancellationToken cancellationToken = default);
 
         Task AddAsync(
             Project project,

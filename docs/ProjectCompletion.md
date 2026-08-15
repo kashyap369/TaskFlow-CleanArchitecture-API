@@ -10,8 +10,8 @@
 > | **Frontend** | `D:\Projects\TMS\TaskFlowUI\TaskFlowApp` — Angular 20, standalone + signals, Atomic Design, multi-portal |
 > | **Dev URLs** | API `https://localhost:7086/api` · UI `http://localhost:4200` (CORS allows only this origin) |
 >
-> **Last verified:** 2026-08-15, after project-write authorization and Individual joined-workspace
-> access. Endpoint counts are unchanged by this fix.
+> **Last verified:** 2026-08-15, after creator-only personal projects and the initial Excalidraw Planner
+> integration. The API exposes 88 endpoints; the UI consumes 86, with the same two deliberate skips.
 
 ---
 
@@ -56,7 +56,7 @@ has been exercised against a running API — not that the code compiles.
 |---|---|---|
 | **Phases complete** | **13 of 13** (+ a security pass and an IDOR fix) | **27 session phases**; roadmap Phases 0–8 ✅ (Phase 6 admin extras closed by session Phase 27) |
 | **Version status** | **Feature-complete.** Both account types + Organization/Reporting/Admin at 100% | **All three portals complete** (session Phases 26–29, 2026-07-26) |
-| **Endpoints** | **82** exposed (13 controllers; excludes the Angular-template `WeatherForecastController`) | **80 consumed.** The only 2 left are the deliberate skips below — **nothing is unconsumed for want of a screen** |
+| **Endpoints** | **88** exposed (13 controllers; excludes the Angular-template `WeatherForecastController`) | **86 consumed.** The only 2 left are the deliberate skips below — **nothing is unconsumed for want of a screen** |
 | **Quality gates** | `dotnet build` **0 warnings / 0 errors** · **no automated tests** (backlog) | `ng lint` **0 errors** · `ng build` ✅ · **204/204** unit tests · WCAG AA on all 42 token pairings · **no E2E** |
 | **Biggest gap** | **None blocking.** Automated tests, pagination, `ApiResponse<T>` consistency | Calendar page, CSV/PDF export, per-member trend charts, E2E tests (V1-GAPS §3) |
 | **Vision coverage** (§3.0) | **Organization 100% · Reporting 100% · Individual 100%** | **All three portals complete** — Organization, Individual and Admin |
@@ -180,6 +180,7 @@ a running API.
 | Task lifecycle | `PUT /{id}/start`, `/complete`, `/reopen` | ✅ | ✅ | ✅ | **Reopen added in Phase 9** — completes the documented Todo→InProgress→Completed→reopen cycle |
 | Task assignment | `PUT /{id}/assign/{userId}`, `/unassign` | ✅ | ✅ | ✅ | Inline assignee `<select>` on every row |
 | **Personal tasks** | `POST /task/personal`, `GET /task/mine/personal` | ✅ | ✅ | ✅ | Member portal **My tasks** page: filters, paging, create/edit drawer, lifecycle |
+| **Personal projects** | `POST /project/personal`, `GET /project/mine/personal` + shared project CRUD | ✅ | ✅ | ✅ | Creator-only projects; My Tasks can filter/create within a private project |
 | Subtasks (add / rename / complete / reopen / delete / list) | 6 on `/subtask` | ✅ | ✅ | ✅ | Parent task auto-completes when all subtasks complete |
 | Teams CRUD + detail + members | 7 on `/team` | ✅ | ✅ | ✅ | Team detail page with add/remove member |
 | **Team-scoped tasks** | `GET /team/{id}/tasks`, `PUT /task/{id}/team/{teamId}`, `DELETE /task/{id}/team` | ✅ | ✅ | ✅ | **API Phase 11 / UI Phase 28.** Team assignment is its own route, never a field on `PUT /task`; the UI's edit drawer honours that and calls it **only when the team changed**. All three verified live |
@@ -364,6 +365,7 @@ Docker + CI/CD.
 
 | Date | Side | Change |
 |---|---|---|
+| 2026-08-15 | **Both** | **Added creator-only personal projects and the initial Excalidraw Planner.** Personal tasks can belong to a private project owned by the same creator; joining an organization never exposes or mixes that data. Added two API routes (**88 total / 86 consumed**), applied the nullable-organization migration, and verified cross-user reads return 403. Planner autosaves per user in that browser; server-side Planner persistence remains intentionally deferred. |
 | 2026-08-15 | **Both** | **Closed project-write authorization and completed Individual membership UX.** `CreateProject` now protects creation and `ManageProjects` protects update/delete through the standard organization permission checker. Individual accounts keep the personal portal as home but can enter organizations they own or joined, switch back to personal work, and see new memberships immediately after accepting invitations. No endpoints or migration added. Backend build and frontend lint/build pass; 16 focused browser regressions are green. |
 | 2026-08-14 | **Both** | **Account recovery and passwordless sign-in shipped end to end.** Four auth endpoints add generic, rate-limited code requests plus reset/login verification; persisted codes are hashed, expiring, single-use and attempt-limited. Password reset revokes active refresh tokens. Angular adds email-code mode to personal/organization/admin sign-in and a responsive forgot-password flow. Endpoints **82 → 86**, consumed **80 → 84**. |
 | 2026-07-26 | UI | **Frontend Phases 26–29 shipped — the two sides are in sync.** Consumed all six endpoints backend Phases 11–13 added: **Admin → Organizations** and **Admin → Platform Settings** pages (Phase 27), **team-scoped tasks + role/active-filtered assignment** (Phase 28), and **priority breakdown + project timeline + per-team task drill-down** in reporting (Phase 29). Phase 26 deleted the admin drawer's now-dead "denied state" and restored the honest member-removal copy. Endpoints consumed **74 → 80 of 82** (re-derived; the 2 left are the standing deliberate skips). Tests **179 → 195**. |

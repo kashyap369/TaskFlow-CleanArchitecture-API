@@ -12,17 +12,20 @@ namespace TaskFlow.Application.Features.WorkManagement.Projects.Commands.DeleteP
     {
         private readonly IProjectRepository _projectRepository;
         private readonly IOrganizationPermissionChecker _permissionChecker;
+        private readonly IOrganizationAccessGuard _accessGuard;
         private readonly ICurrentUserService _currentUserService;
         private readonly IUnitOfWork _unitOfWork;
 
         public DeleteProjectCommandHandler(
             IProjectRepository projectRepository,
             IOrganizationPermissionChecker permissionChecker,
+            IOrganizationAccessGuard accessGuard,
             ICurrentUserService currentUserService,
             IUnitOfWork unitOfWork)
         {
             _projectRepository = projectRepository;
             _permissionChecker = permissionChecker;
+            _accessGuard = accessGuard;
             _currentUserService = currentUserService;
             _unitOfWork = unitOfWork;
         }
@@ -31,6 +34,10 @@ namespace TaskFlow.Application.Features.WorkManagement.Projects.Commands.DeleteP
             DeleteProjectCommand request,
             CancellationToken cancellationToken)
         {
+            await _accessGuard.EnsureProjectAsync(
+                request.ProjectId,
+                cancellationToken);
+
             var project =
                 await _projectRepository.GetByIdAsync(
                     request.ProjectId,
@@ -43,11 +50,14 @@ namespace TaskFlow.Application.Features.WorkManagement.Projects.Commands.DeleteP
                     "Project not found.");
             }
 
-            await _permissionChecker.EnsurePermissionAsync(
-                project.OrganizationId,
-                _currentUserService.UserId,
-                OrganizationPermissionNames.ManageProjects,
-                cancellationToken);
+            if (project.OrganizationId is int organizationId)
+            {
+                await _permissionChecker.EnsurePermissionAsync(
+                    organizationId,
+                    _currentUserService.UserId,
+                    OrganizationPermissionNames.ManageProjects,
+                    cancellationToken);
+            }
 
             _projectRepository.Remove(project);
 

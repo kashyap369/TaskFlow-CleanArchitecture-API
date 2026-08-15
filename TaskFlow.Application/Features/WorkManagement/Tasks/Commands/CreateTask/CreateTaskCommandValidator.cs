@@ -16,12 +16,11 @@ namespace TaskFlow.Application.Features.WorkManagement.Tasks.Commands.CreateTask
                 .GreaterThan(0)
                 .When(x => x.OrganizationId.HasValue);
 
-            // Projects only exist inside organizations.
+            // Both organization and personal projects are valid, but ids must
+            // always be positive. Scope/ownership is checked by the handler.
             RuleFor(x => x.ProjectId)
-                .Null()
-                .When(x => !x.OrganizationId.HasValue)
-                .WithMessage(
-                    "A personal task cannot belong to a project.");
+                .GreaterThan(0)
+                .When(x => x.ProjectId.HasValue);
 
             // Teams only exist inside organizations.
             RuleFor(x => x.TeamId)

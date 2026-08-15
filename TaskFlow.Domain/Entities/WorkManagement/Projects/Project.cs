@@ -19,9 +19,14 @@ public class Project : AuditableEntity, IAggregateRoot
     public DateTime? ExpectedCompletionDate { get; private set; }
 
     public DateTime? ActualCompletionDate { get; private set; }
-    public int OrganizationId { get; private set; }
+    /// <summary>
+    /// Null for a private Individual project. Set for an organization project.
+    /// </summary>
+    public int? OrganizationId { get; private set; }
 
     public int CreatedByUserId { get; private set; }
+
+    public bool IsPersonal => !OrganizationId.HasValue;
 
     public IReadOnlyCollection<Task> Tasks =>
         _tasks.AsReadOnly();
@@ -34,16 +39,16 @@ public class Project : AuditableEntity, IAggregateRoot
      string title,
      string description,
      DateTime startDate,
-     int organizationId,
+     int? organizationId,
      int createdByUserId,
      DateTime? expectedCompletionDate = null)
     {
         if (string.IsNullOrWhiteSpace(title))
             throw new ArgumentException("Project title is required.");
 
-        if (organizationId <= 0)
+        if (organizationId.HasValue && organizationId <= 0)
             throw new ArgumentException(
-                "OrganizationId is required.",
+                "OrganizationId must be positive when supplied.",
                 nameof(organizationId));
 
         if (createdByUserId <= 0)

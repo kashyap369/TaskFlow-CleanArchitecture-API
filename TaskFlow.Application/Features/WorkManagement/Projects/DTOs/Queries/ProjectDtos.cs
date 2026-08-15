@@ -5,7 +5,7 @@ namespace TaskFlow.Application.Features.WorkManagement.Projects.DTOs.Queries
     public sealed class ProjectDto
     {
         public int Id { get; init; }
-        public int OrganizationId { get; init; }
+        public int? OrganizationId { get; init; }
         public string Title { get; init; } = string.Empty;
         public string? Description { get; init; }
         public ProjectStatus Status { get; init; }

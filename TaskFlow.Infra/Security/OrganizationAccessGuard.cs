@@ -36,22 +36,36 @@ namespace TaskFlow.Infra.Security
             int projectId,
             CancellationToken cancellationToken = default)
         {
-            var organizationId =
+            var project =
                 await _context.Projects
                     .AsNoTracking()
                     .Where(x => x.Id == projectId)
-                    .Select(x => (int?)x.OrganizationId)
+                    .Select(x => new
+                    {
+                        x.OrganizationId,
+                        x.CreatedByUserId
+                    })
                     .FirstOrDefaultAsync(cancellationToken);
 
-            if (organizationId is null)
+            if (project is null)
             {
                 throw new NotFoundException(
                     "PROJECT_NOT_FOUND",
                     "Project not found.");
             }
 
-            await EnsureOrganizationAsync(
-                organizationId.Value, cancellationToken);
+            if (project.OrganizationId is int organizationId)
+            {
+                await EnsureOrganizationAsync(
+                    organizationId, cancellationToken);
+
+                return;
+            }
+
+            if (project.CreatedByUserId != _currentUserService.UserId)
+            {
+                throw Denied();
+            }
         }
 
         public async Task EnsureTaskAsync(

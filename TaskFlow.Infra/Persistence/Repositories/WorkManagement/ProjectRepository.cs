@@ -47,6 +47,17 @@ namespace TaskFlow.Infra.Persistence.Repositories.WorkManagement
                 .ToListAsync(cancellationToken);
         }
 
+        public async Task<IReadOnlyList<Project>>
+            GetPersonalByCreatedByUserIdAsync(
+                int userId,
+                CancellationToken cancellationToken = default)
+        {
+            return await _context.Projects
+                .Where(x => x.OrganizationId == null
+                    && x.CreatedByUserId == userId)
+                .ToListAsync(cancellationToken);
+        }
+
         public async Task<bool> ExistsAsync(
             int id,
             CancellationToken cancellationToken = default)
@@ -68,6 +79,22 @@ namespace TaskFlow.Infra.Persistence.Repositories.WorkManagement
                 .AnyAsync(
                     x => x.OrganizationId == organizationId
                       && x.Title == title,
+                    cancellationToken);
+        }
+
+        public async Task<bool> ExistsPersonalByNameAsync(
+            int userId,
+            string title,
+            CancellationToken cancellationToken = default)
+        {
+            var normalizedTitle = title.Trim().ToLower();
+
+            return await _context.Projects
+                .AsNoTracking()
+                .AnyAsync(
+                    x => x.OrganizationId == null
+                      && x.CreatedByUserId == userId
+                      && x.Title.ToLower() == normalizedTitle,
                     cancellationToken);
         }
 
@@ -105,6 +132,21 @@ namespace TaskFlow.Infra.Persistence.Repositories.WorkManagement
             return await _context.Projects
                 .FirstOrDefaultAsync(
                     x => x.OrganizationId == organizationId
+                      && x.Title.ToLower() == normalizedTitle,
+                    cancellationToken);
+        }
+
+        public async Task<Project?> GetPersonalByNameAsync(
+            int userId,
+            string title,
+            CancellationToken cancellationToken = default)
+        {
+            var normalizedTitle = title.Trim().ToLower();
+
+            return await _context.Projects
+                .FirstOrDefaultAsync(
+                    x => x.OrganizationId == null
+                      && x.CreatedByUserId == userId
                       && x.Title.ToLower() == normalizedTitle,
                     cancellationToken);
         }

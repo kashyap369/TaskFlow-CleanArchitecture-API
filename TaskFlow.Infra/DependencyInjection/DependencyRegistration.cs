@@ -99,36 +99,53 @@ namespace TaskFlow.Infra.DependencyInjection
                 .AddOptions<ObjectStorageSettings>()
                 .Bind(configuration.GetSection("ObjectStorage"))
                 .Validate(
-                    settings => Uri.TryCreate(settings.Endpoint, UriKind.Absolute, out _),
+                    settings => settings.UsesLocalFileSystem ||
+                        Uri.TryCreate(settings.Endpoint, UriKind.Absolute, out _),
                     "ObjectStorage:Endpoint must be an absolute URL.")
                 .Validate(
-                    settings =>
+                    settings => settings.UsesLocalFileSystem ||
                         !string.IsNullOrWhiteSpace(settings.AccessKey) &&
                         !string.IsNullOrWhiteSpace(settings.SecretKey) &&
                         !string.IsNullOrWhiteSpace(settings.Bucket),
                     "Object storage credentials and bucket are required.")
+                .Validate(
+                    settings => !settings.UsesLocalFileSystem ||
+                        !string.IsNullOrWhiteSpace(settings.LocalPath),
+                    "ObjectStorage:LocalPath is required for local storage.")
                 .ValidateOnStart();
-            services.AddSingleton<IAmazonS3>(serviceProvider =>
+
+            var objectStorageSettings = configuration
+                .GetSection("ObjectStorage")
+                .Get<ObjectStorageSettings>() ?? new ObjectStorageSettings();
+
+            if (objectStorageSettings.UsesLocalFileSystem)
             {
-                var settings = serviceProvider
-                    .GetRequiredService<Microsoft.Extensions.Options.IOptions<ObjectStorageSettings>>()
-                    .Value;
+                services.AddSingleton<IObjectStorage, LocalFileObjectStorage>();
+            }
+            else
+            {
+                services.AddSingleton<IAmazonS3>(serviceProvider =>
+                {
+                    var settings = serviceProvider
+                        .GetRequiredService<Microsoft.Extensions.Options.IOptions<ObjectStorageSettings>>()
+                        .Value;
 
-                var credentials = new BasicAWSCredentials(
-                    settings.AccessKey,
-                    settings.SecretKey);
+                    var credentials = new BasicAWSCredentials(
+                        settings.AccessKey,
+                        settings.SecretKey);
 
-                return new AmazonS3Client(
-                    credentials,
-                    new AmazonS3Config
-                    {
-                        ServiceURL = settings.Endpoint,
-                        ForcePathStyle = settings.ForcePathStyle,
-                        UseHttp = !settings.UseSsl,
-                        AuthenticationRegion = "us-east-1"
-                    });
-            });
-            services.AddSingleton<IObjectStorage, S3ObjectStorage>();
+                    return new AmazonS3Client(
+                        credentials,
+                        new AmazonS3Config
+                        {
+                            ServiceURL = settings.Endpoint,
+                            ForcePathStyle = settings.ForcePathStyle,
+                            UseHttp = !settings.UseSsl,
+                            AuthenticationRegion = "us-east-1"
+                        });
+                });
+                services.AddSingleton<IObjectStorage, S3ObjectStorage>();
+            }
             // Register the organization repositories
             services.AddScoped<
     IOrganizationRepository,

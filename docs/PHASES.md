@@ -2,6 +2,21 @@
 
 > Keep the Current Status section up to date at the end of every session.
 
+## ✅ Phase 16 — Creator-only personal projects (2026-08-15)
+
+- Personal projects have `OrganizationId = null` and take `CreatedByUserId` exclusively from the JWT.
+  Joining an organization never changes their scope or makes them visible to its members.
+- Added `POST /project/personal` and `GET /project/mine/personal`; existing project get/update/delete
+  routes now authorize organization projects through membership/permissions and personal projects
+  through exact creator ownership.
+- Personal tasks may reference only a private project owned by that same creator. Existing task,
+  subtask, and work-log guards continue the creator-only boundary downstream.
+- Migration `AddPrivatePersonalProjects` applied to the configured development database. Live tests
+  proved bidirectional cross-user project reads return 403, including an admin reading another user's
+  private project.
+- Development object storage can now use the local filesystem, so the API runs without Docker; the S3
+  provider remains the production default.
+
 ## ✅ Phase 15 — Project authorization and joined-workspace access (2026-08-15)
 
 - Secured project creation with `CreateProject` and project update/delete with `ManageProjects`.
