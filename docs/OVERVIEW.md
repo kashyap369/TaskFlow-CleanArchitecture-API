@@ -8,6 +8,20 @@ TaskFlow is a Task Management System API (ASP.NET Core + PostgreSQL, Clean Archi
 
 Intended client: an Angular frontend (CORS already configured for http://localhost:4200). The `AccountType` enum (Individual / Organization) already exists in the Domain and drives this split.
 
+## Planner — committed roadmap
+
+Planner is the next end-to-end product capability: a project-scoped, full-viewport Excalidraw
+workspace for defining projects, arranging tasks/subtasks, attaching supporting resources, tracking
+progress, and preserving a primary requirement baseline plus every later New/Changed/Removed delta.
+Excalidraw owns canvas interaction and layout; TaskFlow remains authoritative for business data,
+ownership, files, progress, and history.
+
+The complete durable requirements, boundaries, domain model, persistence rules, acceptance criteria,
+and Phases 17–23 are in **[PLANNER.md](PLANNER.md)**. Read it before any Planner discussion or work.
+Phases 17–18 are complete: the immersive project workspace now saves authorized, revisioned scenes to
+the API, retains IndexedDB only for recovery, and surfaces offline and optimistic-concurrency conflicts.
+Canonical linked work objects and the remaining resource/history capabilities begin in Phase 19.
+
 ## Individual Users
 > ✅ **Complete end to end (Phase 9, 2026-07-26)** — API *and* Angular client, verified live:
 > register → **verify email** → sign in → create personal tasks with subtasks → start / complete /

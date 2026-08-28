@@ -82,9 +82,70 @@ Controller → MediatR → ValidationBehavior → AccessGuardBehavior (read auth
 - Migrations in `Infra/Migrations`; startup does **not** auto-migrate (seeders run on startup and assume the schema exists).
 - Seeders (`Infra/Seeder/`): RoleSeeder (Admin/Manager/User system roles) then UserSeeder (admin@taskflow.com / Admin@123, verified, Admin role) — run from Program.cs on every startup, idempotent.
 
+## Planner architecture
+
+Planner Phases 17–23 are specified in [PLANNER.md](PLANNER.md). The binding architectural boundary is:
+Excalidraw owns canvas presentation and interaction; TaskFlow owns projects, work items, requirements,
+resources, authorization, progress, and history. An Excalidraw element links through a persisted
+`PlannerNode` to a canonical TaskFlow entity/resource. Scene JSON is never a business-data or
+authorization source of truth and never contains binary media.
+
+Phase 18 implements creator-only personal-project boards with one primary `PlannerBoard` per project,
+immutable `PlannerSceneRevision` checkpoints, and stable `PlannerNode` identities. Authorized scene
+loads/saves use revision/ETag optimistic concurrency; the PostgreSQL revision uniqueness constraint is
+also translated to a 409 so simultaneous writers cannot become a 500 or silently overwrite. Scene JSON
+is UTF-8-size limited and excludes binary media. IndexedDB is an ordered recovery cache, never the
+authority. Phase 21 places binary resources behind `IObjectStorage`; PostgreSQL contains metadata only.
+
+Phase 19 makes `PlannerNode` the stable UUID bridge from an Excalidraw element id to exactly one
+canonical Project, Task, or Subtask integer id. Planner-aware commands create the work record and node
+in one EF transaction; business fields never come from scene JSON. The workspace query joins the live
+aggregate state into backend-derived counts, completion, dates, status, and planning fields. Removing a
+node is explicitly either unlink-only or canonical deletion; deleting the owning project remains in the
+normal Projects flow. Unique filtered indexes prevent duplicate entity links within a board.
+
+Phase 20 adds platform-owned `PlannerTemplate` definitions and append-only `PlannerTemplateVersion`
+snapshots. AdminOnly commands own Draft/Published/Archived transitions and validate JSON fields/defaults
+against the five fixed object contracts; templates cannot execute code or create schemas. Member reads
+return only published active definitions. Each new `PlannerNode` may reference one published version,
+so presentation/default changes never rewrite existing plans and archived versions remain renderable.
+
+Phase 21 adds `PlannerResource` for note/link/document metadata and `PlannerAsset` for private stored-
+object metadata. Resource nodes target exactly one resource UUID; binary content never enters PostgreSQL
+or Excalidraw JSON. Every resource route first authorizes the creator-owned project. Uploads enforce a
+25 MB limit, extension/content-type allowlist, safe filename, SHA-256 checksum, and scan status through
+the replaceable `IPlannerAssetScanner` hook; preview/download streams only after a Clean result. Unlinking
+a node retains its resource and object for the project library, while explicit deletion removes database
+metadata and the object. Soft-deleting a project retains its private objects for recovery; permanent
+storage lifecycle cleanup is an operational hardening concern for Phase 23.
+
+Phase 22 adds immutable `RequirementBaseline` aggregates with ordered `RequirementSnapshot` children
+and append-only `RequirementChange` audit rows. Finalization captures project/task/subtask scope in one
+transaction. Requirement-bearing Project, Task, and SubTask changes are detected inside
+`TaskFlowDbContext.SaveChangesAsync`, after an active baseline lookup and before commit, so mutations
+through non-Planner controllers cannot bypass history. Scope fields are serialized as stable JSON;
+execution-only status/completion/time-log fields are deliberately excluded. The save plus audit rows
+share one database transaction, and actor identity comes from the authenticated request. Comparison
+resolves the latest state against the immutable snapshot and derives effective New/Changed/Removed
+state, including reverted-change suppression and optional user-supplied reasons.
+
+### Phase 23 operational boundary
+
+Planner scene persistence reads the board root without hydrating its node/resource graph, validates a
+maximum 5 MB UTF-8 document with at most 5,000 elements, and keeps a rolling 100-revision history backed
+by a `(BoardId, CreatedAt)` index. Scene JSON cannot embed binary data or unsafe URL schemes. Uploaded
+assets additionally require matching file signatures and pass the scanner gate before private streaming.
+
+`Planner:Enabled` is the server rollback switch; clients have a matching build-time feature flag. The
+Planner middleware emits activities, duration/request/failure/conflict/mutation metrics, slow/error logs,
+and actor/trace mutation audit events without recording scene/file content. Separate Planner and upload
+rate limits constrain abuse. Disabling Planner hides client routes/navigation and makes server routes
+unavailable while preserving all database state and any legacy browser scene retained for rollback.
+
 ## Known Placeholders / Loose Ends
 - `Domain/Common/Result.cs` — empty stub (Result pattern not adopted; exceptions used instead)
 - `Domain/Exceptions/BadRequestException.cs` — defined but the middleware handles Application-layer exceptions; prefer those
 - Email verification: `User.VerifyEmail()` exists but no endpoint/token flow yet (seeder calls it directly)
 - List queries are unpaginated/unfiltered; `ApiResponse<T>` envelope is only used by AuthController — both flagged in PHASES.md
-- No automated tests yet
+- Automated coverage now includes Planner domain/application tests and real HTTP/PostgreSQL migration,
+  ownership, restore, and concurrency integration tests; broader legacy API coverage remains backlog.

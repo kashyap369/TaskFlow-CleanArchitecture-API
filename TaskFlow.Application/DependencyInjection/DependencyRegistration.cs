@@ -3,6 +3,7 @@ using MediatR;
 using Microsoft.Extensions.DependencyInjection;
 using TaskFlow.Application.Behaviors;
 using TaskFlow.Application.Contracts.Security;
+using TaskFlow.Application.Contracts.Planner;
 using TaskFlow.Application.Features.Identity.User.Services;
 
 namespace TaskFlow.Application.DependencyInjection
@@ -32,6 +33,7 @@ namespace TaskFlow.Application.DependencyInjection
                 typeof(AccessGuardBehavior<,>));
 
             services.AddScoped<IAuthSessionIssuer, AuthSessionIssuer>();
+            services.AddScoped<IRequirementChangeContext, RequirementChangeContext>();
             services.AddScoped<OneTimeCodeRequestService>();
             services.AddScoped<OneTimeCodeVerifier>();
 

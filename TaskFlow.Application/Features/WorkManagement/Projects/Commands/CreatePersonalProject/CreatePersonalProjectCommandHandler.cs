@@ -2,7 +2,9 @@ using MediatR;
 using TaskFlow.Application.Contracts.Security;
 using TaskFlow.Application.Exceptions;
 using TaskFlow.Domain.Entities.WorkManagement.Projects;
+using TaskFlow.Domain.Entities.Planner;
 using TaskFlow.Domain.Interfaces.Identity.Users;
+using TaskFlow.Domain.Interfaces.Planner;
 using TaskFlow.Domain.Interfaces.Persistence;
 using TaskFlow.Domain.Interfaces.WorkManagement;
 
@@ -14,17 +16,20 @@ public sealed class CreatePersonalProjectCommandHandler
     private readonly IProjectRepository _projectRepository;
     private readonly IUserRepository _userRepository;
     private readonly ICurrentUserService _currentUserService;
+    private readonly IPlannerBoardRepository _plannerBoardRepository;
     private readonly IUnitOfWork _unitOfWork;
 
     public CreatePersonalProjectCommandHandler(
         IProjectRepository projectRepository,
         IUserRepository userRepository,
         ICurrentUserService currentUserService,
+        IPlannerBoardRepository plannerBoardRepository,
         IUnitOfWork unitOfWork)
     {
         _projectRepository = projectRepository;
         _userRepository = userRepository;
         _currentUserService = currentUserService;
+        _plannerBoardRepository = plannerBoardRepository;
         _unitOfWork = unitOfWork;
     }
 
@@ -58,9 +63,16 @@ public sealed class CreatePersonalProjectCommandHandler
             request.StartDate,
             organizationId: null,
             createdByUserId: userId,
-            request.ExpectedCompletionDate);
+            request.ExpectedCompletionDate,
+            request.ProblemStatement,
+            request.BudgetAmount,
+            request.BudgetCurrency,
+            request.ApproximateDurationWeeks);
 
         await _projectRepository.AddAsync(project, cancellationToken);
+        await _plannerBoardRepository.AddAsync(
+            PlannerBoard.Create(project, userId),
+            cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return project.Id;

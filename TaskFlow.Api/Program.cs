@@ -3,6 +3,8 @@ using Microsoft.EntityFrameworkCore;
 using System.Threading.RateLimiting;
 using TaskFlow.Api.Extensions;
 using TaskFlow.Api.Services;
+using TaskFlow.Api.Filters;
+using TaskFlow.Api.Options;
 using TaskFlow.Application.Contracts.Security;
 using TaskFlow.Application.Contracts.Storage;
 using TaskFlow.Application.DependencyInjection;
@@ -15,15 +17,45 @@ using TaskFlow.Infra.Seeder.Platform;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Console logging is portable across local Windows development, containers, and EF design-time tools.
+// The Windows EventLog provider requires machine-level source permissions and prevented migrations.
+builder.Logging.ClearProviders();
+builder.Logging.AddConsole();
+
 // Services
 
 builder.Services.AddControllers();
+builder.Services.Configure<PlannerOptions>(
+    builder.Configuration.GetSection(PlannerOptions.SectionName));
+builder.Services.AddScoped<PlannerFeatureFilter>();
 
 builder.Services.AddRateLimiter(options =>
 {
     options.AddPolicy("auth-code", httpContext =>
         RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+    options.AddPolicy("planner", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ??
+                          httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 240,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+    options.AddPolicy("planner-upload", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ??
+                          httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
             factory: _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = 10,
@@ -131,9 +163,8 @@ if (app.Environment.IsDevelopment())
 app.UseForwardedHeaders();
 app.UseHttpsRedirection();
 app.UseCors("AngularPolicy");
-app.UseRateLimiter();
-
 app.UseAuthentication();
+app.UseRateLimiter();
 
 // After UseAuthentication so the admin bypass can read the role
 // claim; before UseAuthorization so a held-off request never
@@ -141,6 +172,7 @@ app.UseAuthentication();
 app.UseMaintenanceMode();
 
 app.UseAuthorization();
+app.UsePlannerObservability();
 
 app.MapControllers();
 app.MapHealthChecks("/health");
@@ -152,11 +184,10 @@ app.MapGet(
             ? Results.Ok(new { status = "ready" })
             : Results.StatusCode(StatusCodes.Status503ServiceUnavailable));
 
-using (var scope = app.Services.CreateScope())
+if (!app.Environment.IsEnvironment("Testing"))
 {
-    var context =
-        scope.ServiceProvider
-            .GetRequiredService<TaskFlowDbContext>();
+    using var scope = app.Services.CreateScope();
+    var context = scope.ServiceProvider.GetRequiredService<TaskFlowDbContext>();
 
     await context.Database.MigrateAsync();
 
@@ -189,3 +220,5 @@ using (var scope = app.Services.CreateScope())
 }
 
 app.Run();
+
+public partial class Program;

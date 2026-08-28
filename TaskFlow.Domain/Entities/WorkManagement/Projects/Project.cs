@@ -19,6 +19,14 @@ public class Project : AuditableEntity, IAggregateRoot
     public DateTime? ExpectedCompletionDate { get; private set; }
 
     public DateTime? ActualCompletionDate { get; private set; }
+
+    public string? ProblemStatement { get; private set; }
+
+    public decimal? BudgetAmount { get; private set; }
+
+    public string? BudgetCurrency { get; private set; }
+
+    public int? ApproximateDurationWeeks { get; private set; }
     /// <summary>
     /// Null for a private Individual project. Set for an organization project.
     /// </summary>
@@ -41,7 +49,11 @@ public class Project : AuditableEntity, IAggregateRoot
      DateTime startDate,
      int? organizationId,
      int createdByUserId,
-     DateTime? expectedCompletionDate = null)
+     DateTime? expectedCompletionDate = null,
+     string? problemStatement = null,
+     decimal? budgetAmount = null,
+     string? budgetCurrency = null,
+     int? approximateDurationWeeks = null)
     {
         if (string.IsNullOrWhiteSpace(title))
             throw new ArgumentException("Project title is required.");
@@ -60,6 +72,7 @@ public class Project : AuditableEntity, IAggregateRoot
         Description = description;
         StartDate = startDate;
         ExpectedCompletionDate = expectedCompletionDate;
+        SetPlanningDetails(problemStatement, budgetAmount, budgetCurrency, approximateDurationWeeks);
         OrganizationId = organizationId;
         CreatedByUserId = createdByUserId;
 
@@ -76,7 +89,11 @@ public class Project : AuditableEntity, IAggregateRoot
     public void UpdateDetails(
         string title,
         string description,
-        DateTime? expectedCompletionDate)
+        DateTime? expectedCompletionDate,
+        string? problemStatement = null,
+        decimal? budgetAmount = null,
+        string? budgetCurrency = null,
+        int? approximateDurationWeeks = null)
     {
         if (string.IsNullOrWhiteSpace(title))
             throw new ArgumentException("Project title is required.");
@@ -84,8 +101,28 @@ public class Project : AuditableEntity, IAggregateRoot
         Title = title;
         Description = description;
         ExpectedCompletionDate = expectedCompletionDate;
+        SetPlanningDetails(problemStatement, budgetAmount, budgetCurrency, approximateDurationWeeks);
 
         MarkAsUpdated();
+    }
+
+    private void SetPlanningDetails(
+        string? problemStatement,
+        decimal? budgetAmount,
+        string? budgetCurrency,
+        int? approximateDurationWeeks)
+    {
+        if (budgetAmount < 0)
+            throw new ArgumentOutOfRangeException(nameof(budgetAmount), "Budget cannot be negative.");
+        if (approximateDurationWeeks is <= 0)
+            throw new ArgumentOutOfRangeException(nameof(approximateDurationWeeks), "Duration must be positive.");
+        if (budgetAmount.HasValue && string.IsNullOrWhiteSpace(budgetCurrency))
+            throw new ArgumentException("Budget currency is required when a budget is supplied.", nameof(budgetCurrency));
+
+        ProblemStatement = string.IsNullOrWhiteSpace(problemStatement) ? null : problemStatement.Trim();
+        BudgetAmount = budgetAmount;
+        BudgetCurrency = string.IsNullOrWhiteSpace(budgetCurrency) ? null : budgetCurrency.Trim().ToUpperInvariant();
+        ApproximateDurationWeeks = approximateDurationWeeks;
     }
 
     public void AddTask(Task task)

@@ -21,6 +21,7 @@ using TaskFlow.Domain.Interfaces.Identity.Users;
 using TaskFlow.Domain.Interfaces.Organizations;
 using TaskFlow.Domain.Interfaces.Persistence;
 using TaskFlow.Domain.Interfaces.Platform;
+using TaskFlow.Domain.Interfaces.Planner;
 using TaskFlow.Domain.Interfaces.WorkManagement;
 using TaskFlow.Infra.DomainEvents.Dispatchers;
 using TaskFlow.Infra.Configuration;
@@ -31,6 +32,7 @@ using TaskFlow.Infra.Persistence.Context;
 using TaskFlow.Infra.Persistence.Repositories.Identity.Users;
 using TaskFlow.Infra.Persistence.Repositories.Organizations;
 using TaskFlow.Infra.Persistence.Repositories.Platform;
+using TaskFlow.Infra.Persistence.Repositories.Planner;
 using TaskFlow.Infra.Persistence.Repositories.WorkManagement;
 using TaskFlow.Infra.Security;
 using TaskFlow.Infra.Storage;
@@ -146,6 +148,7 @@ namespace TaskFlow.Infra.DependencyInjection
                 });
                 services.AddSingleton<IObjectStorage, S3ObjectStorage>();
             }
+            services.AddSingleton<IPlannerAssetScanner, NoOpPlannerAssetScanner>();
             // Register the organization repositories
             services.AddScoped<
     IOrganizationRepository,
@@ -191,6 +194,11 @@ namespace TaskFlow.Infra.DependencyInjection
             services.AddScoped<
                 IPlatformSettingRepository,
                 PlatformSettingRepository>();
+
+            services.AddScoped<IPlannerBoardRepository, PlannerBoardRepository>();
+            services.AddScoped<IPlannerTemplateRepository, PlannerTemplateRepository>();
+            services.AddScoped<IPlannerResourceRepository, PlannerResourceRepository>();
+            services.AddScoped<IRequirementBaselineRepository, RequirementBaselineRepository>();
 
             services.AddScoped<SmtpEmailSender>();
 

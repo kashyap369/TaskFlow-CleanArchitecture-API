@@ -12,6 +12,10 @@ namespace TaskFlow.Application.Features.WorkManagement.Projects.DTOs.Queries
         public DateTime StartDate { get; init; }
         public DateTime? ExpectedCompletionDate { get; init; }
         public DateTime? ActualCompletionDate { get; init; }
+        public string? ProblemStatement { get; init; }
+        public decimal? BudgetAmount { get; init; }
+        public string? BudgetCurrency { get; init; }
+        public int? ApproximateDurationWeeks { get; init; }
         public int CreatedByUserId { get; init; }
         public int TaskCount { get; init; }
         public int CompletedTaskCount { get; init; }

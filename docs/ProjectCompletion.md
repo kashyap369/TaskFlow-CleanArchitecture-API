@@ -10,8 +10,9 @@
 > | **Frontend** | `D:\Projects\TMS\TaskFlowUI\TaskFlowApp` — Angular 20, standalone + signals, Atomic Design, multi-portal |
 > | **Dev URLs** | API `https://localhost:7086/api` · UI `http://localhost:4200` (CORS allows only this origin) |
 >
-> **Last verified:** 2026-08-15, after creator-only personal projects and the initial Excalidraw Planner
-> integration. The API exposes 88 endpoints; the UI consumes 86, with the same two deliberate skips.
+> **Last verified implementation:** 2026-08-28, after Planner Phase 23 production rollout.
+> Planner Phases 17–23 are complete; see [PLANNER.md](PLANNER.md). The API exposes 117 endpoints;
+> the UI consumes 115, with the same two deliberate skips.
 
 ---
 
@@ -55,10 +56,10 @@ has been exercised against a running API — not that the code compiles.
 | | Backend | Frontend |
 |---|---|---|
 | **Phases complete** | **13 of 13** (+ a security pass and an IDOR fix) | **27 session phases**; roadmap Phases 0–8 ✅ (Phase 6 admin extras closed by session Phase 27) |
-| **Version status** | **Feature-complete.** Both account types + Organization/Reporting/Admin at 100% | **All three portals complete** (session Phases 26–29, 2026-07-26) |
-| **Endpoints** | **88** exposed (13 controllers; excludes the Angular-template `WeatherForecastController`) | **86 consumed.** The only 2 left are the deliberate skips below — **nothing is unconsumed for want of a screen** |
-| **Quality gates** | `dotnet build` **0 warnings / 0 errors** · **no automated tests** (backlog) | `ng lint` **0 errors** · `ng build` ✅ · **204/204** unit tests · WCAG AA on all 42 token pairings · **no E2E** |
-| **Biggest gap** | **None blocking.** Automated tests, pagination, `ApiResponse<T>` consistency | Calendar page, CSV/PDF export, per-member trend charts, E2E tests (V1-GAPS §3) |
+| **Version status** | **Pre-Planner product complete; Planner Phases 17–23 complete** | **All three portals complete; Planner Phases 17–23 complete** |
+| **Endpoints** | **117** exposed (15 controllers; excludes the Angular-template `WeatherForecastController`) | **115 consumed.** The only 2 left are the deliberate skips below — **nothing is unconsumed for want of a screen** |
+| **Quality gates** | `dotnet test` ✅ **27/27** (domain, application, real HTTP/PostgreSQL integration and large-scene performance) · EF model drift ✅ | `ng lint` **0 errors** · `ng build` ✅ · **240/240** browser specs · Storybook build ✅ · WCAG AA on all 42 token pairings |
+| **Biggest gap** | **No remaining Planner roadmap phase** | **No remaining Planner roadmap phase** |
 | **Vision coverage** (§3.0) | **Organization 100% · Reporting 100% · Individual 100%** | **All three portals complete** — Organization, Individual and Admin |
 
 > **2026-07-26 — the two sides are now in sync.** Backend Phases 10–13 closed every ⛔/⚠️/⬜ row, and
@@ -181,6 +182,7 @@ a running API.
 | Task assignment | `PUT /{id}/assign/{userId}`, `/unassign` | ✅ | ✅ | ✅ | Inline assignee `<select>` on every row |
 | **Personal tasks** | `POST /task/personal`, `GET /task/mine/personal` | ✅ | ✅ | ✅ | Member portal **My tasks** page: filters, paging, create/edit drawer, lifecycle |
 | **Personal projects** | `POST /project/personal`, `GET /project/mine/personal` + shared project CRUD | ✅ | ✅ | ✅ | Creator-only projects; My Tasks can filter/create within a private project |
+| **Planner resources and secure files** | 8 on `/planner/projects/{id}/board/resources` | ✅ | ✅ | ✅ | Notes, links, documents, private authorized preview/download, update, unlink/relink, and delete; binaries stay outside scene JSON |
 | Subtasks (add / rename / complete / reopen / delete / list) | 6 on `/subtask` | ✅ | ✅ | ✅ | Parent task auto-completes when all subtasks complete |
 | Teams CRUD + detail + members | 7 on `/team` | ✅ | ✅ | ✅ | Team detail page with add/remove member |
 | **Team-scoped tasks** | `GET /team/{id}/tasks`, `PUT /task/{id}/team/{teamId}`, `DELETE /task/{id}/team` | ✅ | ✅ | ✅ | **API Phase 11 / UI Phase 28.** Team assignment is its own route, never a field on `PUT /task`; the UI's edit drawer honours that and calls it **only when the team changed**. All three verified live |
@@ -359,12 +361,23 @@ Due-date reminders + notifications · task comments & attachments · activity fe
 tags, labels, search, kanban board · recurring tasks · Redis caching · Hangfire jobs · event bus ·
 Docker + CI/CD.
 
+> Planner is no longer part of the uncommitted backlog. Its product contract and cross-project roadmap
+> are committed in [PLANNER.md](PLANNER.md) and [PHASES.md](PHASES.md) Phases 17–23.
+
 ---
 
 ## 7. Changelog
 
 | Date | Side | Change |
 |---|---|---|
+| 2026-08-28 | **Both** | **Completed Planner Phase 23 and production rollout.** Added bounded/malicious scene validation, root-only persistence, indexed rolling revision retention, upload signature validation and private headers, Planner/upload rate limits, feature-flag rollback, traces/metrics/structured audit logs, coalesced large-canvas serialization, and explicit legacy browser-scene import with rollback preservation. Backend tests are 27/27 and frontend browser specs are 240/240; builds, lint/design lint, Storybook, EF drift, performance, ownership/security integration coverage, Dokploy deployments, and live health checks pass. |
+| 2026-08-28 | **Both** | **Completed Planner Phase 22.** Added immutable transactional primary baselines and ordered snapshots, persistence-boundary scope auditing with actor/time/reason, New/Changed/Removed history, five owner-authorized APIs, and Angular finalization/history/filter/field-comparison UX. Progress-only status/completion/time-log changes are excluded. API routes are now **117 total / 115 consumed**; backend tests are 22/22 and frontend tests are 236/236, with builds, lint/design lint, and EF drift green. |
+| 2026-08-28 | **Both** | **Completed Planner Phase 21.** Added owner-scoped Note/Link/Document resources, private object-storage assets, migration `AddPlannerResourcesAndAssets`, 25 MB/type/name validation, SHA-256, scan-status hook, authorized preview/download, metadata updates, unlink/relink retention, and explicit object deletion. Angular adds resource cards, creation/inspector flows, previews/downloads, and an unlinked-resource library. API routes are now **112 total / 110 consumed**; backend tests are 21/21 and frontend tests are 234/234, with production build, lint/design lint, and EF checks green. |
+| 2026-08-28 | **Both** | **Completed Planner Phase 20.** Added fixed validated template types, AdminOnly Draft/Published/Archived management, immutable published versions, node version snapshots, and migration `AddPlannerTemplateLibrary`. Angular adds an admin library and member Planner picker applying published defaults/colors/dimensions; archived templates leave old cards renderable. API routes are now **104 total / 102 consumed**; backend tests are 18/18 and frontend tests are 232/232, with build, lint/design lint, Storybook, detector, and EF checks green. |
+| 2026-08-28 | **Both** | **Completed Planner Phase 19.** Added stable server-owned links from Excalidraw elements to canonical Project/Task/Subtask records, six owner-authorized node/workspace routes, backend-derived progress and rehydration, atomic Planner-aware create/edit flows, and explicit unlink-versus-delete semantics. Projects gained problem statement, budget/currency, and approximate duration fields through migration. The Angular canvas now creates linked cards, refreshes live labels, restores missing linked cards, and edits them through a responsive inspector. API routes are now **98 total / 96 consumed**; backend tests are 15/15 and frontend tests are 231/231, with build, lint/design lint, Storybook, detector, and EF checks green. |
+| 2026-08-28 | **Both** | **Completed Planner Phase 18.** Added owner-authorized primary boards, immutable revisions, stable node records, migration backfill, cloud load/save/history APIs with ETags and database-safe optimistic concurrency, and Angular debounced autosave with ordered IndexedDB recovery and explicit offline/failure/conflict resolution. Disposable-PostgreSQL HTTP tests prove ownership isolation, cross-device restore, stale-tab rejection, and simultaneous-write safety. API routes are now **92 total / 90 consumed**; backend tests are 12/12 and frontend tests are 230/230, with build, lint/design lint, Storybook, and EF model checks green. |
+| 2026-08-28 | UI | **Completed Planner Phase 17.** `/member/planner` now bypasses the normal member content shell and provides a true `100dvw × 100dvh` Excalidraw workspace with compact project/progress/save/tool overlays, creator-owned project loading and switching, remembered last project, robust empty/loading/error states, and inline personal-project creation. Temporary browser scene storage is separated by user and project; cloud authority intentionally begins in Phase 18. Desktop/mobile component previews, Angular build, lint/design lint, and Storybook build pass; focused Jasmine specs compile but the host ChromeHeadless GPU sandbox crashes before execution. No API endpoint or schema change. |
+| 2026-08-27 | **Both** | **Committed the Planner end-to-end specification and Phases 17–23.** The target is a full-viewport, project-scoped Excalidraw workspace with cloud scene persistence/concurrency, canonical project/task/subtask links, admin-versioned templates, secure notes/documents/media, immutable primary requirement baselines, New/Changed/Removed history, comparison, and production hardening. At this roadmap checkpoint implementation had not started; Phase 17 landed in the following implementation session. See `docs/PLANNER.md`. |
 | 2026-08-15 | **Both** | **Added creator-only personal projects and the initial Excalidraw Planner.** Personal tasks can belong to a private project owned by the same creator; joining an organization never exposes or mixes that data. Added two API routes (**88 total / 86 consumed**), applied the nullable-organization migration, and verified cross-user reads return 403. Planner autosaves per user in that browser; server-side Planner persistence remains intentionally deferred. |
 | 2026-08-15 | **Both** | **Closed project-write authorization and completed Individual membership UX.** `CreateProject` now protects creation and `ManageProjects` protects update/delete through the standard organization permission checker. Individual accounts keep the personal portal as home but can enter organizations they own or joined, switch back to personal work, and see new memberships immediately after accepting invitations. No endpoints or migration added. Backend build and frontend lint/build pass; 16 focused browser regressions are green. |
 | 2026-08-14 | **Both** | **Account recovery and passwordless sign-in shipped end to end.** Four auth endpoints add generic, rate-limited code requests plus reset/login verification; persisted codes are hashed, expiring, single-use and attempt-limited. Password reset revokes active refresh tokens. Angular adds email-code mode to personal/organization/admin sign-in and a responsive forgot-password flow. Endpoints **82 → 86**, consumed **80 → 84**. |
@@ -393,4 +406,5 @@ Docker + CI/CD.
 | How does the API work? | `TaskFlow/docs/` — `OVERVIEW` `ARCHITECTURE` `CONVENTIONS` `PHASES` `SESSIONS` |
 | How does the UI work? | `TaskFlowUI/TaskFlowApp/docs/` — same five, plus `DESIGN` and `ATOMIC-DESIGN-GUIDE` |
 | What does UI v1 deliberately exclude? | `TaskFlowUI/TaskFlowApp/docs/V1-GAPS.md` |
+| What is the complete Planner product and architecture contract? | `TaskFlow/docs/PLANNER.md` |
 | **Are the two sides in sync?** | **This file.** |

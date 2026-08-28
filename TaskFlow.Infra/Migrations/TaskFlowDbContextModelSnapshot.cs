@@ -645,6 +645,532 @@ namespace TaskFlow.Infra.Migrations
                     b.ToTable("TeamMembers", (string)null);
                 });
 
+            modelBuilder.Entity("TaskFlow.Domain.Entities.Planner.PlannerAsset", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BoardId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<int>("ProjectId")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("ResourceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ScanStatus")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("ScannedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Sha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .IsFixedLength();
+
+                    b.Property<long>("Size")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("StorageKey")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<int>("UploadedByUserId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ResourceId")
+                        .IsUnique();
+
+                    b.HasIndex("StorageKey")
+                        .IsUnique();
+
+                    b.HasIndex("ProjectId", "BoardId");
+
+                    b.ToTable("PlannerAssets", (string)null);
+                });
+
+            modelBuilder.Entity("TaskFlow.Domain.Entities.Planner.PlannerBoard", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("CurrentRevision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("LastOpenedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("OwnerUserId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ProjectId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SceneJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OwnerUserId");
+
+                    b.HasIndex("ProjectId")
+                        .IsUnique();
+
+                    b.ToTable("PlannerBoards", (string)null);
+                });
+
+            modelBuilder.Entity("TaskFlow.Domain.Entities.Planner.PlannerNode", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BoardId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ElementId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<int>("NodeType")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("ProjectId")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("ResourceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("SubTaskId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("TaskId")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("TemplateVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProjectId");
+
+                    b.HasIndex("ResourceId");
+
+                    b.HasIndex("SubTaskId");
+
+                    b.HasIndex("TaskId");
+
+                    b.HasIndex("TemplateVersionId");
+
+                    b.HasIndex("BoardId", "ElementId")
+                        .IsUnique();
+
+                    b.HasIndex("BoardId", "ProjectId")
+                        .IsUnique()
+                        .HasFilter("\"ProjectId\" IS NOT NULL");
+
+                    b.HasIndex("BoardId", "ResourceId")
+                        .IsUnique()
+                        .HasFilter("\"ResourceId\" IS NOT NULL");
+
+                    b.HasIndex("BoardId", "SubTaskId")
+                        .IsUnique()
+                        .HasFilter("\"SubTaskId\" IS NOT NULL");
+
+                    b.HasIndex("BoardId", "TaskId")
+                        .IsUnique()
+                        .HasFilter("\"TaskId\" IS NOT NULL");
+
+                    b.ToTable("PlannerNodes", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_PlannerNodes_ExactlyOneTarget", "(\"NodeType\" = 1 AND \"ProjectId\" IS NOT NULL AND \"TaskId\" IS NULL AND \"SubTaskId\" IS NULL AND \"ResourceId\" IS NULL) OR (\"NodeType\" = 2 AND \"ProjectId\" IS NULL AND \"TaskId\" IS NOT NULL AND \"SubTaskId\" IS NULL AND \"ResourceId\" IS NULL) OR (\"NodeType\" = 3 AND \"ProjectId\" IS NULL AND \"TaskId\" IS NULL AND \"SubTaskId\" IS NOT NULL AND \"ResourceId\" IS NULL) OR (\"NodeType\" IN (4, 5) AND \"ProjectId\" IS NULL AND \"TaskId\" IS NULL AND \"SubTaskId\" IS NULL AND \"ResourceId\" IS NOT NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("TaskFlow.Domain.Entities.Planner.PlannerResource", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BoardId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Content")
+                        .HasMaxLength(20000)
+                        .HasColumnType("character varying(20000)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("OwnerUserId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ProjectId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Url")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BoardId", "CreatedAt");
+
+                    b.HasIndex("ProjectId", "OwnerUserId");
+
+                    b.ToTable("PlannerResources", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_PlannerResources_Content", "(\"Kind\" = 1 AND \"Content\" IS NOT NULL AND \"Url\" IS NULL) OR (\"Kind\" = 2 AND \"Content\" IS NULL AND \"Url\" IS NOT NULL) OR (\"Kind\" = 3 AND \"Content\" IS NULL AND \"Url\" IS NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("TaskFlow.Domain.Entities.Planner.PlannerSceneRevision", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BoardId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RevisionNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SceneJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BoardId", "CreatedAt");
+
+                    b.HasIndex("BoardId", "RevisionNumber")
+                        .IsUnique();
+
+                    b.ToTable("PlannerSceneRevisions", (string)null);
+                });
+
+            modelBuilder.Entity("TaskFlow.Domain.Entities.Planner.PlannerTemplate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("BackgroundColor")
+                        .IsRequired()
+                        .HasMaxLength(7)
+                        .HasColumnType("character varying(7)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("CurrentVersionNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("DefaultHeight")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("DefaultValuesJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<int>("DefaultWidth")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Header")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("Icon")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("ObjectType")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("StrokeColor")
+                        .IsRequired()
+                        .HasMaxLength(7)
+                        .HasColumnType("character varying(7)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("VisibleFieldsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ObjectType", "SortOrder");
+
+                    b.ToTable("PlannerTemplates", (string)null);
+                });
+
+            modelBuilder.Entity("TaskFlow.Domain.Entities.Planner.PlannerTemplateVersion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("BackgroundColor")
+                        .IsRequired()
+                        .HasMaxLength(7)
+                        .HasColumnType("character varying(7)");
+
+                    b.Property<int>("DefaultHeight")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("DefaultValuesJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<int>("DefaultWidth")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Header")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("Icon")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("ObjectType")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("PublishedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("PublishedByUserId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("StrokeColor")
+                        .IsRequired()
+                        .HasMaxLength(7)
+                        .HasColumnType("character varying(7)");
+
+                    b.Property<Guid>("TemplateId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("VersionNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("VisibleFieldsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TemplateId", "VersionNumber")
+                        .IsUnique();
+
+                    b.ToTable("PlannerTemplateVersions", (string)null);
+                });
+
+            modelBuilder.Entity("TaskFlow.Domain.Entities.Planner.RequirementBaseline", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("BaselineNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("BoardId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("FinalizedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("FinalizedByUserId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ProjectId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BoardId");
+
+                    b.HasIndex("ProjectId", "BaselineNumber")
+                        .IsUnique();
+
+                    b.ToTable("RequirementBaselines", (string)null);
+                });
+
+            modelBuilder.Entity("TaskFlow.Domain.Entities.Planner.RequirementChange", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ActorUserId")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("BaselineId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ChangeType")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("ChangedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("EntityId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("EntityType")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("NewValuesJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("OldValuesJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<int?>("ParentEntityId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BaselineId", "ChangeType");
+
+                    b.HasIndex("BaselineId", "ChangedAt");
+
+                    b.ToTable("RequirementChanges", (string)null);
+                });
+
+            modelBuilder.Entity("TaskFlow.Domain.Entities.Planner.RequirementSnapshot", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BaselineId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CapturedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("EntityId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("EntityType")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("FieldsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<int>("OrderIndex")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("ParentEntityId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BaselineId", "EntityType", "EntityId")
+                        .IsUnique();
+
+                    b.ToTable("RequirementSnapshots", (string)null);
+                });
+
             modelBuilder.Entity("TaskFlow.Domain.Entities.Platform.PlatformSetting", b =>
                 {
                     b.Property<int>("Id")
@@ -700,6 +1226,17 @@ namespace TaskFlow.Infra.Migrations
                     b.Property<DateTime?>("ActualCompletionDate")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int?>("ApproximateDurationWeeks")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("BudgetAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("BudgetCurrency")
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -722,6 +1259,10 @@ namespace TaskFlow.Infra.Migrations
 
                     b.Property<int?>("OrganizationId")
                         .HasColumnType("integer");
+
+                    b.Property<string>("ProblemStatement")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
 
                     b.Property<DateTime>("StartDate")
                         .HasColumnType("timestamp with time zone");
@@ -1074,6 +1615,132 @@ namespace TaskFlow.Infra.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("TaskFlow.Domain.Entities.Planner.PlannerAsset", b =>
+                {
+                    b.HasOne("TaskFlow.Domain.Entities.Planner.PlannerResource", null)
+                        .WithOne("Asset")
+                        .HasForeignKey("TaskFlow.Domain.Entities.Planner.PlannerAsset", "ResourceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("TaskFlow.Domain.Entities.Planner.PlannerBoard", b =>
+                {
+                    b.HasOne("TaskFlow.Domain.Entities.WorkManagement.Projects.Project", "Project")
+                        .WithOne()
+                        .HasForeignKey("TaskFlow.Domain.Entities.Planner.PlannerBoard", "ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Project");
+                });
+
+            modelBuilder.Entity("TaskFlow.Domain.Entities.Planner.PlannerNode", b =>
+                {
+                    b.HasOne("TaskFlow.Domain.Entities.Planner.PlannerBoard", null)
+                        .WithMany("Nodes")
+                        .HasForeignKey("BoardId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("TaskFlow.Domain.Entities.WorkManagement.Projects.Project", "Project")
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("TaskFlow.Domain.Entities.Planner.PlannerResource", "Resource")
+                        .WithMany()
+                        .HasForeignKey("ResourceId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("TaskFlow.Domain.Entities.WorkManagement.SubTasks.SubTask", "SubTask")
+                        .WithMany()
+                        .HasForeignKey("SubTaskId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("TaskFlow.Domain.Entities.WorkManagement.Tasks.Task", "Task")
+                        .WithMany()
+                        .HasForeignKey("TaskId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("TaskFlow.Domain.Entities.Planner.PlannerTemplateVersion", "TemplateVersion")
+                        .WithMany()
+                        .HasForeignKey("TemplateVersionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Project");
+
+                    b.Navigation("Resource");
+
+                    b.Navigation("SubTask");
+
+                    b.Navigation("Task");
+
+                    b.Navigation("TemplateVersion");
+                });
+
+            modelBuilder.Entity("TaskFlow.Domain.Entities.Planner.PlannerResource", b =>
+                {
+                    b.HasOne("TaskFlow.Domain.Entities.Planner.PlannerBoard", null)
+                        .WithMany()
+                        .HasForeignKey("BoardId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("TaskFlow.Domain.Entities.Planner.PlannerSceneRevision", b =>
+                {
+                    b.HasOne("TaskFlow.Domain.Entities.Planner.PlannerBoard", null)
+                        .WithMany("SceneRevisions")
+                        .HasForeignKey("BoardId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("TaskFlow.Domain.Entities.Planner.PlannerTemplateVersion", b =>
+                {
+                    b.HasOne("TaskFlow.Domain.Entities.Planner.PlannerTemplate", "Template")
+                        .WithMany("Versions")
+                        .HasForeignKey("TemplateId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Template");
+                });
+
+            modelBuilder.Entity("TaskFlow.Domain.Entities.Planner.RequirementBaseline", b =>
+                {
+                    b.HasOne("TaskFlow.Domain.Entities.Planner.PlannerBoard", "Board")
+                        .WithMany()
+                        .HasForeignKey("BoardId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Board");
+                });
+
+            modelBuilder.Entity("TaskFlow.Domain.Entities.Planner.RequirementChange", b =>
+                {
+                    b.HasOne("TaskFlow.Domain.Entities.Planner.RequirementBaseline", "Baseline")
+                        .WithMany()
+                        .HasForeignKey("BaselineId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Baseline");
+                });
+
+            modelBuilder.Entity("TaskFlow.Domain.Entities.Planner.RequirementSnapshot", b =>
+                {
+                    b.HasOne("TaskFlow.Domain.Entities.Planner.RequirementBaseline", "Baseline")
+                        .WithMany("Snapshots")
+                        .HasForeignKey("BaselineId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Baseline");
+                });
+
             modelBuilder.Entity("TaskFlow.Domain.Entities.WorkManagement.SubTasks.SubTask", b =>
                 {
                     b.HasOne("TaskFlow.Domain.Entities.WorkManagement.Tasks.Task", null)
@@ -1105,6 +1772,28 @@ namespace TaskFlow.Infra.Migrations
             modelBuilder.Entity("TaskFlow.Domain.Entities.Organization.Team", b =>
                 {
                     b.Navigation("Members");
+                });
+
+            modelBuilder.Entity("TaskFlow.Domain.Entities.Planner.PlannerBoard", b =>
+                {
+                    b.Navigation("Nodes");
+
+                    b.Navigation("SceneRevisions");
+                });
+
+            modelBuilder.Entity("TaskFlow.Domain.Entities.Planner.PlannerResource", b =>
+                {
+                    b.Navigation("Asset");
+                });
+
+            modelBuilder.Entity("TaskFlow.Domain.Entities.Planner.PlannerTemplate", b =>
+                {
+                    b.Navigation("Versions");
+                });
+
+            modelBuilder.Entity("TaskFlow.Domain.Entities.Planner.RequirementBaseline", b =>
+                {
+                    b.Navigation("Snapshots");
                 });
 
             modelBuilder.Entity("TaskFlow.Domain.Entities.WorkManagement.Projects.Project", b =>

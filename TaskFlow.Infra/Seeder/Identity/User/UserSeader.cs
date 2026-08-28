@@ -25,7 +25,7 @@ namespace TaskFlow.Infra.Seeder.Identity.User
                         AdminEmail),
                     new PhoneNumber(
                         "9999999999"),
-                    passwordHasher.Hash("Admin@123"));
+                    passwordHasher.Hash("Admin@123git"));
 
                 user.VerifyEmail();
 

@@ -3,4 +3,5 @@
   <Project Path="TaskFlow.Application/TaskFlow.Application.csproj" />
   <Project Path="TaskFlow.Domain/TaskFlow.Domain.csproj" />
   <Project Path="TaskFlow.Infra/TaskFlow.Infra.csproj" />
+  <Project Path="TaskFlow.Tests/TaskFlow.Tests.csproj" />
 </Solution>

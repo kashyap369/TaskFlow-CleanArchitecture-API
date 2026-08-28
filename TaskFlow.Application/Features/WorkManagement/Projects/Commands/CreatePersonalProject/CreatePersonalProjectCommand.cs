@@ -10,5 +10,9 @@ public sealed record CreatePersonalProjectCommand(
     string Title,
     string Description,
     DateTime StartDate,
-    DateTime? ExpectedCompletionDate
+    DateTime? ExpectedCompletionDate,
+    string? ProblemStatement = null,
+    decimal? BudgetAmount = null,
+    string? BudgetCurrency = null,
+    int? ApproximateDurationWeeks = null
 ) : IRequest<int>;

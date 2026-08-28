@@ -2,6 +2,210 @@
 
 > Keep the Current Status section up to date at the end of every session.
 
+## ✅ PLANNER ROADMAP COMPLETE (2026-08-28)
+
+Planner's canonical requirements and architecture are in **[PLANNER.md](PLANNER.md)**. Phases 17–23
+now deliver the immersive shell, cloud persistence, linked work objects, immutable templates, secure
+resources, immutable requirement baselines, and an observable feature-flagged production rollout.
+
+## ✅ Phase 23 — Hardening, scale, and production rollout (2026-08-28)
+
+**Outcome:** Planner is bounded, observable, secure, performant on realistic boards, and safely
+deployable behind an explicit feature flag.
+
+- Scene validation now caps UTF-8 payload size, JSON depth, strings, and elements; rejects embedded
+  binary data and unsafe link schemes; and saves through a root-only board query instead of hydrating
+  the complete node/resource graph.
+- Revision history retains the latest 100 checkpoints with a board/time index and transactional pruning.
+- Uploads combine size/type/name checks with file-signature validation, separate rate limiting, private
+  cache/security headers, and the existing scan gate before content is served.
+- Planner requests emit traces, duration/request/failure/conflict/mutation metrics, structured slow/error
+  warnings, and mutation audit events without logging scene or file content.
+- `Planner:Enabled` gates the server routes, Angular route, and navigation. Legacy browser-only scenes
+  are imported only after explicit user action; the original copy is retained for rollback.
+
+**Delivered evidence:** backend tests pass 27/27, frontend specs pass 240/240, production builds,
+lint/design lint, Storybook, EF migration drift, security/ownership integration coverage, the 5,000-
+element performance test, and critical Planner browser specs pass. Production deployment is recorded
+in [ProjectCompletion.md](ProjectCompletion.md).
+
+## ✅ Phase 22 — Primary requirements, changes, and comparison (2026-08-28)
+
+**Outcome:** the initial plan is an immutable primary baseline and later scope changes are fully traceable.
+
+- Added `RequirementBaseline`, `RequirementSnapshot`, and `RequirementChange` with migration
+  `AddPlannerRequirementBaselines`; Baseline 1 captures project/task/subtask scope and ordering atomically.
+- Added five owner-authorized APIs for finalization, baseline list/detail, append-only history, and
+  field-level comparison with New/Changed/Removed filters and optional reasons.
+- Requirement auditing runs at the EF persistence boundary, so normal project/task/subtask endpoints
+  cannot bypass history. Scope fields are compared; status, completion, and work logs are excluded.
+- Angular enables the Planner Requirements tool with irreversible-finalization guidance, immutable
+  baseline inspection, working-change filters, reasons, and baseline/current field diffs.
+
+**Delivered evidence:** real HTTP/PostgreSQL integration proves ownership, immutable finalization,
+progress exclusion, additions, edits, removals, filters, and field comparison. Backend tests pass
+22/22, frontend specs pass 236/236, both builds and lint pass, and EF reports no drift.
+
+## ✅ Phase 17 — Immersive Planner shell and project context (2026-08-28)
+
+**Outcome:** Excalidraw behaves like a real full-screen editor and every session has an explicit
+personal-project context.
+
+- Add a dedicated authenticated Planner layout at `100dvw × 100dvh`; remove member content max-width,
+  outer padding/card treatment, document scroll, and the separate page heading from this route.
+- Keep native Excalidraw controls and add compact overlays for return navigation, project selection,
+  project progress, save state, library, details, and baseline/history entry points.
+- Load creator-owned personal projects, remember the last opened project, and switch project context.
+- If no project exists, show **Create your first project** using the existing personal-project flow.
+- Define responsive behavior for desktop, tablet, mobile browser chrome, keyboard, and reduced motion.
+
+**Acceptance:** the canvas fills the visible browser viewport without outer scrolling at supported
+viewports; no-project, loading, error, one-project, and many-project states work; project options never
+cross personal ownership or active workspace boundaries.
+
+**Delivered evidence:** `/member/planner` is now a standalone guarded route outside `MemberLayout`,
+with a `100dvw × 100dvh` Excalidraw host, compact project/progress/save/tool overlays, creator-owned
+personal-project loading and switching, remembered last project, recoverable loading/empty states, and
+an inline create-project drawer using the existing personal-project endpoint and shared validation.
+Each project has an isolated temporary browser scene key pending Phase 18. Responsive behavior was
+verified in the real component preview at 1280×720 and 390×844, including the mobile drawer and project
+switching. Angular development build, lint/design lint, and Storybook build pass; five focused Jasmine
+specs compile, but the local ChromeHeadless process crashed in its GPU sandbox before executing them.
+
+## ✅ Phase 18 — Planner board domain and cloud persistence (2026-08-28)
+
+**Outcome:** a project board survives refresh/device changes and cannot be silently overwritten.
+
+- Add `PlannerBoard`, `PlannerSceneRevision`, and `PlannerNode` persistence/configurations/migration.
+- Use one primary board per personal project and stable UUID node identities.
+- Add authorized board/scene load and debounced save APIs with revision/ETag concurrency checks.
+- Store current scene JSON without binary media; retain immutable checkpoint revisions.
+- Add frontend repository/facade state for loading, saving, saved, offline, failed, and conflict.
+- Keep IndexedDB only as a recovery cache and provide recovery/conflict UX.
+- Add domain, handler, ownership, concurrency, API integration, and frontend autosave tests.
+
+**Acceptance:** another device restores the board; stale tabs receive a conflict; user B cannot read or
+write user A's board; network failure does not falsely report Saved; no scene contains base64 assets.
+
+**Delivered evidence:** added the board, scene-revision, and node domain/persistence model, a migration
+that backfills one primary board for every existing personal project, owner-authorized load/save/history
+APIs, UTF-8 scene-size validation, immutable revisions, ETags, and database-safe optimistic concurrency.
+The Angular Planner now uses cloud authority with debounced autosave, ordered IndexedDB recovery,
+offline/failed/conflict states, explicit local-vs-server conflict resolution, and embedded-file blocking.
+Disposable-PostgreSQL HTTP integration tests prove migration backfill, cross-user 403 isolation,
+cross-device restore, stale saves, and simultaneous-write handling. All 12 backend and 230 frontend
+tests pass; frontend build, lint/design lint, and Storybook build pass; EF reports no model drift.
+
+## ✅ Phase 19 — Linked project, task, and subtask objects (2026-08-28)
+
+**Outcome:** canvas objects operate on canonical TaskFlow work records and show live progress.
+
+- Define Project/Task/Subtask Planner node contracts and stable Excalidraw-element mappings.
+- Create/edit through Planner-aware commands that reuse current domain invariants and authorization.
+- Use an inspector for business fields; keep layout/connector properties in Excalidraw scene data.
+- Extend project fields with problem statement, budget amount/currency, and approximate duration weeks
+  using a migration and backward-compatible DTO changes.
+- Show derived total/completed task/subtask counts, status, dates, and completion percentage.
+- Rehydrate current backend state so changes made elsewhere in TaskFlow appear on Planner nodes.
+
+**Acceptance:** creating/editing a visual work item updates the canonical record exactly once; status
+changes outside Planner are reflected; deleting/unlinking has explicit semantics; counts are backend
+derived and cannot be forged by scene JSON.
+
+**Delivered evidence:** `PlannerNode` now carries unique, server-owned Project/Task/Subtask links while
+Excalidraw retains only element layout and a cached node id. Six owner-authorized workspace/node routes
+atomically link the project, create tasks/subtasks, edit canonical fields, refresh backend-derived
+status/counts/progress, and explicitly unlink a card or delete its underlying work item. Project records
+now include problem statement, budget amount/currency, and approximate duration weeks through migration
+`AddPlannerLinkedWorkItems`; existing clients remain backward compatible. The Angular workspace adds
+linked-work creation, automatic missing-card rehydration, live labels, a compact inspector, and clear
+unlink/delete controls. Disposable-PostgreSQL HTTP tests prove ownership, atomic creation, external
+completion refresh, planning-field persistence, and removal semantics. All 15 backend and 231 frontend
+tests pass; production build, lint/design lint, Storybook, detector, and EF model-drift checks pass.
+
+## ✅ Phase 20 — Admin-managed template library (2026-08-28)
+
+**Outcome:** admins publish safe, versioned Project/Task/Subtask/Note/Document building blocks.
+
+- Add `PlannerTemplate` and immutable `PlannerTemplateVersion` records and migration.
+- Support Draft → Published → Archived lifecycle, ordering, icon, header/title, color, dimensions,
+  visible fields, and validated default values.
+- Add AdminOnly management/publication APIs and admin UI; add a member read API and Excalidraw library
+  integration.
+- Limit the initial release to the five fixed object types; no executable templates or arbitrary DB
+  schemas.
+- Snapshot template version on node creation; published edits never mutate existing nodes.
+
+**Acceptance:** only admins manage templates; members see only published active versions; archived
+templates remain renderable for old nodes; invalid type/default combinations are rejected server-side.
+
+**Delivered evidence:** `PlannerTemplate` and immutable `PlannerTemplateVersion` records, node version
+snapshots, fixed per-type field/default validation, Draft/Published/Archived lifecycle, and migration
+`AddPlannerTemplateLibrary` are complete. Six routes provide AdminOnly list/create/edit/publish/archive
+and member published-active reads. Published edits append a version; existing cards retain their
+original presentation after later edits or archive. Angular adds `/admin/planner-templates` and a live
+Planner library using template defaults, dimensions, and colors. Note/Document definitions are visible
+but intentionally await Phase 21 resource records. Backend tests pass 18/18; frontend specs pass 232/232;
+build, lint/design lint, Storybook, detector, and EF model-drift checks pass.
+
+## ✅ Phase 21 — Notes, documents, and secure media (2026-08-28)
+
+**Outcome:** project plans can reference the material needed during execution without bloating scenes.
+
+- Add `PlannerResource` and `PlannerAsset` metadata with project/board/node ownership.
+- Use existing `IObjectStorage` for binary content (S3-compatible production, local development).
+- Support notes, links, PDFs, images, audio, video, and generic documents through explicit limits.
+- Add authorized upload, preview/download, rename/metadata update, unlink, and delete flows.
+- Add checksum, safe filename/content-disposition, size/type validation, and scanning-status hook.
+- Keep all binary/base64 content out of PostgreSQL scene JSON.
+
+**Acceptance:** every resource is ownership-checked; unsupported/oversized files fail clearly; scene
+saves remain small; deleting a board/project follows an explicit asset-retention/deletion policy.
+
+**Delivered evidence:** `PlannerResource` and `PlannerAsset` records, exact resource-node targets, and
+migration `AddPlannerResourcesAndAssets` now separate notes/link/file metadata from binary objects.
+Eight owner-authorized routes cover list, note/link creation, multipart upload, preview/download,
+metadata/filename update, relink, and permanent deletion. Uploads use private `IObjectStorage`, a 25 MB
+limit, extension/content-type allowlist, safe names, SHA-256, scan status, and a replaceable scanner
+hook. Angular adds resource cards, forms, preview/download, inspector editing, and an unlinked-resource
+library. Unlink retains metadata/object; explicit delete removes both; project soft-delete retains them
+for recovery. HTTP/PostgreSQL tests prove isolation, validation, relinking, deletion, and scene exclusion.
+Backend tests pass 21/21 and frontend specs pass 234/234; build, lint/design lint, and EF checks pass.
+
+## ✅ Phase 22 — Primary requirements, changes, and comparison (delivered above)
+
+**Outcome:** the initial plan becomes an immutable primary baseline and later scope changes are fully
+traceable.
+
+- Add `RequirementBaseline`, `RequirementSnapshot`, and `RequirementChange` plus migration.
+- Implement atomic **Finalize primary requirements** for project/task/subtask requirement fields and
+  ordering.
+- After finalization, Planner-aware mutations record New, Changed, or Removed/Deprecated server-side,
+  including actor, timestamp, old/new values, and optional reason.
+- Keep execution progress (status, completion, time logs) separate from requirement changes.
+- Add baseline list/detail, working change set, field-level comparison, and filters.
+- Preserve Baseline 1 forever; design the model so later baselines can be finalized without rewrite.
+
+**Acceptance:** baseline creation is transactional and immutable; ordinary/direct clients cannot bypass
+change history; original/current values are comparable; progress alone does not mark a requirement
+Changed; ownership checks cover every history read and write.
+
+## ✅ Phase 23 — Hardening, scale, and production rollout (delivered above)
+
+**Outcome:** Planner is observable, secure, performant on realistic boards, and safely deployable.
+
+- Load/performance-test large scenes, node hydration, project switching, revisions, and uploads.
+- Add indexes, payload/file limits, revision retention/archival policy, structured metrics, tracing,
+  audit logs, and operational alerts.
+- Complete security review for IDOR, malicious scene JSON, upload attacks, XSS, and signed access.
+- Add API/domain/integration tests and critical browser flows: empty project, autosave/recovery,
+  conflict, template versioning, upload, baseline finalization, diff, and cross-user denial.
+- Roll out behind a feature flag, migrate existing per-user browser scenes through an explicit import
+  choice, monitor, then remove the prototype-only path after the rollback window.
+
+**Acceptance:** agreed performance/error targets pass in staging; rollback and migration are tested;
+no silent data loss or cross-user access occurs; documentation and completion ledger match production.
+
 ## ✅ Phase 16 — Creator-only personal projects (2026-08-15)
 
 - Personal projects have `OrganizationId = null` and take `CreatedByUserId` exclusively from the JWT.

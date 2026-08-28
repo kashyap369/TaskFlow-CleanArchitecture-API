@@ -40,6 +40,11 @@ namespace TaskFlow.Infra.Persistence.Configurations.WorkManagement
 
             builder.Property(x => x.ActualCompletionDate);
 
+            builder.Property(x => x.ProblemStatement).HasMaxLength(4000);
+            builder.Property(x => x.BudgetAmount).HasPrecision(18, 2);
+            builder.Property(x => x.BudgetCurrency).HasMaxLength(3);
+            builder.Property(x => x.ApproximateDurationWeeks);
+
             builder.Property(x => x.CreatedAt)
                 .IsRequired();
 

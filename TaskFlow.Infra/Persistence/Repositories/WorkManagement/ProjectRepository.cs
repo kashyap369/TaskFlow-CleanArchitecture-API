@@ -22,6 +22,7 @@ namespace TaskFlow.Infra.Persistence.Repositories.WorkManagement
         {
             return await _context.Projects
                 .Include(x => x.Tasks)
+                .ThenInclude(x => x.SubTasks)
                 .FirstOrDefaultAsync(
                     x => x.Id == id,
                     cancellationToken);

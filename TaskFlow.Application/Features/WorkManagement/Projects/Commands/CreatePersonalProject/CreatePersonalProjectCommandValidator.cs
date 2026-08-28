@@ -20,5 +20,14 @@ public sealed class CreatePersonalProjectCommandValidator
         RuleFor(x => x.ExpectedCompletionDate)
             .GreaterThan(x => x.StartDate)
             .When(x => x.ExpectedCompletionDate.HasValue);
+
+        RuleFor(x => x.ProblemStatement).MaximumLength(4000);
+        RuleFor(x => x.BudgetAmount).GreaterThanOrEqualTo(0).When(x => x.BudgetAmount.HasValue);
+        RuleFor(x => x.BudgetCurrency)
+            .NotEmpty().Length(3).Matches("^[A-Za-z]{3}$")
+            .When(x => x.BudgetAmount.HasValue);
+        RuleFor(x => x.ApproximateDurationWeeks)
+            .InclusiveBetween(1, 520)
+            .When(x => x.ApproximateDurationWeeks.HasValue);
     }
 }

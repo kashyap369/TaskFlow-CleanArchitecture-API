@@ -80,7 +80,11 @@ namespace TaskFlow.Application.Features.WorkManagement.Projects.Commands.UpdateP
             project.UpdateDetails(
                 request.Title,
                 request.Description,
-                request.ExpectedCompletionDate);
+                request.ExpectedCompletionDate,
+                request.ProblemStatement ?? project.ProblemStatement,
+                request.BudgetAmount ?? project.BudgetAmount,
+                request.BudgetCurrency ?? project.BudgetCurrency,
+                request.ApproximateDurationWeeks ?? project.ApproximateDurationWeeks);
 
             _projectRepository.Update(project);
 

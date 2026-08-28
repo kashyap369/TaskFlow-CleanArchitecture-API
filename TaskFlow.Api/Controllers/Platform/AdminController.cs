@@ -1,10 +1,14 @@
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using TaskFlow.Api.Constants;
+using TaskFlow.Api.Filters;
 using TaskFlow.Application.Features.Organizations.Organization.Queries.GetAllOrganizations;
 using TaskFlow.Application.Features.Platform.Commands.UpdatePlatformSettings;
 using TaskFlow.Application.Features.Platform.Queries.GetPlatformSettings;
+using TaskFlow.Application.Features.Planner.Commands.ManagePlannerTemplate;
+using TaskFlow.Application.Features.Planner.Queries.GetPlannerTemplates;
 
 namespace TaskFlow.Api.Controllers.Platform
 {
@@ -67,6 +71,39 @@ namespace TaskFlow.Api.Controllers.Platform
                 command,
                 cancellationToken);
 
+            return NoContent();
+        }
+
+        [HttpGet("planner/templates")]
+        [ServiceFilter(typeof(PlannerFeatureFilter))]
+        [EnableRateLimiting("planner")]
+        public async Task<IActionResult> GetPlannerTemplates(CancellationToken cancellationToken) =>
+            Ok(await _mediator.Send(new GetPlannerTemplatesQuery(true), cancellationToken));
+
+        [HttpPost("planner/templates")]
+        [ServiceFilter(typeof(PlannerFeatureFilter))]
+        [EnableRateLimiting("planner")]
+        public async Task<IActionResult> CreatePlannerTemplate(PlannerTemplateDefinition definition, CancellationToken cancellationToken) =>
+            Ok(await _mediator.Send(new CreatePlannerTemplateCommand(definition), cancellationToken));
+
+        [HttpPut("planner/templates/{templateId:guid}")]
+        [ServiceFilter(typeof(PlannerFeatureFilter))]
+        [EnableRateLimiting("planner")]
+        public async Task<IActionResult> UpdatePlannerTemplate(Guid templateId, PlannerTemplateDefinition definition, CancellationToken cancellationToken) =>
+            Ok(await _mediator.Send(new UpdatePlannerTemplateCommand(templateId, definition), cancellationToken));
+
+        [HttpPost("planner/templates/{templateId:guid}/publish")]
+        [ServiceFilter(typeof(PlannerFeatureFilter))]
+        [EnableRateLimiting("planner")]
+        public async Task<IActionResult> PublishPlannerTemplate(Guid templateId, CancellationToken cancellationToken) =>
+            Ok(await _mediator.Send(new PublishPlannerTemplateCommand(templateId), cancellationToken));
+
+        [HttpPost("planner/templates/{templateId:guid}/archive")]
+        [ServiceFilter(typeof(PlannerFeatureFilter))]
+        [EnableRateLimiting("planner")]
+        public async Task<IActionResult> ArchivePlannerTemplate(Guid templateId, CancellationToken cancellationToken)
+        {
+            await _mediator.Send(new ArchivePlannerTemplateCommand(templateId), cancellationToken);
             return NoContent();
         }
     }

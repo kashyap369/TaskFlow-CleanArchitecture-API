@@ -1,13 +1,95 @@
 # TaskFlow — Session Log
 
+## 2026-08-28 (Planner Phase 23 — hardening and production rollout)
+
+- Bounded scene size/depth/elements/strings and link schemes, optimized scene persistence, retained the
+  latest 100 revisions, indexed revision reads, and validated upload signatures before scanning.
+- Added server and client feature flags, Planner rate limits, traces/metrics, structured slow/error and
+  mutation audit logs, private download headers, and explicit legacy browser-scene import with rollback.
+- Backend is 27/27 and frontend is 240/240; builds, lint/design lint, Storybook, EF drift, large-scene
+  performance, ownership/security integration coverage, and critical browser specs pass.
+- Both production services were released through Dokploy; migration and live health evidence are tracked
+  in ProjectCompletion.md.
+
+## 2026-08-28 (Planner Phase 22 — immutable primary requirements and comparison)
+
+- Added transactional Baseline 1 snapshots and persistence-boundary New/Changed/Removed auditing so
+  normal API mutations cannot bypass requirement history; progress-only updates remain excluded.
+- Added owner-authorized baseline/history/comparison routes plus Angular finalization, filters, reasons,
+  immutable snapshot inspection, and field-level baseline/current differences.
+- Real PostgreSQL HTTP coverage proves immutability, ownership, progress separation, additions, edits,
+  removals, and filters. Backend is 22/22 and frontend is 236/236; builds/lint and EF drift pass.
+- Phase 23 hardening, performance, observability, feature-flag rollout, and critical E2E flows are next.
+
+## 2026-08-28 (Planner Phase 21 — notes, documents, and secure media)
+
+- Added owner-scoped `PlannerResource`/`PlannerAsset` persistence and eight resource/file routes with
+  private object storage, 25 MB/type limits, safe names, SHA-256, and a scanner extension point.
+- Added Note/Link/Document canvas cards, creation and inspector flows, authorized preview/download,
+  rename, unlink/relink retention, and explicit resource/object deletion; scene JSON stays binary-free.
+- Added migration, domain tests, and disposable-PostgreSQL HTTP coverage. Backend is 21/21 and frontend
+  is 234/234, with production build and EF model-drift checks green. Phase 22 is next.
+
 > Append-only. 3–5 lines per session. Focus on gotchas, dead ends, and decisions — things git history doesn't capture.
 >
-> **▶ Next session: the BACKEND IS FEATURE-COMPLETE** (**82 endpoints**). Phases 10–13 closed every
-> §3.0 vision gap and every open defect (§4.2/§4.3/§4.3b/§4.4). Organization, Reporting, Admin and
-> Individual are all at **100%** on the API. **Remaining work is entirely frontend** — see the client's
-> `docs/PHASES.md` Phases 24–29. Backend backlog left (non-blocking): automated tests, pagination,
-> `ApiResponse<T>` consistency, forgot-password, Docker/CI.
-> Cross-project status: [ProjectCompletion.md](ProjectCompletion.md).
+> **Planner roadmap complete:** Phases 17–23 are delivered. Continue to treat [PLANNER.md](PLANNER.md)
+> as the product/architecture contract and [ProjectCompletion.md](ProjectCompletion.md) as the release ledger.
+
+## 2026-08-28 (Planner Phase 20 — admin-managed template library)
+
+- Added fixed Project/Task/Subtask/Note/Document template contracts, Draft/Published/Archived lifecycle,
+  immutable published versions, type-safe JSON fields/defaults, node snapshots, and migration.
+- Added AdminOnly management/publication routes, member published-active reads, an admin library page,
+  and a Planner picker that applies defaults and visual dimensions/colors to new linked cards.
+- Archived templates disappear from the member picker while old nodes retain their version; Note and
+  Document definitions remain visible but await Phase 21 resources. All verification gates pass.
+
+## 2026-08-28 (Planner Phase 19 — linked work objects and live progress)
+
+- Added stable PlannerNode links to canonical personal Project/Task/Subtask records and six
+  owner-authorized workspace/node routes for atomic creation, editing, rehydration, unlinking, and deletion.
+- Extended projects with problem statement, budget/currency, and approximate duration through
+  `AddPlannerLinkedWorkItems`, preserving existing project-client update behavior.
+- Added linked-card creation and automatic missing-card recovery, live backend-derived canvas labels,
+  inspector editing, progress/counts, and explicit unlink-versus-delete actions in Angular.
+- PostgreSQL HTTP integration proves cross-user denial, exact-once canonical creation, external status
+  refresh, planning fields, and removal semantics. Backend tests are 15/15 and frontend tests are
+  231/231; build, lint/design lint, Storybook, Impeccable detector, and EF model checks pass.
+
+## 2026-08-28 (Planner Phase 18 — cloud persistence and concurrency)
+
+- Added one owner-authorized primary Planner board per personal project, immutable scene revisions,
+  stable node identities, migration backfill, scene/history APIs, ETags, and UTF-8 payload limits.
+- Replaced browser authority with debounced cloud autosave while retaining ordered IndexedDB recovery;
+  offline, failed, unavailable-recovery, embedded-file, and revision-conflict states are explicit.
+- Hardened concurrent saves at both the aggregate and PostgreSQL unique-constraint boundary so two
+  simultaneous stale writes produce one success and one 409 instead of a silent overwrite or 500.
+- Verified migration/backfill and real HTTP ownership, restore, stale-tab, and concurrent-write paths
+  against a disposable PostgreSQL database. Backend tests are 12/12; frontend tests are 230/230;
+  build, lint/design lint, Storybook build, and EF model-drift checks pass.
+
+## 2026-08-28 (Planner Phase 17 — immersive shell and project context)
+
+- Moved `/member/planner` to its own authenticated full-viewport route so Excalidraw owns the complete
+  `100dvw × 100dvh` browser surface instead of inheriting the member shell's width, padding, and scroll.
+- Added compact project/progress/save/tool overlays, creator-owned project selection, remembered last
+  project, loading/error/empty states, and an inline personal-project creation drawer.
+- Kept scenes isolated by user and project in temporary browser storage; Phase 18 must replace this
+  with server-authorized boards, revisions, recovery cache, and concurrency conflict UX.
+- Desktop (1280×720) and mobile (390×844) component previews pass; frontend build, lint/design lint,
+  and Storybook build pass. Five focused specs compile, but ChromeHeadless crashes in the host GPU
+  sandbox before Jasmine executes.
+
+## 2026-08-27 (Planner requirements and end-to-end roadmap committed)
+
+- Added `docs/PLANNER.md` as the canonical context for every future Planner discussion.
+- Defined the full-viewport project-scoped workspace, Excalidraw/TaskFlow source-of-truth boundary,
+  cloud persistence and concurrency, canonical work-item links, admin-versioned templates, secure
+  resources, immutable primary requirement baselines, and New/Changed/Removed comparison history.
+- Scheduled implementation as `docs/PHASES.md` Phases 17–23. **Next implementation phase is Phase 17;
+  no Planner code or schema change was made in this documentation session.**
+- Updated OVERVIEW and ProjectCompletion so a new chat following normal documentation entry points
+  discovers the committed Planner roadmap immediately.
 
 ## 2026-08-15 (Private personal projects + Docker-free development)
 

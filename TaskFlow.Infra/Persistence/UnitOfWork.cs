@@ -1,22 +1,42 @@
-﻿using TaskFlow.Domain.Interfaces;
+using Microsoft.EntityFrameworkCore;
+using Npgsql;
+using TaskFlow.Application.Exceptions;
 using TaskFlow.Domain.Interfaces.Persistence;
 using TaskFlow.Infra.Persistence.Context;
 
-namespace TaskFlow.Infra.Persistence
+namespace TaskFlow.Infra.Persistence;
+
+public sealed class UnitOfWork : IUnitOfWork
 {
-    public sealed class UnitOfWork : IUnitOfWork
+    private readonly TaskFlowDbContext _context;
+
+    public UnitOfWork(TaskFlowDbContext context)
     {
-        private readonly TaskFlowDbContext _context;
+        _context = context;
+    }
 
-        public UnitOfWork(TaskFlowDbContext context)
+    public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        try
         {
-            _context = context;
+            return await _context.SaveChangesAsync(cancellationToken);
         }
-
-        public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+        catch (DbUpdateConcurrencyException)
         {
-            return await _context.SaveChangesAsync(
-                cancellationToken);
+            throw new ConflictException(
+                "CONCURRENCY_CONFLICT",
+                "This record changed in another request. Reload and try again.");
+        }
+        catch (DbUpdateException exception) when (
+            exception.InnerException is PostgresException
+            {
+                SqlState: PostgresErrorCodes.UniqueViolation,
+                ConstraintName: "IX_PlannerSceneRevisions_BoardId_RevisionNumber",
+            })
+        {
+            throw new ConflictException(
+                "PLANNER_REVISION_CONFLICT",
+                "This Planner board changed in another tab or device. Reload it before saving.");
         }
     }
 }

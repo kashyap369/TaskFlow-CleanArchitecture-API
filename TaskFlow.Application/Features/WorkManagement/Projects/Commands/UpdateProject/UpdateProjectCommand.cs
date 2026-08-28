@@ -6,6 +6,10 @@ namespace TaskFlow.Application.Features.WorkManagement.Projects.Commands.UpdateP
         int ProjectId,
         string Title,
         string Description,
-        DateTime? ExpectedCompletionDate
+        DateTime? ExpectedCompletionDate,
+        string? ProblemStatement = null,
+        decimal? BudgetAmount = null,
+        string? BudgetCurrency = null,
+        int? ApproximateDurationWeeks = null
     ) : IRequest;
 }
