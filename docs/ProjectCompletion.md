@@ -10,9 +10,9 @@
 > | **Frontend** | `D:\Projects\TMS\TaskFlowUI\TaskFlowApp` — Angular 20, standalone + signals, Atomic Design, multi-portal |
 > | **Dev URLs** | API `https://localhost:7086/api` · UI `http://localhost:4200` (CORS allows only this origin) |
 >
-> **Last verified implementation:** 2026-08-28, after Planner Phase 23 production rollout.
-> Planner Phases 17–23 are complete; see [PLANNER.md](PLANNER.md). The API exposes 117 endpoints;
-> the UI consumes 115, with the same two deliberate skips.
+> **Last verified implementation:** 2026-08-29, after Organization Calendar Phase 4.
+> Planner Phases 17–23 are complete; see [PLANNER.md](PLANNER.md). The API exposes 125 endpoints;
+> the UI consumes 123, with the same two deliberate skips.
 
 ---
 
@@ -57,8 +57,8 @@ has been exercised against a running API — not that the code compiles.
 |---|---|---|
 | **Phases complete** | **13 of 13** (+ a security pass and an IDOR fix) | **27 session phases**; roadmap Phases 0–8 ✅ (Phase 6 admin extras closed by session Phase 27) |
 | **Version status** | **Pre-Planner product complete; Planner Phases 17–23 complete** | **All three portals complete; Planner Phases 17–23 complete** |
-| **Endpoints** | **117** exposed (15 controllers; excludes the Angular-template `WeatherForecastController`) | **115 consumed.** The only 2 left are the deliberate skips below — **nothing is unconsumed for want of a screen** |
-| **Quality gates** | `dotnet test` ✅ **27/27** (domain, application, real HTTP/PostgreSQL integration and large-scene performance) · EF model drift ✅ | `ng lint` **0 errors** · `ng build` ✅ · **240/240** browser specs · Storybook build ✅ · WCAG AA on all 42 token pairings |
+| **Endpoints** | **125** exposed (16 controllers; excludes the Angular-template `WeatherForecastController`) | **123 consumed.** The only 2 left are the deliberate skips below — **nothing is unconsumed for want of a screen** |
+| **Quality gates** | `dotnet test` ✅ **35/35** (domain, application, real HTTP/PostgreSQL integration and large-scene performance) · EF model drift ✅ | `ng lint` **0 errors** · `ng build` ✅ · **254/254** browser specs · Storybook build ✅ · WCAG AA on all 42 token pairings |
 | **Biggest gap** | **No remaining Planner roadmap phase** | **No remaining Planner roadmap phase** |
 | **Vision coverage** (§3.0) | **Organization 100% · Reporting 100% · Individual 100%** | **All three portals complete** — Organization, Individual and Admin |
 
@@ -180,6 +180,8 @@ a running API.
 | Task lists (org / project) | `GET /task/organization/{id}`, `/project/{id}` | ✅ | ✅ | ✅ | |
 | Task lifecycle | `PUT /{id}/start`, `/complete`, `/reopen` | ✅ | ✅ | ✅ | **Reopen added in Phase 9** — completes the documented Todo→InProgress→Completed→reopen cycle |
 | Task assignment | `PUT /{id}/assign/{userId}`, `/unassign` | ✅ | ✅ | ✅ | Inline assignee `<select>` on every row |
+| **Calendar task scheduling** | `PUT /task/{id}/schedule` | ✅ | ✅ | ⬜ | Phase 2: focused date-only command, `ManageTasks`, shared filters, details, authorized drag/resize and visible rollback; automated end-to-end gates pass, live API/browser mutation not rerun in this session |
+| **Calendar-owned events** | `GET /calendar/organization/{id}`, `POST`/`PUT /calendar`, `DELETE /calendar/{id}` | ✅ | ✅ | ✅ | Phase 4: organization events, member leave, holidays, UTC/timezone-aware timed entries, all-day validation and bounded Daily/Weekly/Monthly recurrence under `ManageCalendar` |
 | **Personal tasks** | `POST /task/personal`, `GET /task/mine/personal` | ✅ | ✅ | ✅ | Member portal **My tasks** page: filters, paging, create/edit drawer, lifecycle |
 | **Personal projects** | `POST /project/personal`, `GET /project/mine/personal` + shared project CRUD | ✅ | ✅ | ✅ | Creator-only projects; My Tasks can filter/create within a private project |
 | **Planner resources and secure files** | 8 on `/planner/projects/{id}/board/resources` | ✅ | ✅ | ✅ | Notes, links, documents, private authorized preview/download, update, unlink/relink, and delete; binaries stay outside scene JSON |
@@ -330,7 +332,7 @@ assigning a personal task returns **400 `TASK_NOT_ASSIGNABLE`**, not 500.
 | Item | Why it needs no API change |
 |---|---|
 | **CSV / PDF report export** | The reports page already holds every figure; this is serialisation + download. **Highest value** — and it clears an item off the *backend's* backlog |
-| **Calendar page** | Still `<a class="disabled" title="Coming soon">` in the org sidebar. Tasks already carry `startDate` + `expectedCompletionDate` |
+| **Calendar page** | ✅ Phases 1–4 implemented: Schedule + Project Timeline, shared filters/details, authorized rescheduling, server-computed Team Capacity, and calendar-owned events/leave/holidays with recurrence. Optional booking Phase 5 remains a product decision. |
 | **Richer member trend charts** | `/report/member/{id}` already accepts `?from&to` — a trend is that call looped |
 | **E2E tests** (Playwright) | 164 unit specs, zero E2E |
 | Manager-role portal decision | The role exists in the API; which portal a Manager lands in is an unmade **product** call |
@@ -370,6 +372,10 @@ Docker + CI/CD.
 
 | Date | Side | Change |
 |---|---|---|
+| 2026-08-29 | **Both** | **Completed Organization Calendar Phase 4.** Added the `CalendarEntry` aggregate and `AddCalendarEntries` migration, new `ManageCalendar` permission, four organization-scoped CRUD/window routes, timezone/all-day validation and bounded Daily/Weekly/Monthly recurrence expansion. Angular merges occurrences through the existing Schedule adapter and adds accessible permission-aware create/edit/delete management. Routes are now **125 total / 123 consumed**; frontend specs pass 256/256, backend tests pass 40/40 with real HTTP/PostgreSQL recurrence/isolation/delete coverage, and build/lint/design lint/contrast/EF drift pass. |
+| 2026-08-29 | **Both** | **Completed Organization Calendar Phase 3.** Added nullable task estimates and member weekly capacities through migration `AddCalendarCapacity`, focused `ManageTasks`/`ManageMembers` writes, and an organization-scoped Monday-based capacity query. Angular adds a responsive six-week Team Capacity grid plus in-context hours/estimate editing; missing data is always `NotEnoughData`, never partial availability. Routes are now **121 total / 119 consumed**; frontend specs pass 254/254, backend tests pass 35/35 including real UTC/isolation PostgreSQL coverage, and build/lint/design lint/contrast/EF drift pass. |
+| 2026-08-29 | **Both** | **Completed Organization Calendar Phase 2.** Added persistent shared filters and a reusable accessible detail drawer, plus authorized drag/resize in FullCalendar and Frappe Gantt. The new focused `PUT /task/{id}/schedule` route updates dates only, validates the window and reuses `ManageTasks`; failed moves restore server state visibly and project bars remain immutable. Routes are now **118 total / 116 consumed**; frontend specs pass 253/253, backend tests pass 30/30, and build/lint/design lint/contrast pass. |
+| 2026-08-29 | UI | **Completed Organization Calendar Phase 1.** Enabled `/organization/calendar` and its sidebar item with FullCalendar month/week/list Schedule views plus a lazy, project-selectable, read-only Frappe Gantt timeline. TaskFlow-owned adapters derive dates, status, progress, assignee and team context from the existing organization DTOs; no endpoint, schema or migration changed. The full frontend suite passes 247/247, build/lint/design lint/contrast pass, and desktop/mobile browser verification covers both views and item selection. |
 | 2026-08-28 | **Both** | **Completed Planner Phase 23 and production rollout.** Added bounded/malicious scene validation, root-only persistence, indexed rolling revision retention, upload signature validation and private headers, Planner/upload rate limits, feature-flag rollback, traces/metrics/structured audit logs, coalesced large-canvas serialization, and explicit legacy browser-scene import with rollback preservation. Backend tests are 27/27 and frontend browser specs are 240/240; builds, lint/design lint, Storybook, EF drift, performance, ownership/security integration coverage, Dokploy deployments, and live health checks pass. |
 | 2026-08-28 | **Both** | **Completed Planner Phase 22.** Added immutable transactional primary baselines and ordered snapshots, persistence-boundary scope auditing with actor/time/reason, New/Changed/Removed history, five owner-authorized APIs, and Angular finalization/history/filter/field-comparison UX. Progress-only status/completion/time-log changes are excluded. API routes are now **117 total / 115 consumed**; backend tests are 22/22 and frontend tests are 236/236, with builds, lint/design lint, and EF drift green. |
 | 2026-08-28 | **Both** | **Completed Planner Phase 21.** Added owner-scoped Note/Link/Document resources, private object-storage assets, migration `AddPlannerResourcesAndAssets`, 25 MB/type/name validation, SHA-256, scan-status hook, authorized preview/download, metadata updates, unlink/relink retention, and explicit object deletion. Angular adds resource cards, creation/inspector flows, previews/downloads, and an unlinked-resource library. API routes are now **112 total / 110 consumed**; backend tests are 21/21 and frontend tests are 234/234, with production build, lint/design lint, and EF checks green. |

@@ -57,6 +57,7 @@ namespace TaskFlow.Application.Features.Organizations.OrganizationMember.Queries
                     r."Name"                          AS "RoleName",
                     m."IsActive"                      AS "IsActive",
                     m."JoinedAt"                      AS "JoinedAt"
+                    ,m."WeeklyCapacityMinutes"        AS "WeeklyCapacityMinutes"
                 FROM "OrganizationMembers" m
                 JOIN "Users" u
                     ON u."Id" = m."UserId"

@@ -21,8 +21,14 @@ using Npgsql;
 using TaskFlow.Domain.Constants;
 using TaskFlow.Domain.Entities.Planner;
 using TaskFlow.Domain.Entities.WorkManagement.Projects;
+using TaskFlow.Domain.Entities.Identity;
+using TaskFlow.Domain.Entities.Organization;
+using TaskFlow.Domain.Enums.Identity;
+using TaskFlow.Domain.Enums.WorkManagement;
+using TaskFlow.Domain.ValueObjects;
 using TaskFlow.Infra.Persistence.Context;
 using TaskFlow.Application.Contracts.Storage;
+using TaskEntity = TaskFlow.Domain.Entities.WorkManagement.Tasks.Task;
 
 namespace TaskFlow.Tests.Api;
 
@@ -33,6 +39,86 @@ public sealed class PlannerApiIntegrationTests : IClassFixture<PlannerApiFixture
     public PlannerApiIntegrationTests(PlannerApiFixture fixture)
     {
         _fixture = fixture;
+    }
+
+    [Fact]
+    public async Task CalendarEntries_ExpandRecurrence_StayOrganizationScoped_AndDeleteIndependently()
+    {
+        using var owner = _fixture.CreateClient(_fixture.CapacityOwnerUserId);
+        using var outsider = _fixture.CreateClient(999);
+        var created = await owner.PostAsJsonAsync("api/calendar", new
+        {
+            organizationId = _fixture.CapacityOrganizationId,
+            kind = 2,
+            title = "Annual leave",
+            description = "Integration coverage",
+            startsAtUtc = "2026-09-01T00:00:00Z",
+            endsAtUtc = "2026-09-03T00:00:00Z",
+            isAllDay = true,
+            timeZone = "UTC",
+            memberUserId = _fixture.CapacityMemberUserId,
+            recurrenceFrequency = 2,
+            recurrenceInterval = 1,
+            recurrenceUntil = "2026-09-15"
+        });
+        Assert.Equal(HttpStatusCode.OK, created.StatusCode);
+        var id = await created.Content.ReadFromJsonAsync<int>();
+
+        var path = $"api/calendar/organization/{_fixture.CapacityOrganizationId}" +
+            "?fromUtc=2026-09-01T00:00:00Z&toUtc=2026-09-22T00:00:00Z";
+        var queryResponse = await owner.GetAsync(path);
+        Assert.True(queryResponse.IsSuccessStatusCode,
+            $"Calendar query failed: {queryResponse.StatusCode} {await queryResponse.Content.ReadAsStringAsync()}");
+        var occurrences = await queryResponse.Content.ReadFromJsonAsync<List<CalendarEntryResponse>>();
+        Assert.NotNull(occurrences);
+        Assert.Equal(3, occurrences.Count);
+        Assert.All(occurrences, occurrence => Assert.Equal(id, occurrence.Id));
+        Assert.Equal(3, occurrences.Select(x => x.OccurrenceId).Distinct().Count());
+        Assert.Equal(HttpStatusCode.Forbidden, (await outsider.GetAsync(path)).StatusCode);
+
+        Assert.Equal(HttpStatusCode.NoContent, (await owner.DeleteAsync($"api/calendar/{id}")).StatusCode);
+        Assert.Empty((await owner.GetFromJsonAsync<List<CalendarEntryResponse>>(path))!);
+    }
+
+    [Fact]
+    public async Task Capacity_IsServerComputed_OrganizationScoped_AndUtcWeekSafe()
+    {
+        using var owner = _fixture.CreateClient(_fixture.CapacityOwnerUserId);
+        using var outsider = _fixture.CreateClient(999);
+        const string path = "api/report/capacity/";
+
+        var response = await owner.GetAsync(
+            $"{path}{_fixture.CapacityOrganizationId}?weekStart=2026-08-31&weeks=2");
+        Assert.True(
+            response.StatusCode == HttpStatusCode.OK,
+            $"Capacity query failed: {response.StatusCode} {await response.Content.ReadAsStringAsync()}");
+        var rows = await response.Content.ReadFromJsonAsync<List<CapacityResponse>>();
+        Assert.NotNull(rows);
+        Assert.Equal(4, rows.Count);
+
+        var balanced = Assert.Single(rows, row =>
+            row.MemberName == "Asha Rao" && row.WeekStart == new DateOnly(2026, 8, 31));
+        Assert.True(balanced.HasEnoughData);
+        Assert.Equal(1_800, balanced.AssignedEstimateMinutes);
+        Assert.Equal(600, balanced.RemainingCapacityMinutes);
+        Assert.Equal("Balanced", balanced.WorkloadState);
+
+        var unknown = Assert.Single(rows, row =>
+            row.MemberName == "Ben Shah" && row.WeekStart == new DateOnly(2026, 8, 31));
+        Assert.False(unknown.HasEnoughData);
+        Assert.Null(unknown.AssignedEstimateMinutes);
+        Assert.Equal(1, unknown.MissingEstimateTaskCount);
+        Assert.Equal("NotEnoughData", unknown.WorkloadState);
+
+        var nextWeek = Assert.Single(rows, row =>
+            row.MemberName == "Asha Rao" && row.WeekStart == new DateOnly(2026, 9, 7));
+        Assert.Equal("Heavy", nextWeek.WorkloadState);
+        Assert.Equal(3_000, nextWeek.AssignedEstimateMinutes);
+
+        Assert.Equal(
+            HttpStatusCode.Forbidden,
+            (await outsider.GetAsync(
+                $"{path}{_fixture.CapacityOrganizationId}?weekStart=2026-08-31&weeks=1")).StatusCode);
     }
 
     [Fact]
@@ -405,6 +491,15 @@ public sealed class PlannerApiIntegrationTests : IClassFixture<PlannerApiFixture
     private sealed record RequirementComparisonItemResponse(int ChangeType,
         List<RequirementDifferenceResponse> Differences);
     private sealed record RequirementDifferenceResponse(string Field, string? BaselineValue, string? CurrentValue);
+    private sealed record CapacityResponse(
+        string MemberName,
+        DateOnly WeekStart,
+        int? AssignedEstimateMinutes,
+        int? RemainingCapacityMinutes,
+        int MissingEstimateTaskCount,
+        bool HasEnoughData,
+        string WorkloadState);
+    private sealed record CalendarEntryResponse(int Id, string OccurrenceId);
 }
 
 public sealed class PlannerApiFixture : IAsyncLifetime
@@ -417,6 +512,9 @@ public sealed class PlannerApiFixture : IAsyncLifetime
     public int ProjectId { get; private set; }
     public int ConcurrentProjectId { get; private set; }
     public int RequirementProjectId { get; private set; }
+    public int CapacityOrganizationId { get; private set; }
+    public int CapacityOwnerUserId { get; private set; }
+    public int CapacityMemberUserId { get; private set; }
 
     public async Task InitializeAsync()
     {
@@ -506,6 +604,77 @@ public sealed class PlannerApiFixture : IAsyncLifetime
             Assert.Equal(101, board.OwnerUserId);
             Assert.Equal(0, board.CurrentRevision);
         });
+
+        await SeedCapacityScenarioAsync(context);
+    }
+
+    private async Task SeedCapacityScenarioAsync(TaskFlowDbContext context)
+    {
+        var owner = User.Register(
+            new FullName("Asha", "Rao"),
+            new Email("asha.capacity@example.test"),
+            new PhoneNumber("9876543210"),
+            "test-password-hash",
+            AccountType.Organization);
+        var colleague = User.Register(
+            new FullName("Ben", "Shah"),
+            new Email("ben.capacity@example.test"),
+            new PhoneNumber("9876543211"),
+            "test-password-hash");
+        owner.ClearDomainEvents();
+        colleague.ClearDomainEvents();
+        context.Users.AddRange(owner, colleague);
+        await context.SaveChangesAsync();
+
+        var organization = new Organization("Capacity test", "", owner.Id);
+        context.Organizations.Add(organization);
+        await context.SaveChangesAsync();
+        var role = new OrganizationRole(organization.Id, "Planner", "");
+        context.OrganizationRoles.Add(role);
+        await context.SaveChangesAsync();
+
+        var ownerMember = new OrganizationMember(organization.Id, owner.Id, role.Id);
+        ownerMember.SetWeeklyCapacity(2_400);
+        var colleagueMember = new OrganizationMember(organization.Id, colleague.Id, role.Id);
+        colleagueMember.SetWeeklyCapacity(2_400);
+        context.OrganizationMembers.AddRange(ownerMember, colleagueMember);
+        await context.SaveChangesAsync();
+
+        context.Tasks.AddRange(
+            CapacityTask("Monday edge", owner.Id, organization.Id,
+                new DateTime(2026, 8, 31, 0, 30, 0, DateTimeKind.Utc), 1_200),
+            CapacityTask("Sunday edge", owner.Id, organization.Id,
+                new DateTime(2026, 9, 6, 23, 30, 0, DateTimeKind.Utc), 600),
+            CapacityTask("Next Monday", owner.Id, organization.Id,
+                new DateTime(2026, 9, 7, 0, 0, 0, DateTimeKind.Utc), 3_000),
+            CapacityTask("Unknown effort", colleague.Id, organization.Id,
+                new DateTime(2026, 9, 2, 12, 0, 0, DateTimeKind.Utc), null));
+        await context.SaveChangesAsync();
+
+        CapacityOrganizationId = organization.Id;
+        CapacityOwnerUserId = owner.Id;
+        CapacityMemberUserId = colleague.Id;
+    }
+
+    private static TaskEntity CapacityTask(
+        string title,
+        int userId,
+        int organizationId,
+        DateTime due,
+        int? estimateMinutes)
+    {
+        var task = new TaskEntity(
+            title,
+            "",
+            due.AddDays(-1),
+            TaskPriority.Medium,
+            organizationId,
+            userId,
+            due);
+        task.Assign(userId, userId);
+        task.SetEstimate(estimateMinutes);
+        task.ClearDomainEvents();
+        return task;
     }
 
     private static async Task<int> InsertPersonalProjectAsync(NpgsqlConnection connection, string title)

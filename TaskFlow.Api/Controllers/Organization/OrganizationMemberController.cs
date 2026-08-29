@@ -6,6 +6,8 @@ using TaskFlow.Application.Features.Organizations.OrganizationMember.Commands.Ac
 using TaskFlow.Application.Features.Organizations.OrganizationMember.Commands.ChangeMemberRole;
 using TaskFlow.Application.Features.Organizations.OrganizationMember.Commands.DeactivateMember;
 using TaskFlow.Application.Features.Organizations.OrganizationMember.Commands.RemoveMember;
+using TaskFlow.Application.Features.Organizations.OrganizationMember.Commands.SetMemberCapacity;
+using TaskFlow.Api.Models.Requests;
 using TaskFlow.Application.Features.Organizations.OrganizationMember.Queries.GetOrganizationMembers;
 
 namespace TaskFlow.Api.Controllers.Organization
@@ -67,6 +69,23 @@ namespace TaskFlow.Api.Controllers.Organization
                 command,
                 cancellationToken);
 
+            return NoContent();
+        }
+
+        /// <summary>Sets or clears a member's normal Monday-Sunday working capacity.</summary>
+        [HttpPut("organization/{organizationId:int}/users/{userId:int}/capacity")]
+        public async Task<IActionResult> SetCapacity(
+            int organizationId,
+            int userId,
+            SetMemberCapacityRequest request,
+            CancellationToken cancellationToken)
+        {
+            await _mediator.Send(
+                new SetMemberCapacityCommand(
+                    organizationId,
+                    userId,
+                    request.WeeklyCapacityMinutes),
+                cancellationToken);
             return NoContent();
         }
 

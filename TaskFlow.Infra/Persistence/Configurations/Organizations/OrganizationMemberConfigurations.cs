@@ -31,6 +31,8 @@ namespace TaskFlow.Infra.Persistence.Configurations.Organization
             builder.Property(x => x.IsActive)
                 .IsRequired();
 
+            builder.Property(x => x.WeeklyCapacityMinutes);
+
             builder.Property(x => x.CreatedAt)
                 .IsRequired();
 

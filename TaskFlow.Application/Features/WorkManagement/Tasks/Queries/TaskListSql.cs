@@ -22,6 +22,7 @@
                 t."StartDate"              AS "StartDate",
                 t."ExpectedCompletionDate" AS "ExpectedCompletionDate",
                 t."ActualCompletionDate"   AS "ActualCompletionDate",
+                t."EstimateMinutes"        AS "EstimateMinutes",
                 t."ProjectId"              AS "ProjectId",
                 t."OrganizationId"         AS "OrganizationId",
                 t."TeamId"                 AS "TeamId",

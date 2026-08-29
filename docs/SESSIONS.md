@@ -1,5 +1,32 @@
 # TaskFlow — Session Log
 
+## 2026-08-29 (Organization Calendar Phase 4)
+
+- Added one organization-owned calendar aggregate for events, member leave and holidays, the
+  `ManageCalendar` catalog permission, focused CRUD/window CQRS handlers and an additive migration.
+- Defined the recurrence contract as None/Daily/Weekly/Monthly, interval 1–30 and optional inclusive
+  end date. Reads expand occurrences inside a validated 366-day organization-scoped query window.
+- Backend is 40/40 with real HTTP/PostgreSQL recurrence, all-day, organization-isolation and delete
+  coverage; Release build and EF model-drift checks pass. Angular consumes all four new routes.
+
+## 2026-08-29 (Organization Calendar Phase 3)
+
+- Added `EstimateMinutes` / `WeeklyCapacityMinutes`, the additive capacity migration, and focused
+  permission-gated writes without expanding the general task/member update contracts.
+- Added a date-only, Monday-based Dapper query whose totals and workload state are computed in
+  PostgreSQL. The test pass caught and fixed Dapper's unsupported DateOnly parameter binding while
+  preserving DateOnly at the HTTP contract.
+- Backend is 35/35 with real HTTP/PostgreSQL coverage for totals, UTC week edges, missing data and
+  organization isolation; build and EF model-drift checks pass.
+
+## 2026-08-29 (Organization Calendar Phase 2)
+
+- Added the focused task schedule route/command/domain method instead of expanding general task update.
+- Reused `ManageTasks`, rejected personal scheduling and validated target date >= start date; no schema
+  or migration was needed.
+- Added three scheduling tests; the full suite passes 30/30 when the existing one-time-code test secret
+  is provided. Angular consumes the route with permission-aware drag/resize and failure rollback.
+
 ## 2026-08-28 (Planner Phase 23 — hardening and production rollout)
 
 - Bounded scene size/depth/elements/strings and link schemes, optimized scene persistence, retained the

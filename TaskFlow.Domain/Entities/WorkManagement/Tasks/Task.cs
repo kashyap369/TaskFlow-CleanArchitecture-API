@@ -24,6 +24,12 @@ public class Task : AuditableEntity
 
     public DateTime? ActualCompletionDate { get; private set; }
 
+    /// <summary>
+    /// Expected effort for capacity planning. Null means the task has not been
+    /// estimated; zero is valid for a genuinely effort-free milestone.
+    /// </summary>
+    public int? EstimateMinutes { get; private set; }
+
     public int? ProjectId { get; private set; }
 
     /// <summary>
@@ -160,6 +166,46 @@ public class Task : AuditableEntity
         Description = description;
         Priority = priority;
         ExpectedCompletionDate = expectedCompletionDate;
+
+        MarkAsUpdated();
+    }
+
+    /// <summary>
+    /// Changes only the task's planning window. Calendar interactions use this
+    /// focused operation instead of the general details update so a drag can
+    /// never overwrite title, description, priority, team, or assignment data.
+    /// </summary>
+    public void Reschedule(
+        DateTime startDate,
+        DateTime? expectedCompletionDate)
+    {
+        if (startDate == default)
+            throw new ArgumentException(
+                "Task start date is required.",
+                nameof(startDate));
+
+        if (expectedCompletionDate.HasValue &&
+            expectedCompletionDate.Value < startDate)
+        {
+            throw new ArgumentException(
+                "Expected completion date cannot be before the start date.",
+                nameof(expectedCompletionDate));
+        }
+
+        StartDate = startDate;
+        ExpectedCompletionDate = expectedCompletionDate;
+
+        MarkAsUpdated();
+    }
+
+    public void SetEstimate(int? estimateMinutes)
+    {
+        if (estimateMinutes < 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(estimateMinutes),
+                "Task estimate cannot be negative.");
+
+        EstimateMinutes = estimateMinutes;
 
         MarkAsUpdated();
     }

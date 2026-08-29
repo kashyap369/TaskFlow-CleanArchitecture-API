@@ -35,7 +35,9 @@ namespace TaskFlow.Infra.Seeder.Organization.Permission
                 [OrganizationPermissionNames.ManageTeams] =
                     "Create teams and manage their members.",
                 [OrganizationPermissionNames.ViewReports] =
-                    "View organization reports and dashboards."
+                    "View organization reports and dashboards.",
+                [OrganizationPermissionNames.ManageCalendar] =
+                    "Create, update and remove organization events, leave and holidays."
             };
 
         public static async Task SeedAsync(

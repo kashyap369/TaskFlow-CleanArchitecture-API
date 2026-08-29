@@ -11,5 +11,6 @@
         public string RoleName { get; init; } = string.Empty;
         public bool IsActive { get; init; }
         public DateTime JoinedAt { get; init; }
+        public int? WeeklyCapacityMinutes { get; init; }
     }
 }

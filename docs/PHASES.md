@@ -2,6 +2,35 @@
 
 > Keep the Current Status section up to date at the end of every session.
 
+## ✅ Calendar Phase 4 — Events, leave, holidays + recurrence (2026-08-29)
+
+- Added the `CalendarEntry` aggregate, `ManageCalendar` permission and additive
+  `AddCalendarEntries` migration for organization events, member leave and holidays.
+- Four organization-scoped routes provide bounded window reads and permission-gated CRUD. Timed
+  entries retain UTC boundaries plus timezone, leave/holidays are all-day, and recurrence is limited
+  to Daily/Weekly/Monthly with interval and optional inclusive end date.
+- Real HTTP/PostgreSQL coverage proves recurrence expansion, all-day member leave, outsider denial and
+  independent soft deletion. The full backend suite passes 40/40 and EF has no model drift.
+
+## ✅ Calendar Phase 3 — Estimates, member capacity + server totals (2026-08-29)
+
+- Added nullable task estimate minutes and organization-member weekly capacity minutes through
+  migration `AddCalendarCapacity` and focused `ManageTasks` / `ManageMembers` commands.
+- Added an organization-scoped, Monday-based capacity query. PostgreSQL computes task totals,
+  remaining minutes and Light/Balanced/Heavy state; missing capacity or estimates returns
+  `NotEnoughData` instead of partial availability.
+- Real HTTP/PostgreSQL coverage proves UTC Monday/Sunday edges, state thresholds, missing-estimate
+  behavior and cross-organization denial. The full backend suite passes 35/35 and EF has no drift.
+
+## ✅ Calendar Phase 2 — Focused task scheduling API (2026-08-29)
+
+- Added `PUT /task/{taskId}/schedule` with a dedicated command/validator and `Task.Reschedule`; it
+  changes only `StartDate`/`ExpectedCompletionDate` and rejects an end before the start.
+- Organization access is checked before loading, personal tasks are rejected, and the existing
+  `ManageTasks` permission (including the standard owner bypass) is the write authority.
+- Three focused handler/validation tests cover authorized persistence, denied mutation and invalid
+  windows. The complete backend suite passes 30/30 with the required test one-time-code secret set.
+
 ## ✅ PLANNER ROADMAP COMPLETE (2026-08-28)
 
 Planner's canonical requirements and architecture are in **[PLANNER.md](PLANNER.md)**. Phases 17–23

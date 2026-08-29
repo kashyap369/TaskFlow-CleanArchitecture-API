@@ -61,6 +61,7 @@ public sealed class TaskFlowDbContext : DbContext
     public DbSet<RequirementBaseline> RequirementBaselines => Set<RequirementBaseline>();
     public DbSet<RequirementSnapshot> RequirementSnapshots => Set<RequirementSnapshot>();
     public DbSet<RequirementChange> RequirementChanges => Set<RequirementChange>();
+    public DbSet<CalendarEntry> CalendarEntries => Set<CalendarEntry>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

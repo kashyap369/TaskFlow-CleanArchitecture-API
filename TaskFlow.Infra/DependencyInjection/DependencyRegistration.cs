@@ -174,6 +174,8 @@ namespace TaskFlow.Infra.DependencyInjection
                 IOrganizationPermissionRepository,
                 OrganizationPermissionRepository>();
 
+            services.AddScoped<ICalendarEntryRepository, CalendarEntryRepository>();
+
             // Register the Wrok management  repositories
             services.AddScoped<
     IProjectRepository,

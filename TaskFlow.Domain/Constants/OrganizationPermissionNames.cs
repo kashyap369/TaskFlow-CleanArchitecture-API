@@ -27,6 +27,8 @@ namespace TaskFlow.Domain.Constants
 
         public const string ViewReports = "ViewReports";
 
+        public const string ManageCalendar = "ManageCalendar";
+
         /// <summary>
         /// Every known permission — used by the seeder to keep
         /// the OrganizationPermissions catalog table in sync.
@@ -41,7 +43,8 @@ namespace TaskFlow.Domain.Constants
             ManageMembers,
             ManageRoles,
             ManageTeams,
-            ViewReports
+            ViewReports,
+            ManageCalendar
         };
     }
 }

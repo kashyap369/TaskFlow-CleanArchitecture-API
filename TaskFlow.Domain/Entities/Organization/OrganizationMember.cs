@@ -15,6 +15,12 @@ namespace TaskFlow.Domain.Entities.Organization
 
         public bool IsActive { get; private set; }
 
+        /// <summary>
+        /// Normal working capacity for one Monday-Sunday week. Null means the
+        /// organization has not recorded a defensible capacity for this member.
+        /// </summary>
+        public int? WeeklyCapacityMinutes { get; private set; }
+
         protected OrganizationMember()
         {
         }
@@ -49,6 +55,18 @@ namespace TaskFlow.Domain.Entities.Organization
         public void Activate()
         {
             IsActive = true;
+
+            MarkAsUpdated();
+        }
+
+        public void SetWeeklyCapacity(int? weeklyCapacityMinutes)
+        {
+            if (weeklyCapacityMinutes < 0)
+                throw new ArgumentOutOfRangeException(
+                    nameof(weeklyCapacityMinutes),
+                    "Weekly capacity cannot be negative.");
+
+            WeeklyCapacityMinutes = weeklyCapacityMinutes;
 
             MarkAsUpdated();
         }

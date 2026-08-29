@@ -11,6 +11,8 @@ using TaskFlow.Application.Features.WorkManagement.Tasks.Commands.CompleteTask;
 using TaskFlow.Application.Features.WorkManagement.Tasks.Commands.CreateTask;
 using TaskFlow.Application.Features.WorkManagement.Tasks.Commands.DeleteTask;
 using TaskFlow.Application.Features.WorkManagement.Tasks.Commands.ReopenTask;
+using TaskFlow.Application.Features.WorkManagement.Tasks.Commands.ScheduleTask;
+using TaskFlow.Application.Features.WorkManagement.Tasks.Commands.SetTaskEstimate;
 using TaskFlow.Application.Features.WorkManagement.Tasks.Commands.StartTask;
 using TaskFlow.Application.Features.WorkManagement.Tasks.Commands.UnassignTask;
 using TaskFlow.Application.Features.WorkManagement.Tasks.Commands.UpdateTask;
@@ -102,6 +104,40 @@ namespace TaskFlow.Api.Controllers.WorkManagement
                 command,
                 cancellationToken);
 
+            return NoContent();
+        }
+
+        /// <summary>
+        /// Changes only an organization task's planning window. This endpoint is
+        /// permission-gated with ManageTasks and is the write boundary used by
+        /// calendar drag and resize interactions.
+        /// </summary>
+        [HttpPut("{taskId:int}/schedule")]
+        public async Task<IActionResult> ScheduleTask(
+            int taskId,
+            ScheduleTaskRequest request,
+            CancellationToken cancellationToken)
+        {
+            await _mediator.Send(
+                new ScheduleTaskCommand(
+                    taskId,
+                    request.StartDate,
+                    request.ExpectedCompletionDate),
+                cancellationToken);
+
+            return NoContent();
+        }
+
+        /// <summary>Sets or clears the effort estimate used by Team Capacity.</summary>
+        [HttpPut("{taskId:int}/estimate")]
+        public async Task<IActionResult> SetEstimate(
+            int taskId,
+            SetTaskEstimateRequest request,
+            CancellationToken cancellationToken)
+        {
+            await _mediator.Send(
+                new SetTaskEstimateCommand(taskId, request.EstimateMinutes),
+                cancellationToken);
             return NoContent();
         }
         [HttpDelete("{taskId:int}")]

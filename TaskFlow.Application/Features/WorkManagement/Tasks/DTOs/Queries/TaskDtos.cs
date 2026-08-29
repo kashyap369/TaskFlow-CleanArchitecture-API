@@ -13,6 +13,7 @@ namespace TaskFlow.Application.Features.WorkManagement.Tasks.DTOs.Queries
         public DateTime StartDate { get; init; }
         public DateTime? ExpectedCompletionDate { get; init; }
         public DateTime? ActualCompletionDate { get; init; }
+        public int? EstimateMinutes { get; init; }
         public int? ProjectId { get; init; }
         public int? OrganizationId { get; init; }
         public int? TeamId { get; init; }
@@ -33,6 +34,7 @@ namespace TaskFlow.Application.Features.WorkManagement.Tasks.DTOs.Queries
         public DateTime StartDate { get; init; }
         public DateTime? ExpectedCompletionDate { get; init; }
         public DateTime? ActualCompletionDate { get; init; }
+        public int? EstimateMinutes { get; init; }
         public int? ProjectId { get; init; }
         public int? OrganizationId { get; init; }
         public int? TeamId { get; init; }

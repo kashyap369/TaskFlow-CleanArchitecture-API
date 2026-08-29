@@ -7,6 +7,7 @@ using TaskFlow.Application.Features.Reporting.Queries.GetMemberTaskReport;
 using TaskFlow.Application.Features.Reporting.Queries.GetMyPersonalTaskReport;
 using TaskFlow.Application.Features.Reporting.Queries.GetProjectReport;
 using TaskFlow.Application.Features.Reporting.Queries.GetTeamPerformanceReport;
+using TaskFlow.Application.Features.Reporting.Queries.GetOrganizationCapacity;
 
 namespace TaskFlow.Api.Controllers.Reporting
 {
@@ -21,6 +22,26 @@ namespace TaskFlow.Api.Controllers.Reporting
             IMediator mediator)
         {
             _mediator = mediator;
+        }
+
+        /// <summary>
+        /// Server-computed Monday-based member capacity. DateOnly parameters keep
+        /// the planning boundary independent of the caller's timezone.
+        /// </summary>
+        [HttpGet("capacity/{organizationId:int}")]
+        public async Task<IActionResult> GetCapacity(
+            int organizationId,
+            [FromQuery] DateOnly weekStart,
+            [FromQuery] int weeks,
+            CancellationToken cancellationToken)
+        {
+            var capacity = await _mediator.Send(
+                new GetOrganizationCapacityQuery(
+                    organizationId,
+                    weekStart,
+                    weeks == 0 ? 6 : weeks),
+                cancellationToken);
+            return Ok(capacity);
         }
 
         [HttpGet("dashboard/{organizationId:int}")]

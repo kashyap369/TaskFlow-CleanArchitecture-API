@@ -46,6 +46,8 @@ namespace TaskFlow.Infra.Persistence.Configurations.WorkManagement
 
             builder.Property(x => x.ActualCompletionDate);
 
+            builder.Property(x => x.EstimateMinutes);
+
             builder.Property(x => x.ProjectId);
 
             // Nullable: a task need not belong to a team, and a
