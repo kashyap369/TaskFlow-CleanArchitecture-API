@@ -10,10 +10,10 @@
 > | **Frontend** | `D:\Projects\TMS\TaskFlowUI\TaskFlowApp` — Angular 20, standalone + signals, Atomic Design, multi-portal |
 > | **Dev URLs** | API `https://localhost:7086/api` · UI `http://localhost:4200` (CORS allows only this origin) |
 >
-> **Last verified implementation:** 2026-08-30, after Organization Meetings Phase 0.
-> Planner Phases 17–23 are complete; see [PLANNER.md](PLANNER.md). The API exposes 125 endpoints;
-> the UI consumes 123, with the same two deliberate skips. Meetings Phase 0 adds only a
-> development-only feasibility probe, so production endpoint counts are unchanged.
+> **Last verified implementation:** 2026-08-30, after Organization Meetings Phase 2.
+> Planner Phases 17–23 are complete; see [PLANNER.md](PLANNER.md). The API exposes 138 endpoints;
+> the UI consumes 132. Nine meeting-management routes now power Phase 2; four badge/link metadata
+> routes remain staged for Phase 3, and the two long-standing deliberate skips remain unchanged.
 
 ---
 
@@ -57,17 +57,17 @@ has been exercised against a running API — not that the code compiles.
 | | Backend | Frontend |
 |---|---|---|
 | **Phases complete** | **13 of 13** (+ a security pass and an IDOR fix) | **27 session phases**; roadmap Phases 0–8 ✅ (Phase 6 admin extras closed by session Phase 27) |
-| **Version status** | **Pre-Planner product complete; Planner Phases 17–23 and Meetings Phase 0 complete** | **All three portals complete; Planner Phases 17–23 and Meetings Phase 0 complete** |
-| **Endpoints** | **125** exposed (16 controllers; excludes the Angular-template `WeatherForecastController`) | **123 consumed.** The only 2 left are the deliberate skips below — **nothing is unconsumed for want of a screen** |
-| **Quality gates** | `dotnet test` ✅ **42/42** · build ✅ · EF model drift ✅ | `ng lint` **0 errors** · production build ✅ · **258/258** browser specs · WCAG AA on all 42 token pairings |
-| **Biggest gap** | **Meetings Phase 1 — authoritative domain, persistence, permissions and core API** | **Meetings Phase 2 follows the backend-first Phase 1 contract** |
+| **Version status** | **Pre-Planner product complete; Planner Phases 17–23 and Meetings Phases 0–2 complete** | **All three portals complete; Planner Phases 17–23 and Meetings Phases 0–2 complete** |
+| **Endpoints** | **138** exposed (17 controllers; excludes the Angular-template `WeatherForecastController`) | **132 consumed.** Four meeting badge/link metadata routes are staged for Phase 3; the 2 deliberate skips below remain |
+| **Quality gates** | `dotnet test` ✅ **49/49** · build ✅ · EF model drift ✅ | `ng lint` **0 errors** · production build ✅ · **262/262** browser specs · WCAG AA on all 42 token pairings |
+| **Biggest gap** | **Meetings Phase 3 — secure invitations, share links and guest sessions** | **Meetings Phase 3 — guest link and lobby experience** |
 | **Vision coverage** (§3.0) | **Organization 100% · Reporting 100% · Individual 100%** | **All three portals complete** — Organization, Individual and Admin |
 
 > **2026-07-26 — the two sides are now in sync.** Backend Phases 10–13 closed every ⛔/⚠️/⬜ row, and
 > frontend Phases 26–29 consumed the six endpoints they added. **What remains on either side is
 > optional polish, not parity:** V1-GAPS §3 on the UI.
 
-### The 2 unconsumed endpoints — deliberate, not a gap
+### The 2 long-standing unconsumed endpoints — deliberate, not a gap
 
 | Endpoint | Why unconsumed |
 |---|---|
@@ -85,7 +85,9 @@ Both are live and correct; nothing is blocked on them.
 | Milestone | API/infrastructure | UI | Reality |
 |---|:--:|:--:|---|
 | Phase 0 — LiveKit feasibility | ✅ | ✅ | Pinned provider stack and SDKs, provider-neutral backend boundary, scoped-token and signed/idempotent-webhook proofs, plus a development-only two-browser mic/camera/screen-share/reconnect harness. No production route or schema change. |
-| Phases 1–7 — product delivery | ⬜ | ⬜ | Phase 1 is READY; the canonical contract is [MEETINGS.md](MEETINGS.md). |
+| Phase 1 — authoritative meeting core | ✅ | — | Aggregate/lifecycle, additive migration, three permissions and 13 feature-gated management/metadata routes. Real PostgreSQL coverage proves participant access and organization isolation. |
+| Phase 2 — management and scheduling | ✅ | ✅ | Lazy list/detail, create/edit/lifecycle and registered-participant UI consume nine routes; scheduled/live meetings derive once into Calendar. |
+| Phases 3–7 — product delivery | ⬜ | ⬜ | Phase 3 is READY; the canonical contract is [MEETINGS.md](MEETINGS.md). |
 
 ### 3.0 Vision coverage — `OVERVIEW.md` read as a spec
 
@@ -190,6 +192,8 @@ a running API.
 | Task assignment | `PUT /{id}/assign/{userId}`, `/unassign` | ✅ | ✅ | ✅ | Inline assignee `<select>` on every row |
 | **Calendar task scheduling** | `PUT /task/{id}/schedule` | ✅ | ✅ | ⬜ | Phase 2: focused date-only command, `ManageTasks`, shared filters, details, authorized drag/resize and visible rollback; automated end-to-end gates pass, live API/browser mutation not rerun in this session |
 | **Calendar-owned events** | `GET /calendar/organization/{id}`, `POST`/`PUT /calendar`, `DELETE /calendar/{id}` | ✅ | ✅ | ✅ | Phase 4: organization events, member leave, holidays, UTC/timezone-aware timed entries, all-day validation and bounded Daily/Weekly/Monthly recurrence under `ManageCalendar` |
+| **Meeting lifecycle** | 7 on `/meeting` for create/list/detail/update/start/end/cancel | ✅ | ✅ | ⬜ | Phase 2: lazy list/detail, validated instant/scheduled create/edit and permission-aware start/end/cancel. Automated gates pass; a credentialed live mutation was not run. |
+| **Meeting badges, participants and access links** | 6 on `/meeting/{id}` metadata routes | ✅ | 🟡 | ⬜ | Initial badge definitions plus registered-member add/revoke are surfaced. Separate badge creation and all three access-link routes stay staged for Phase 3. |
 | **Personal tasks** | `POST /task/personal`, `GET /task/mine/personal` | ✅ | ✅ | ✅ | Member portal **My tasks** page: filters, paging, create/edit drawer, lifecycle |
 | **Personal projects** | `POST /project/personal`, `GET /project/mine/personal` + shared project CRUD | ✅ | ✅ | ✅ | Creator-only projects; My Tasks can filter/create within a private project |
 | **Planner resources and secure files** | 8 on `/planner/projects/{id}/board/resources` | ✅ | ✅ | ✅ | Notes, links, documents, private authorized preview/download, update, unlink/relink, and delete; binaries stay outside scene JSON |
@@ -221,7 +225,7 @@ a running API.
 | Pagination | ⬜ No endpoint accepts page/size | ✅ Client-side over the full list (`createPagination` + `Pagination` molecule) — swap the source when the API pages |
 | Error mapping | ✅ Domain exceptions → 400 (§4.5, Phase 9.B) | Central `errorInterceptor`; the client-side worklog guard can now be relaxed |
 | Design system / theming / a11y | n/a | ✅ Atomic Design + Storybook, light/dark tokens, WCAG AA enforced by `npm run a11y:contrast` |
-| Automated tests | ⬜ **None** (backlog) | ✅ 164 unit specs · ⬜ no E2E |
+| Automated tests | ✅ **49 tests**, including disposable-PostgreSQL HTTP isolation coverage | ✅ 258 browser specs · ⬜ no E2E |
 | Docker / CI-CD | ⬜ Backlog | ⬜ |
 
 ---
@@ -380,6 +384,8 @@ Docker + CI/CD.
 
 | Date | Side | Change |
 |---|---|---|
+| 2026-08-30 | UI | **Completed Organization Meetings Phase 2.** Added lazy Meetings navigation/list/detail, Upcoming/Live/Past search/filter/paging, validated instant/scheduled create/edit, lifecycle actions, registered-participant access and truthful later-phase placeholders. Calendar derives timed meetings without duplicate rows. Nine meeting routes are now bound (**132/138 consumed**); the four badge/link metadata routes stay staged for Phase 3. All **262/262** specs, production build, lint/design lint, detector and all 42 contrast checks pass. |
+| 2026-08-30 | API | **Completed Organization Meetings Phase 1.** Added the meeting lifecycle aggregate with badge/participant/hash-only access-link/attendance foundations, additive `AddMeetingCore` migration, `CreateMeetings`/`ManageMeetings`/`RecordMeetings`, validated staged feature configuration, and 13 authenticated management/metadata routes. Raw access tokens are returned once and never exposed by later reads. Routes are now **138 total / 123 consumed**; backend build and all **49/49** tests pass, disposable PostgreSQL proves participant access plus outsider/cross-organization denial, and EF reports no drift. Phase 2 is READY. |
 | 2026-08-30 | **Both** | **Completed Organization Meetings Phase 0.** Pinned LiveKit Server `1.13.6`, .NET server SDK `1.2.3`, JavaScript client `2.22.1` and Redis `8.2.9-alpine`; added the provider-neutral media boundary, local Compose/config, five-minute scoped-token proof and signed/idempotent-webhook proof. A development-only Angular harness verified two isolated browser contexts exchanging microphone/camera, screen sharing and fresh-token reconnect with real webhook delivery. Production endpoint counts remain **125 / 123**; backend tests pass 42/42, frontend specs 258/258, builds/lint/design/contrast and EF drift pass. Phase 1 is READY. |
 | 2026-08-29 | **Both** | **Completed Organization Calendar Phase 4.** Added the `CalendarEntry` aggregate and `AddCalendarEntries` migration, new `ManageCalendar` permission, four organization-scoped CRUD/window routes, timezone/all-day validation and bounded Daily/Weekly/Monthly recurrence expansion. Angular merges occurrences through the existing Schedule adapter and adds accessible permission-aware create/edit/delete management. Routes are now **125 total / 123 consumed**; frontend specs pass 256/256, backend tests pass 40/40 with real HTTP/PostgreSQL recurrence/isolation/delete coverage, and build/lint/design lint/contrast/EF drift pass. |
 | 2026-08-29 | **Both** | **Completed Organization Calendar Phase 3.** Added nullable task estimates and member weekly capacities through migration `AddCalendarCapacity`, focused `ManageTasks`/`ManageMembers` writes, and an organization-scoped Monday-based capacity query. Angular adds a responsive six-week Team Capacity grid plus in-context hours/estimate editing; missing data is always `NotEnoughData`, never partial availability. Routes are now **121 total / 119 consumed**; frontend specs pass 254/254, backend tests pass 35/35 including real UTC/isolation PostgreSQL coverage, and build/lint/design lint/contrast/EF drift pass. |

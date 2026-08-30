@@ -1,5 +1,14 @@
 # TaskFlow — Session Log
 
+## 2026-08-30 (Organization Meetings Phase 2 — frontend management handoff)
+
+- Angular now consumes nine core meeting routes through lazy organization list/detail surfaces,
+  validated create/edit, lifecycle actions and registered-participant access management.
+- Meeting records derive into the existing Calendar mapper without duplicate `CalendarEntry` rows;
+  state resets across organization switches and unauthorized controls follow API-authored authority.
+- Frontend is 262/262 with build/lint/design/contrast/detector green. Four badge/link metadata routes
+  remain intentionally staged for the guest-link work in Phase 3, which is now READY.
+
 ## 2026-08-30 (Organization Meetings Phase 0 — LiveKit feasibility)
 
 - Pinned the self-hosted LiveKit/Redis stack and both SDKs, added the TaskFlow-owned
@@ -312,3 +321,19 @@
 - Installed `dotnet-ef` global tool (wasn't on this machine). Migration `DomainVisionFoundation` generated but **not applied** — run `dotnet ef database update --project TaskFlow.Infra --startup-project TaskFlow.Api`.
 - New repo interfaces (ITeamRepository, IOrganizationPermissionRepository, ITaskWorkLogRepository) have no Infra implementations/DI registrations yet — that's Application/Infra phase work.
 - Gotchas found: `DapperContext` and `Domain/Common/Result.cs` are empty stubs; no Queries exist yet (write side only); Org/WorkManagement controllers deliberately unauthenticated (dev stage); domain events dispatch synchronously after SaveChanges (SMTP failure throws after data persisted); response envelope `ApiResponse<T>` only used by AuthController.
+
+## 2026-08-30 (Organization Meetings Phase 1 — authoritative core API)
+
+- Added the meeting aggregate and constrained badge, participant, access-link and attendance
+  foundations through the additive `AddMeetingCore` migration. Lifecycle rules cover
+  Draft/Scheduled/Live/Ended/Cancelled, UTC schedules retain their display timezone, and the creator
+  is an immutable Host.
+- Added `CreateMeetings`, `ManageMeetings` and `RecordMeetings`, plus 13 feature-gated routes for
+  bounded lists, authorized detail, lifecycle management and safe metadata. Access-link creation
+  returns 256-bit random material once; only SHA-256 is persisted and later reads expose no secret.
+- Preserved the provider boundary from Phase 0. Official token/grant and raw-body signed-webhook
+  guidance was rechecked; this phase did not change LiveKit dependencies or issue production room
+  tokens.
+- Backend build, all 49 tests and EF model-drift checks pass. The disposable PostgreSQL HTTP suite
+  proves participant archive access, outsider/cross-organization denial, lifecycle timestamps and
+  one-time raw-link disclosure. Phase 2 is READY.

@@ -1,6 +1,6 @@
 # TaskFlow Meetings — Canonical End-to-End Delivery Plan
 
-> **Status:** PHASE 0 DONE — Phase 1 is READY.
+> **Status:** PHASES 0–2 DONE — Phase 3 is READY.
 >
 > **Canonical scope:** Angular in `D:\Projects\TMS\TaskFlowUI\TaskFlowApp`, ASP.NET Core API in
 > `D:\Projects\TMS\TaskFlow`, PostgreSQL for durable state, TaskFlow private object storage for
@@ -414,9 +414,9 @@ Official references to re-verify during implementation:
 | Phase | Outcome | Dependency | Status |
 |---|---|---|---|
 | 0 | Architecture contract and LiveKit feasibility spike | None | DONE |
-| 1 | Meeting domain, persistence, permissions and core API | Phase 0 | READY |
-| 2 | Organization meeting management UI and scheduling | Phase 1 | NOT STARTED |
-| 3 | Secure email invitations, share links and guest lobby | Phase 2 | NOT STARTED |
+| 1 | Meeting domain, persistence, permissions and core API | Phase 0 | DONE |
+| 2 | Organization meeting management UI and scheduling | Phase 1 | DONE |
+| 3 | Secure email invitations, share links and guest lobby | Phase 2 | READY |
 | 4 | Custom LiveKit room for registered users and guests | Phase 3 | NOT STARTED |
 | 5 | Durable chat, notes, files and complete meeting archive | Phase 4 | NOT STARTED |
 | 6 | Consent-aware recording, Egress and playback | Phase 5 | NOT STARTED |
@@ -501,6 +501,28 @@ real HTTP/PostgreSQL integration covers outsider denial and cross-organization i
 ProjectCompletion endpoint ledger are updated; no LiveKit secret or raw share token is returned by a
 later read.
 
+**Completion evidence (2026-08-30):**
+
+- Added the `Meeting` aggregate with Draft/Scheduled/Live/Ended/Cancelled transitions plus meeting-owned
+  badge definitions, registered participants, access-link metadata and attendance foundations. The
+  additive `AddMeetingCore` migration creates five constrained/indexed tables with organization/user
+  foreign keys and global soft-delete filters.
+- Added `CreateMeetings`, `ManageMeetings` and `RecordMeetings` to the seeded permission catalog.
+  Creation requires `CreateMeetings`; a creator manages their own meeting, while organization owners
+  and roles with `ManageMeetings` can manage any meeting. Detail/archive reads are limited to the
+  creator, an assigned non-revoked participant or an authorized manager.
+- Added 13 authenticated, feature-gated routes for bounded/filterable/paged organization lists,
+  detail, create/update, start/end/cancel, safe badge and registered-participant metadata, and
+  create/list/revoke access-link metadata. A cryptographically random raw link token is returned once;
+  PostgreSQL stores only its SHA-256 hash and safe later reads expose neither token nor hash.
+- Added validated `Meetings` configuration for staged enablement, guest/recording dependencies,
+  guest-session duration, retention and file-size bounds. Existing provider registration remains
+  isolated behind `IMeetingMediaProvider`; official LiveKit token/grant and signed raw-body webhook
+  contracts were rechecked and no provider dependency changed in this domain/API phase.
+- Verification: backend build passes; all `49/49` tests pass, including lifecycle/permission unit tests
+  and disposable-PostgreSQL HTTP coverage for participant access, outsider denial, cross-organization
+  isolation, lifecycle timestamps and one-time raw-link disclosure; EF reports no model drift.
+
 ### Phase 2 — Organization meeting management and scheduling UI
 
 **Goal:** users can manage meetings end to end before guest or media complexity is introduced.
@@ -519,6 +541,24 @@ later read.
 unauthorized controls are absent and API denial is proven; meetings appear once in Calendar; switching
 organizations cannot leak prior meeting state; responsive/light/dark/accessibility checks, full specs,
 lint/design lint, contrast and production build pass.
+
+**Completion evidence (2026-08-30):**
+
+- Added lazy `/organization/meetings` and detail routes plus the video-icon sidebar entry. Upcoming,
+  Live and Past work states provide search, status filtering, client paging, skeleton/error/empty
+  recovery and organization-scoped state reset.
+- Added validated instant/scheduled creation and editing with IANA/Windows-compatible timezone text,
+  room settings, retention and initial meeting-only badge definitions. Create controls follow
+  `CreateMeetings`; edit/lifecycle/participant controls use the detail DTO's server-authored
+  `CanManage` authority.
+- Registered organization members can be added as co-hosts, participants or viewers and have access
+  revoked. Guest links, join media, chat, notes, files and recording are explicit later-phase states,
+  not fake controls; their four metadata routes remain intentionally unbound until Phase 3.
+- Calendar derives timed Meeting records through the existing TaskFlow mapper and opens the canonical
+  meeting detail; it creates no `CalendarEntry` duplicate and timed ends stay non-exclusive.
+- Verification: all frontend specs pass `262/262`; production build, Angular lint, design lint, the
+  Impeccable detector and all 42 light/dark contrast checks pass. A local browser reached the auth
+  boundary correctly, but no test credentials or session were used for a destructive live-data pass.
 
 ### Phase 3 — Secure invitations, share links and guest access
 
@@ -651,6 +691,18 @@ Until approved, phases use the conservative defaults stated in this document and
 guest/recording behavior disabled in production.
 
 ## 13. Evidence and decision log
+
+- **2026-08-30 — Phase 2 completed:** shipped the organization Meetings navigation, list/detail,
+  validated management/lifecycle and registered-participant UI, plus duplicate-free Calendar
+  derivation. Nine of the 13 core meeting routes are now bound; the four badge/link metadata routes
+  stay staged for Phase 3. Frontend verification is 262/262 with build/lint/design/contrast/detector
+  green. Phase 3 is READY.
+
+- **2026-08-30 — Phase 1 completed:** TaskFlow now owns the meeting lifecycle, persistence,
+  authorization and management contract through 13 feature-gated API routes and the additive
+  `AddMeetingCore` migration. Three permissions are seeded, raw access tokens are hash-only after
+  creation, all `49/49` backend tests pass with real PostgreSQL isolation coverage, and EF has no
+  model drift. Phase 2 is READY.
 
 - **2026-08-30 — Phase 0 completed:** pinned the LiveKit/Redis stack, established the provider boundary,
   added scoped-token and signed/idempotent-webhook proofs, and verified the disposable Angular harness

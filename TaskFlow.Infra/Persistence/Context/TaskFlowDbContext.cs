@@ -6,6 +6,7 @@ using TaskFlow.Application.Contracts.Security;
 using TaskFlow.Application.Features.Planner;
 using TaskFlow.Domain.Common;
 using TaskFlow.Domain.Entities.Identity;
+using TaskFlow.Domain.Entities.Meetings;
 using TaskFlow.Domain.Entities.Organization;
 using TaskFlow.Domain.Entities.Platform;
 using TaskFlow.Domain.Entities.Planner;
@@ -62,6 +63,11 @@ public sealed class TaskFlowDbContext : DbContext
     public DbSet<RequirementSnapshot> RequirementSnapshots => Set<RequirementSnapshot>();
     public DbSet<RequirementChange> RequirementChanges => Set<RequirementChange>();
     public DbSet<CalendarEntry> CalendarEntries => Set<CalendarEntry>();
+    public DbSet<Meeting> Meetings => Set<Meeting>();
+    public DbSet<MeetingBadgeDefinition> MeetingBadgeDefinitions => Set<MeetingBadgeDefinition>();
+    public DbSet<MeetingParticipant> MeetingParticipants => Set<MeetingParticipant>();
+    public DbSet<MeetingAccessLink> MeetingAccessLinks => Set<MeetingAccessLink>();
+    public DbSet<MeetingAttendance> MeetingAttendance => Set<MeetingAttendance>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

@@ -37,7 +37,13 @@ namespace TaskFlow.Infra.Seeder.Organization.Permission
                 [OrganizationPermissionNames.ViewReports] =
                     "View organization reports and dashboards.",
                 [OrganizationPermissionNames.ManageCalendar] =
-                    "Create, update and remove organization events, leave and holidays."
+                    "Create, update and remove organization events, leave and holidays.",
+                [OrganizationPermissionNames.CreateMeetings] =
+                    "Create instant and scheduled organization meetings.",
+                [OrganizationPermissionNames.ManageMeetings] =
+                    "Manage any meeting in the organization.",
+                [OrganizationPermissionNames.RecordMeetings] =
+                    "Request and manage meeting recordings when recording is enabled."
             };
 
         public static async Task SeedAsync(

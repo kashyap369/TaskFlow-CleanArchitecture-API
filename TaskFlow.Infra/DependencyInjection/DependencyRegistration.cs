@@ -19,6 +19,7 @@ using TaskFlow.Application.DomainEvents.Organizations;
 using TaskFlow.Domain.DomainEvents.Identity.User;
 using TaskFlow.Domain.DomainEvents.Organizations;
 using TaskFlow.Domain.Interfaces.Identity.Users;
+using TaskFlow.Domain.Interfaces.Meetings;
 using TaskFlow.Domain.Interfaces.Organizations;
 using TaskFlow.Domain.Interfaces.Persistence;
 using TaskFlow.Domain.Interfaces.Platform;
@@ -31,6 +32,7 @@ using TaskFlow.Infra.Email.Smtp;
 using TaskFlow.Infra.Persistence;
 using TaskFlow.Infra.Persistence.Context;
 using TaskFlow.Infra.Persistence.Repositories.Identity.Users;
+using TaskFlow.Infra.Persistence.Repositories.Meetings;
 using TaskFlow.Infra.Persistence.Repositories.Organizations;
 using TaskFlow.Infra.Persistence.Repositories.Platform;
 using TaskFlow.Infra.Persistence.Repositories.Planner;
@@ -169,6 +171,20 @@ namespace TaskFlow.Infra.DependencyInjection
                     "LiveKit:WebhookToleranceSeconds must be between 30 and 900 seconds.")
                 .ValidateOnStart();
             services.AddSingleton<IMeetingMediaProvider, LiveKitMeetingMediaProvider>();
+            services
+                .AddOptions<MeetingSettings>()
+                .Bind(configuration.GetSection(MeetingSettings.SectionName))
+                .Validate(settings => settings.GuestSessionMinutes is >= 5 and <= 1440,
+                    "Meetings:GuestSessionMinutes must be between 5 and 1440.")
+                .Validate(settings => settings.DefaultRetentionDays is >= 1 and <= 3650,
+                    "Meetings:DefaultRetentionDays must be between 1 and 3650.")
+                .Validate(settings => settings.MaxFileBytes is >= 1_024 and <= 1_073_741_824,
+                    "Meetings:MaxFileBytes must be between 1 KiB and 1 GiB.")
+                .Validate(settings => !settings.GuestsEnabled || settings.Enabled,
+                    "Meetings:GuestsEnabled requires Meetings:Enabled.")
+                .Validate(settings => !settings.RecordingEnabled || settings.Enabled,
+                    "Meetings:RecordingEnabled requires Meetings:Enabled.")
+                .ValidateOnStart();
             // Register the organization repositories
             services.AddScoped<
     IOrganizationRepository,
@@ -195,6 +211,7 @@ namespace TaskFlow.Infra.DependencyInjection
                 OrganizationPermissionRepository>();
 
             services.AddScoped<ICalendarEntryRepository, CalendarEntryRepository>();
+            services.AddScoped<IMeetingRepository, MeetingRepository>();
 
             // Register the Wrok management  repositories
             services.AddScoped<

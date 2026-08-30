@@ -31,6 +31,7 @@ builder.Services.AddControllers();
 builder.Services.Configure<PlannerOptions>(
     builder.Configuration.GetSection(PlannerOptions.SectionName));
 builder.Services.AddScoped<PlannerFeatureFilter>();
+builder.Services.AddScoped<MeetingFeatureFilter>();
 
 builder.Services.AddRateLimiter(options =>
 {

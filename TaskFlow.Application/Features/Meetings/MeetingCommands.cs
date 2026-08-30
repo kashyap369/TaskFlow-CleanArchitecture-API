@@ -1,0 +1,248 @@
+using System.Security.Cryptography;
+using FluentValidation;
+using MediatR;
+using TaskFlow.Application.Contracts.Security;
+using TaskFlow.Application.Exceptions;
+using TaskFlow.Domain.Constants;
+using TaskFlow.Domain.Entities.Meetings;
+using TaskFlow.Domain.Enums.Meetings;
+using TaskFlow.Domain.Interfaces.Meetings;
+using TaskFlow.Domain.Interfaces.Organizations;
+using TaskFlow.Domain.Interfaces.Persistence;
+
+namespace TaskFlow.Application.Features.Meetings;
+
+public sealed record CreateMeetingCommand(int OrganizationId, string Title, string? Description,
+    DateTimeOffset? ScheduledStartUtc, DateTimeOffset? ScheduledEndUtc, string TimeZone = "UTC",
+    bool LobbyEnabled = true, bool GuestsAllowed = false, bool ParticipantsCanPublish = true,
+    bool ParticipantsCanShareScreen = true, bool ParticipantsCanEditNote = true,
+    bool ViewersCanChat = false, int RetentionDays = 90,
+    IReadOnlyList<MeetingBadgeInput>? Badges = null, IReadOnlyList<int>? ParticipantUserIds = null) : IRequest<int>;
+
+public sealed record UpdateMeetingCommand(int Id, string Title, string? Description,
+    DateTimeOffset? ScheduledStartUtc, DateTimeOffset? ScheduledEndUtc, string TimeZone = "UTC",
+    bool LobbyEnabled = true, bool GuestsAllowed = false, bool ParticipantsCanPublish = true,
+    bool ParticipantsCanShareScreen = true, bool ParticipantsCanEditNote = true,
+    bool ViewersCanChat = false, int RetentionDays = 90) : IRequest;
+public sealed record StartMeetingCommand(int Id) : IRequest;
+public sealed record EndMeetingCommand(int Id) : IRequest;
+public sealed record CancelMeetingCommand(int Id) : IRequest;
+public sealed record AddMeetingBadgeCommand(int MeetingId, string Label, string Color, string? Icon) : IRequest<int>;
+public sealed record AddMeetingParticipantCommand(int MeetingId, int UserId,
+    MeetingAccessLevel AccessLevel = MeetingAccessLevel.Participant, int? BadgeDefinitionId = null) : IRequest<int>;
+public sealed record UpdateMeetingParticipantCommand(int MeetingId, int ParticipantId,
+    MeetingAccessLevel AccessLevel, int? BadgeDefinitionId, MeetingParticipantState State) : IRequest;
+public sealed record CreateMeetingAccessLinkCommand(int MeetingId, MeetingAccessLinkMode Mode,
+    string? LockedEmail, MeetingAccessLevel DefaultAccessLevel, int? BadgeDefinitionId,
+    DateTimeOffset ExpiresAtUtc, int? MaximumUses) : IRequest<CreatedMeetingAccessLinkDto>;
+public sealed record RevokeMeetingAccessLinkCommand(int MeetingId, int LinkId) : IRequest;
+
+internal static class MeetingValidationRules
+{
+    public static void Apply<T>(AbstractValidator<T> validator, Func<T, string> title,
+        Func<T, DateTimeOffset?> start, Func<T, DateTimeOffset?> end, Func<T, string> timeZone,
+        Func<T, int> retention)
+    {
+        validator.RuleFor(x => title(x)).NotEmpty().MaximumLength(160);
+        validator.RuleFor(x => x).Must(x => start(x).HasValue == end(x).HasValue)
+            .WithMessage("A schedule requires both start and end.");
+        validator.RuleFor(x => x).Must(x => !start(x).HasValue || end(x) > start(x))
+            .WithMessage("Scheduled end must be after start.");
+        validator.RuleFor(x => timeZone(x)).NotEmpty().MaximumLength(100).Must(BeTimeZone)
+            .WithMessage("Time zone is not recognized.");
+        validator.RuleFor(x => retention(x)).InclusiveBetween(1, 3650);
+    }
+    private static bool BeTimeZone(string value)
+    { try { _ = TimeZoneInfo.FindSystemTimeZoneById(value); return true; } catch { return false; } }
+}
+
+public sealed class CreateMeetingCommandValidator : AbstractValidator<CreateMeetingCommand>
+{
+    public CreateMeetingCommandValidator()
+    {
+        RuleFor(x => x.OrganizationId).GreaterThan(0);
+        MeetingValidationRules.Apply(this, x => x.Title, x => x.ScheduledStartUtc,
+            x => x.ScheduledEndUtc, x => x.TimeZone, x => x.RetentionDays);
+        RuleFor(x => x.Badges).Must(x => x is null || x.Count <= 20).WithMessage("A meeting can define at most 20 badges.");
+        RuleFor(x => x.ParticipantUserIds).Must(x => x is null || x.Distinct().Count() == x.Count)
+            .WithMessage("Participant user ids must be unique.");
+    }
+}
+public sealed class UpdateMeetingCommandValidator : AbstractValidator<UpdateMeetingCommand>
+{
+    public UpdateMeetingCommandValidator()
+    { RuleFor(x => x.Id).GreaterThan(0); MeetingValidationRules.Apply(this, x => x.Title,
+        x => x.ScheduledStartUtc, x => x.ScheduledEndUtc, x => x.TimeZone, x => x.RetentionDays); }
+}
+public sealed class AddMeetingBadgeCommandValidator : AbstractValidator<AddMeetingBadgeCommand>
+{
+    public AddMeetingBadgeCommandValidator()
+    { RuleFor(x => x.MeetingId).GreaterThan(0); RuleFor(x => x.Label).NotEmpty().MaximumLength(40);
+      RuleFor(x => x.Label).Must(x => x.IndexOfAny(['<', '>', '&']) < 0 && !x.Any(char.IsControl))
+          .WithMessage("Badge label contains unsafe characters.");
+      RuleFor(x => x.Color).NotEmpty().Matches("^[a-z][a-z0-9-]{0,23}$");
+      RuleFor(x => x.Icon).Matches("^[A-Za-z][A-Za-z0-9-]{0,39}$").When(x => !string.IsNullOrWhiteSpace(x.Icon)); }
+}
+public sealed class AddMeetingParticipantCommandValidator : AbstractValidator<AddMeetingParticipantCommand>
+{
+    public AddMeetingParticipantCommandValidator()
+    { RuleFor(x => x.MeetingId).GreaterThan(0); RuleFor(x => x.UserId).GreaterThan(0);
+      RuleFor(x => x.AccessLevel).IsInEnum().NotEqual(MeetingAccessLevel.Host); }
+}
+public sealed class UpdateMeetingParticipantCommandValidator : AbstractValidator<UpdateMeetingParticipantCommand>
+{
+    public UpdateMeetingParticipantCommandValidator()
+    { RuleFor(x => x.MeetingId).GreaterThan(0); RuleFor(x => x.ParticipantId).GreaterThan(0);
+      RuleFor(x => x.AccessLevel).IsInEnum(); RuleFor(x => x.State).IsInEnum(); }
+}
+public sealed class CreateMeetingAccessLinkCommandValidator : AbstractValidator<CreateMeetingAccessLinkCommand>
+{
+    public CreateMeetingAccessLinkCommandValidator()
+    {
+        RuleFor(x => x.MeetingId).GreaterThan(0); RuleFor(x => x.Mode).IsInEnum();
+        RuleFor(x => x.DefaultAccessLevel).IsInEnum().NotEqual(MeetingAccessLevel.Host);
+        RuleFor(x => x.ExpiresAtUtc).GreaterThan(DateTimeOffset.UtcNow);
+        RuleFor(x => x.MaximumUses).GreaterThan(0).When(x => x.MaximumUses.HasValue);
+        RuleFor(x => x.LockedEmail).NotEmpty().EmailAddress()
+            .When(x => x.Mode == MeetingAccessLinkMode.PrivateInvitation);
+    }
+}
+
+internal sealed class MeetingCommandAccess(IMeetingRepository meetings, ICurrentUserService user,
+    IOrganizationPermissionChecker permissions)
+{
+    public async Task<Meeting> LoadManageableAsync(int id, CancellationToken cancellationToken)
+    {
+        var meeting = await meetings.GetByIdAsync(id, cancellationToken) ??
+            throw new NotFoundException("MEETING_NOT_FOUND", "Meeting not found.");
+        if (meeting.CreatedByUserId != user.UserId)
+            await permissions.EnsurePermissionAsync(meeting.OrganizationId, user.UserId,
+                OrganizationPermissionNames.ManageMeetings, cancellationToken);
+        return meeting;
+    }
+}
+
+public sealed class CreateMeetingCommandHandler(IMeetingRepository meetings,
+    IOrganizationMemberRepository members, IOrganizationPermissionChecker permissions,
+    ICurrentUserService user, IUnitOfWork unitOfWork) : IRequestHandler<CreateMeetingCommand, int>
+{
+    public async Task<int> Handle(CreateMeetingCommand request, CancellationToken cancellationToken)
+    {
+        await permissions.EnsurePermissionAsync(request.OrganizationId, user.UserId,
+            OrganizationPermissionNames.CreateMeetings, cancellationToken);
+        var meeting = new Meeting(request.OrganizationId, user.UserId, request.Title, request.Description,
+            request.ScheduledStartUtc?.UtcDateTime, request.ScheduledEndUtc?.UtcDateTime, request.TimeZone,
+            $"meeting-{Guid.NewGuid():N}", request.LobbyEnabled, request.GuestsAllowed,
+            request.ParticipantsCanPublish, request.ParticipantsCanShareScreen,
+            request.ParticipantsCanEditNote, request.ViewersCanChat, request.RetentionDays);
+        foreach (var badge in request.Badges ?? [])
+            Execute(() => meeting.AddBadge(badge.Label, badge.Color, badge.Icon));
+        foreach (var participantUserId in request.ParticipantUserIds ?? [])
+        {
+            if (!await members.IsActiveMemberAsync(request.OrganizationId, participantUserId, cancellationToken))
+                throw new NotFoundException("MEETING_PARTICIPANT_NOT_FOUND", "An active participant was not found in this organization.");
+            Execute(() => meeting.AddRegisteredParticipant(participantUserId, MeetingAccessLevel.Participant));
+        }
+        await meetings.AddAsync(meeting, cancellationToken); await unitOfWork.SaveChangesAsync(cancellationToken);
+        return meeting.Id;
+    }
+    private static void Execute(Action action)
+    { try { action(); } catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
+      { throw new BusinessException("MEETING_RULE_VIOLATION", ex.Message); } }
+}
+
+public sealed class UpdateMeetingCommandHandler(IMeetingRepository meetings, ICurrentUserService user,
+    IOrganizationPermissionChecker permissions, IUnitOfWork unitOfWork) : IRequestHandler<UpdateMeetingCommand>
+{
+    public async Task Handle(UpdateMeetingCommand request, CancellationToken cancellationToken)
+    {
+        var meeting = await new MeetingCommandAccess(meetings, user, permissions).LoadManageableAsync(request.Id, cancellationToken);
+        Execute(() => meeting.Update(request.Title, request.Description, request.ScheduledStartUtc?.UtcDateTime,
+            request.ScheduledEndUtc?.UtcDateTime, request.TimeZone, request.LobbyEnabled,
+            request.GuestsAllowed, request.ParticipantsCanPublish, request.ParticipantsCanShareScreen,
+            request.ParticipantsCanEditNote, request.ViewersCanChat, request.RetentionDays));
+        meetings.Update(meeting); await unitOfWork.SaveChangesAsync(cancellationToken);
+    }
+    internal static void Execute(Action action)
+    { try { action(); } catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
+      { throw new BusinessException("MEETING_RULE_VIOLATION", ex.Message); } }
+}
+
+public abstract class MeetingLifecycleHandler(IMeetingRepository meetings, ICurrentUserService user,
+    IOrganizationPermissionChecker permissions, IUnitOfWork unitOfWork)
+{
+    protected async Task Mutate(int id, Action<Meeting> mutation, CancellationToken cancellationToken)
+    {
+        var meeting = await new MeetingCommandAccess(meetings, user, permissions).LoadManageableAsync(id, cancellationToken);
+        UpdateMeetingCommandHandler.Execute(() => mutation(meeting)); meetings.Update(meeting);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+    }
+}
+public sealed class StartMeetingCommandHandler(IMeetingRepository meetings, ICurrentUserService user,
+    IOrganizationPermissionChecker permissions, IUnitOfWork unitOfWork)
+    : MeetingLifecycleHandler(meetings, user, permissions, unitOfWork), IRequestHandler<StartMeetingCommand>
+{ public Task Handle(StartMeetingCommand request, CancellationToken ct) => Mutate(request.Id, x => x.Start(DateTime.UtcNow), ct); }
+public sealed class EndMeetingCommandHandler(IMeetingRepository meetings, ICurrentUserService user,
+    IOrganizationPermissionChecker permissions, IUnitOfWork unitOfWork)
+    : MeetingLifecycleHandler(meetings, user, permissions, unitOfWork), IRequestHandler<EndMeetingCommand>
+{ public Task Handle(EndMeetingCommand request, CancellationToken ct) => Mutate(request.Id, x => x.End(DateTime.UtcNow), ct); }
+public sealed class CancelMeetingCommandHandler(IMeetingRepository meetings, ICurrentUserService user,
+    IOrganizationPermissionChecker permissions, IUnitOfWork unitOfWork)
+    : MeetingLifecycleHandler(meetings, user, permissions, unitOfWork), IRequestHandler<CancelMeetingCommand>
+{ public Task Handle(CancelMeetingCommand request, CancellationToken ct) => Mutate(request.Id, x => x.Cancel(), ct); }
+
+public sealed class AddMeetingBadgeCommandHandler(IMeetingRepository meetings, ICurrentUserService user,
+    IOrganizationPermissionChecker permissions, IUnitOfWork unitOfWork) : IRequestHandler<AddMeetingBadgeCommand, int>
+{
+    public async Task<int> Handle(AddMeetingBadgeCommand request, CancellationToken ct)
+    { var meeting = await new MeetingCommandAccess(meetings, user, permissions).LoadManageableAsync(request.MeetingId, ct);
+      MeetingBadgeDefinition? badge = null; UpdateMeetingCommandHandler.Execute(() => badge = meeting.AddBadge(request.Label, request.Color, request.Icon));
+      meetings.Update(meeting); await unitOfWork.SaveChangesAsync(ct); return badge!.Id; }
+}
+
+public sealed class AddMeetingParticipantCommandHandler(IMeetingRepository meetings,
+    IOrganizationMemberRepository members, ICurrentUserService user, IOrganizationPermissionChecker permissions,
+    IUnitOfWork unitOfWork) : IRequestHandler<AddMeetingParticipantCommand, int>
+{
+    public async Task<int> Handle(AddMeetingParticipantCommand request, CancellationToken ct)
+    { var meeting = await new MeetingCommandAccess(meetings, user, permissions).LoadManageableAsync(request.MeetingId, ct);
+      if (!await members.IsActiveMemberAsync(meeting.OrganizationId, request.UserId, ct))
+          throw new NotFoundException("MEETING_PARTICIPANT_NOT_FOUND", "The selected active organization member was not found.");
+      MeetingParticipant? participant = null; UpdateMeetingCommandHandler.Execute(() => participant = meeting.AddRegisteredParticipant(request.UserId, request.AccessLevel, request.BadgeDefinitionId));
+      meetings.Update(meeting); await unitOfWork.SaveChangesAsync(ct); return participant!.Id; }
+}
+
+public sealed class UpdateMeetingParticipantCommandHandler(IMeetingRepository meetings, ICurrentUserService user,
+    IOrganizationPermissionChecker permissions, IUnitOfWork unitOfWork) : IRequestHandler<UpdateMeetingParticipantCommand>
+{
+    public async Task Handle(UpdateMeetingParticipantCommand request, CancellationToken ct)
+    { var meeting = await new MeetingCommandAccess(meetings, user, permissions).LoadManageableAsync(request.MeetingId, ct);
+      UpdateMeetingCommandHandler.Execute(() => meeting.UpdateParticipant(request.ParticipantId, request.AccessLevel, request.BadgeDefinitionId, request.State));
+      meetings.Update(meeting); await unitOfWork.SaveChangesAsync(ct); }
+}
+
+public sealed class CreateMeetingAccessLinkCommandHandler(IMeetingRepository meetings, ICurrentUserService user,
+    IOrganizationPermissionChecker permissions, IUnitOfWork unitOfWork) : IRequestHandler<CreateMeetingAccessLinkCommand, CreatedMeetingAccessLinkDto>
+{
+    public async Task<CreatedMeetingAccessLinkDto> Handle(CreateMeetingAccessLinkCommand request, CancellationToken ct)
+    {
+        var meeting = await new MeetingCommandAccess(meetings, user, permissions).LoadManageableAsync(request.MeetingId, ct);
+        var token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+        var hash = Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(token)));
+        MeetingAccessLink? link = null;
+        UpdateMeetingCommandHandler.Execute(() => link = meeting.AddAccessLink(hash, request.Mode,
+            request.LockedEmail, request.DefaultAccessLevel, request.BadgeDefinitionId,
+            request.ExpiresAtUtc.UtcDateTime, request.MaximumUses));
+        meetings.Update(meeting); await unitOfWork.SaveChangesAsync(ct);
+        return new(link!.Id, token, link.ExpiresAtUtc);
+    }
+}
+
+public sealed class RevokeMeetingAccessLinkCommandHandler(IMeetingRepository meetings, ICurrentUserService user,
+    IOrganizationPermissionChecker permissions, IUnitOfWork unitOfWork) : IRequestHandler<RevokeMeetingAccessLinkCommand>
+{
+    public async Task Handle(RevokeMeetingAccessLinkCommand request, CancellationToken ct)
+    { var meeting = await new MeetingCommandAccess(meetings, user, permissions).LoadManageableAsync(request.MeetingId, ct);
+      UpdateMeetingCommandHandler.Execute(() => meeting.RevokeAccessLink(request.LinkId, DateTime.UtcNow));
+      meetings.Update(meeting); await unitOfWork.SaveChangesAsync(ct); }
+}

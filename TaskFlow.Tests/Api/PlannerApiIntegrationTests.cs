@@ -42,6 +42,61 @@ public sealed class PlannerApiIntegrationTests : IClassFixture<PlannerApiFixture
     }
 
     [Fact]
+    public async Task Meetings_EnforceLifecycleParticipantReadsAndCrossOrganizationIsolation()
+    {
+        using var owner = _fixture.CreateClient(_fixture.CapacityOwnerUserId);
+        using var participant = _fixture.CreateClient(_fixture.CapacityMemberUserId);
+        using var otherOwner = _fixture.CreateClient(_fixture.OtherOrganizationOwnerUserId);
+        var created = await owner.PostAsJsonAsync("api/meeting", new
+        {
+            organizationId = _fixture.CapacityOrganizationId,
+            title = "Quarterly planning",
+            description = "Phase 1 integration",
+            scheduledStartUtc = "2026-10-01T09:00:00Z",
+            scheduledEndUtc = "2026-10-01T10:00:00Z",
+            timeZone = "UTC",
+            retentionDays = 90,
+            participantUserIds = new[] { _fixture.CapacityMemberUserId }
+        });
+        Assert.True(created.IsSuccessStatusCode,
+            $"Meeting create failed: {created.StatusCode} {await created.Content.ReadAsStringAsync()}");
+        var meetingId = await created.Content.ReadFromJsonAsync<int>();
+
+        Assert.Equal(HttpStatusCode.OK, (await participant.GetAsync($"api/meeting/{meetingId}")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await otherOwner.GetAsync($"api/meeting/{meetingId}")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await otherOwner.GetAsync(
+            $"api/meeting/organization/{_fixture.CapacityOrganizationId}?fromUtc=2026-01-01T00:00:00Z&toUtc=2026-12-31T00:00:00Z")).StatusCode);
+
+        var linkResponse = await owner.PostAsJsonAsync($"api/meeting/{meetingId}/access-links", new
+        {
+            meetingId,
+            mode = 2,
+            lockedEmail = (string?)null,
+            defaultAccessLevel = 3,
+            badgeDefinitionId = (int?)null,
+            expiresAtUtc = DateTimeOffset.UtcNow.AddDays(30),
+            maximumUses = 5
+        });
+        Assert.Equal(HttpStatusCode.OK, linkResponse.StatusCode);
+        using var linkDocument = JsonDocument.Parse(await linkResponse.Content.ReadAsStringAsync());
+        var rawToken = linkDocument.RootElement.GetProperty("token").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(rawToken));
+        var safeLinks = await owner.GetStringAsync($"api/meeting/{meetingId}/access-links");
+        Assert.DoesNotContain(rawToken!, safeLinks);
+        Assert.DoesNotContain("tokenHash", safeLinks, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await otherOwner.GetAsync($"api/meeting/{meetingId}/access-links")).StatusCode);
+
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await owner.PostAsync($"api/meeting/{meetingId}/start", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await owner.PostAsync($"api/meeting/{meetingId}/end", null)).StatusCode);
+        var detail = await owner.GetFromJsonAsync<MeetingDetailResponse>($"api/meeting/{meetingId}");
+        Assert.NotNull(detail); Assert.Equal(4, detail.Status); Assert.NotNull(detail.ActualStartUtc);
+        Assert.NotNull(detail.ActualEndUtc); Assert.Equal(2, detail.Participants.Count);
+    }
+
+    [Fact]
     public async Task CalendarEntries_ExpandRecurrence_StayOrganizationScoped_AndDeleteIndependently()
     {
         using var owner = _fixture.CreateClient(_fixture.CapacityOwnerUserId);
@@ -500,6 +555,9 @@ public sealed class PlannerApiIntegrationTests : IClassFixture<PlannerApiFixture
         bool HasEnoughData,
         string WorkloadState);
     private sealed record CalendarEntryResponse(int Id, string OccurrenceId);
+    private sealed record MeetingDetailResponse(int Status, DateTime? ActualStartUtc,
+        DateTime? ActualEndUtc, List<MeetingParticipantResponse> Participants);
+    private sealed record MeetingParticipantResponse(int Id);
 }
 
 public sealed class PlannerApiFixture : IAsyncLifetime
@@ -515,6 +573,7 @@ public sealed class PlannerApiFixture : IAsyncLifetime
     public int CapacityOrganizationId { get; private set; }
     public int CapacityOwnerUserId { get; private set; }
     public int CapacityMemberUserId { get; private set; }
+    public int OtherOrganizationOwnerUserId { get; private set; }
 
     public async Task InitializeAsync()
     {
@@ -561,6 +620,7 @@ public sealed class PlannerApiFixture : IAsyncLifetime
                         ["ClientSettings:BaseUrl"] = "http://localhost",
                         ["ObjectStorage:Provider"] = "Local",
                         ["ObjectStorage:LocalPath"] = "App_Data/integration-test-objects",
+                        ["Meetings:Enabled"] = "true",
                     });
                 });
                 builder.ConfigureTestServices(services =>
@@ -621,13 +681,21 @@ public sealed class PlannerApiFixture : IAsyncLifetime
             new Email("ben.capacity@example.test"),
             new PhoneNumber("9876543211"),
             "test-password-hash");
+        var otherOwner = User.Register(
+            new FullName("Nila", "Patel"),
+            new Email("nila.other@example.test"),
+            new PhoneNumber("9876543212"),
+            "test-password-hash",
+            AccountType.Organization);
         owner.ClearDomainEvents();
         colleague.ClearDomainEvents();
-        context.Users.AddRange(owner, colleague);
+        otherOwner.ClearDomainEvents();
+        context.Users.AddRange(owner, colleague, otherOwner);
         await context.SaveChangesAsync();
 
         var organization = new Organization("Capacity test", "", owner.Id);
-        context.Organizations.Add(organization);
+        var otherOrganization = new Organization("Other organization", "", otherOwner.Id);
+        context.Organizations.AddRange(organization, otherOrganization);
         await context.SaveChangesAsync();
         var role = new OrganizationRole(organization.Id, "Planner", "");
         context.OrganizationRoles.Add(role);
@@ -654,6 +722,7 @@ public sealed class PlannerApiFixture : IAsyncLifetime
         CapacityOrganizationId = organization.Id;
         CapacityOwnerUserId = owner.Id;
         CapacityMemberUserId = colleague.Id;
+        OtherOrganizationOwnerUserId = otherOwner.Id;
     }
 
     private static TaskEntity CapacityTask(

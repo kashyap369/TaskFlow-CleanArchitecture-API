@@ -2,18 +2,19 @@
 
 > Keep the Current Status section up to date at the end of every session.
 
-## ✅ Organization Meetings Phase 0 — LiveKit feasibility (2026-08-30)
+## ✅ Organization Meetings Phase 2 — management and scheduling UI (2026-08-30)
 
 The approved cross-repository product, security, architecture and Phase 0–7 delivery contract is in
 **[MEETINGS.md](MEETINGS.md)**. It covers registered and unregistered email participants, revocable
 private/reusable links, separate capability levels and custom display badges, custom LiveKit calling,
 persistent collaboration/attendance, consent-aware recording and production rollout.
 
-Phase 0 is DONE and Phase 1 is READY. LiveKit Server `1.13.6`, the community .NET SDK `1.2.3`,
-`livekit-client` `2.22.1`, and Redis `8.2.9-alpine` are pinned. TaskFlow now owns a provider-neutral
-media boundary, a local Compose stack, five-minute least-privilege token proof, and signed/idempotent
-webhook proof. The development-only two-browser harness verified mic, camera, screen share,
-disconnect/reconnect, and real webhook delivery. All backend tests pass 42/42 and EF has no drift.
+Phases 0–2 are DONE and Phase 3 is READY. Angular now consumes the meeting list/detail,
+create/update/lifecycle and registered-participant contract through lazy organization routes, with
+permission-aware controls and organization-switch isolation. Scheduled/live meeting records derive
+once into Calendar without duplicate persistence. Nine meeting routes are bound now; four badge/link
+metadata routes remain staged for Phase 3 guest access. The frontend passes all 262 specs plus
+build/lint/design/contrast/detector; the unchanged backend remains 49/49 with no EF drift.
 
 ## ✅ Calendar Phase 4 — Events, leave, holidays + recurrence (2026-08-29)
 
