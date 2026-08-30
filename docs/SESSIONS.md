@@ -1,5 +1,25 @@
 # TaskFlow — Session Log
 
+## 2026-08-30 (Organization Meetings Phase 0 — LiveKit feasibility)
+
+- Pinned the self-hosted LiveKit/Redis stack and both SDKs, added the TaskFlow-owned
+  `IMeetingMediaProvider` boundary, local Compose/config examples, and a development-only API probe.
+- Proved five-minute least-privilege room tokens plus raw-body signed webhook validation and event-id
+  replay protection; real LiveKit participant/track/room webhooks returned 200 from TaskFlow.
+- The isolated Angular harness completed a two-context mic/camera/screen-share/disconnect/reconnect
+  flow. Backend is 42/42 with no EF drift; frontend is 258/258 with build/lint/design/contrast green.
+  Phase 0 is DONE and Phase 1 is READY.
+
+## 2026-08-30 (Organization Meetings — plan approved)
+
+- Added the canonical Phase 0–7 Meetings contract in `docs/MEETINGS.md` for secure registered/guest
+  email access, separate access levels and display badges, custom Angular/LiveKit calls, persistent
+  collaboration/attendance, consent-aware Egress recording and production hardening.
+- Chose TaskFlow/PostgreSQL/object storage as the durable authority and LiveKit only for realtime
+  transport/recording production; Phase 0 is READY and no implementation or API surface has landed.
+- Future sessions can use “meeting status,” “complete next meeting phase,” or “continue meeting phase N”
+  and must update the canonical status/evidence plus both repositories' phase/session documents.
+
 ## 2026-08-29 (Organization Calendar Phase 4)
 
 - Added one organization-owned calendar aggregate for events, member leave and holidays, the

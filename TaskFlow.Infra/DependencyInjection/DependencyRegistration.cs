@@ -8,6 +8,7 @@ using Amazon.Runtime;
 using Amazon.S3;
 using System.Text;
 using TaskFlow.Application.Contracts.Email;
+using TaskFlow.Application.Contracts.Meetings;
 using TaskFlow.Application.Contracts.Configuration;
 using TaskFlow.Application.Contracts.Persistence;
 using TaskFlow.Application.Contracts.Security;
@@ -36,6 +37,7 @@ using TaskFlow.Infra.Persistence.Repositories.Planner;
 using TaskFlow.Infra.Persistence.Repositories.WorkManagement;
 using TaskFlow.Infra.Security;
 using TaskFlow.Infra.Storage;
+using TaskFlow.Infra.Meetings;
 
 namespace TaskFlow.Infra.DependencyInjection
 {
@@ -149,6 +151,24 @@ namespace TaskFlow.Infra.DependencyInjection
                 services.AddSingleton<IObjectStorage, S3ObjectStorage>();
             }
             services.AddSingleton<IPlannerAssetScanner, NoOpPlannerAssetScanner>();
+            services
+                .AddOptions<LiveKitSettings>()
+                .Bind(configuration.GetSection(LiveKitSettings.SectionName))
+                .Validate(
+                    settings => !settings.Enabled ||
+                        Uri.TryCreate(settings.Url, UriKind.Absolute, out var uri) &&
+                        uri.Scheme is "ws" or "wss",
+                    "LiveKit:Url must be an absolute ws:// or wss:// URL when LiveKit is enabled.")
+                .Validate(
+                    settings => !settings.Enabled ||
+                        !string.IsNullOrWhiteSpace(settings.ApiKey) &&
+                        settings.ApiSecret.Length >= 32,
+                    "LiveKit API key and a secret of at least 32 characters are required when enabled.")
+                .Validate(
+                    settings => settings.WebhookToleranceSeconds is >= 30 and <= 900,
+                    "LiveKit:WebhookToleranceSeconds must be between 30 and 900 seconds.")
+                .ValidateOnStart();
+            services.AddSingleton<IMeetingMediaProvider, LiveKitMeetingMediaProvider>();
             // Register the organization repositories
             services.AddScoped<
     IOrganizationRepository,

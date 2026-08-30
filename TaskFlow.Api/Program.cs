@@ -1,10 +1,13 @@
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.Connections;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using System.Threading.RateLimiting;
 using TaskFlow.Api.Extensions;
 using TaskFlow.Api.Services;
 using TaskFlow.Api.Filters;
 using TaskFlow.Api.Options;
+using TaskFlow.Api.Meetings;
 using TaskFlow.Application.Contracts.Security;
 using TaskFlow.Application.Contracts.Storage;
 using TaskFlow.Application.DependencyInjection;
@@ -69,6 +72,7 @@ builder.Services.AddRateLimiter(options =>
 builder.Services.AddEndpointsApiExplorer();
 
 builder.Services.AddHealthChecks();
+builder.Services.AddSingleton<MeetingWebhookReplayGuard>();
 
 // Swagger with a Bearer token input, so protected
 // endpoints can be tested from the Swagger UI.
@@ -161,7 +165,19 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseForwardedHeaders();
-app.UseHttpsRedirection();
+if (app.Environment.IsDevelopment())
+{
+    // The local LiveKit container cannot trust ASP.NET's self-signed certificate and some smoke-test
+    // hosts have no development certificate. Keep the development-only Phase 0 probe group on HTTP;
+    // every other request still redirects.
+    app.UseWhen(
+        context => !context.Request.Path.StartsWithSegments("/api/dev/meetings/livekit"),
+        branch => branch.UseHttpsRedirection());
+}
+else
+{
+    app.UseHttpsRedirection();
+}
 app.UseCors("AngularPolicy");
 app.UseAuthentication();
 app.UseRateLimiter();
@@ -177,6 +193,11 @@ app.UsePlannerObservability();
 app.MapControllers();
 app.MapHealthChecks("/health");
 
+if (app.Environment.IsDevelopment())
+{
+    app.MapMeetingMediaProbe();
+}
+
 app.MapGet(
     "/health/ready",
     async (TaskFlowDbContext context, CancellationToken cancellationToken) =>
@@ -184,41 +205,74 @@ app.MapGet(
             ? Results.Ok(new { status = "ready" })
             : Results.StatusCode(StatusCodes.Status503ServiceUnavailable));
 
-if (!app.Environment.IsEnvironment("Testing"))
+try
 {
-    using var scope = app.Services.CreateScope();
-    var context = scope.ServiceProvider.GetRequiredService<TaskFlowDbContext>();
+    if (!app.Environment.IsEnvironment("Testing"))
+    {
+        using var scope = app.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<TaskFlowDbContext>();
 
-    await context.Database.MigrateAsync();
+        await context.Database.MigrateAsync();
 
-    var passwordHasher =
-        scope.ServiceProvider
-            .GetRequiredService<IPasswordHasher>();
+        var passwordHasher =
+            scope.ServiceProvider
+                .GetRequiredService<IPasswordHasher>();
 
-    var objectStorage =
-        scope.ServiceProvider
-            .GetRequiredService<IObjectStorage>();
+        var objectStorage =
+            scope.ServiceProvider
+                .GetRequiredService<IObjectStorage>();
 
-    await objectStorage.EnsureBucketExistsAsync();
+        await objectStorage.EnsureBucketExistsAsync();
 
-    // Roles first, because the user seeder assigns
-    // the Admin role to the seeded admin user.
-    await RoleSeeder.SeedAsync(context);
+        // Roles first, because the user seeder assigns
+        // the Admin role to the seeded admin user.
+        await RoleSeeder.SeedAsync(context);
 
-    await UserSeeder.SeedAsync(
-        context,
-        passwordHasher);
+        await UserSeeder.SeedAsync(
+            context,
+            passwordHasher);
 
-    // Organization permission catalog — populated from
-    // OrganizationPermissionNames so roles can be granted
-    // permissions by id.
-    await OrganizationPermissionSeeder.SeedAsync(context);
+        // Organization permission catalog — populated from
+        // OrganizationPermissionNames so roles can be granted
+        // permissions by id.
+        await OrganizationPermissionSeeder.SeedAsync(context);
 
-    // Platform settings singleton. Inserts only when the table is
-    // empty, so an admin's saved values survive every restart.
-    await PlatformSettingSeeder.SeedAsync(context);
+        // Platform settings singleton. Inserts only when the table is
+        // empty, so an admin's saved values survive every restart.
+        await PlatformSettingSeeder.SeedAsync(context);
+    }
+
+    await app.RunAsync();
+}
+catch (Exception exception)
+{
+    var failure = ContainsException<AddressInUseException>(exception)
+        ?
+            "TaskFlow API could not start because its configured port is already in use. " +
+            "Keep the existing API instance or stop it before launching another one."
+        : ContainsException<OptionsValidationException>(exception)
+            ? "TaskFlow API could not start because required configuration is missing or invalid."
+            : "TaskFlow API stopped during startup. See the error below for details.";
+
+    // Startup exceptions used to escape the process and could trigger a native
+    // Windows 'unknown software exception (0xe0434352)' dialog. Log the failure
+    // and return a non-zero exit code instead, so launchers can report it cleanly.
+    app.Logger.LogCritical(exception, "{StartupFailure}", failure);
+    Environment.ExitCode = 1;
 }
 
-app.Run();
+static bool ContainsException<TException>(Exception exception)
+    where TException : Exception
+{
+    for (var current = exception; current is not null; current = current.InnerException)
+    {
+        if (current is TException)
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
 
 public partial class Program;

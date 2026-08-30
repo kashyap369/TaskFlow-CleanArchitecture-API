@@ -40,6 +40,13 @@ Canonical linked work objects and the remaining resource/history capabilities be
 - **Tasks & assignment** — org tasks (standalone or under a project) get assigned to members, optionally filtered role-wise (e.g. a Manager assigns a design task to someone in the Designer role/team).
 - **Projects** — permission-designated members create projects containing tasks/subtasks, then assign which members work on which task. Project views show which task belongs to which project and who it's assigned to.
 
+### Approved post-v1 roadmap: Meetings
+
+Organization Meetings is approved but not implemented. It will support registered members and
+email-verified guests without TaskFlow accounts, revocable invite/share links, separate meeting
+capabilities and custom display badges, a custom LiveKit call UI, durable chat/notes/files/attendance,
+and consent-aware recording. The canonical Phase 0–7 contract is [MEETINGS.md](MEETINGS.md).
+
 ## Reporting & Dashboard (a headline feature)
 A strong dashboard backed by the Dapper read side, focused on:
 - Which team performed which tasks, and in what duration

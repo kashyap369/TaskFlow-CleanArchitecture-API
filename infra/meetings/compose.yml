@@ -1,0 +1,26 @@
+name: taskflow-meetings-phase0
+
+services:
+  redis:
+    image: redis:8.2.9-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  livekit:
+    image: livekit/livekit-server:v1.13.6
+    command: ["--config", "/etc/livekit/livekit.yaml"]
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./livekit.yaml:/etc/livekit/livekit.yaml:ro
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+      - "50000-50100:50000-50100/udp"

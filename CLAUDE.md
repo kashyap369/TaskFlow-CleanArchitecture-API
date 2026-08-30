@@ -38,6 +38,9 @@ DB: PostgreSQL, connection string `DefaultConnection`. Seeds on startup: system 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — layers, request flow, auth, domain events, persistence
 - [docs/CONVENTIONS.md](docs/CONVENTIONS.md) — naming patterns + new-endpoint checklist
 - [docs/PHASES.md](docs/PHASES.md) — roadmap and current status (check this first each session)
+- [docs/MEETINGS.md](docs/MEETINGS.md) — canonical cross-repository Meetings roadmap and session
+  handoff contract. Read it completely for any meeting, LiveKit, guest-link, badge, collaboration or
+  recording task; Phase 0 is complete and Phase 1 is READY.
 - [docs/SESSIONS.md](docs/SESSIONS.md) — session log: gotchas, dead ends, decisions
 
 ## Session Habit
