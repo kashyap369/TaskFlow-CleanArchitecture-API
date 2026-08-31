@@ -1,6 +1,9 @@
 using System.Security.Cryptography;
+using System.Net;
 using FluentValidation;
 using MediatR;
+using TaskFlow.Application.Contracts.Configuration;
+using TaskFlow.Application.Contracts.Email;
 using TaskFlow.Application.Contracts.Security;
 using TaskFlow.Application.Exceptions;
 using TaskFlow.Domain.Constants;
@@ -36,6 +39,7 @@ public sealed record CreateMeetingAccessLinkCommand(int MeetingId, MeetingAccess
     string? LockedEmail, MeetingAccessLevel DefaultAccessLevel, int? BadgeDefinitionId,
     DateTimeOffset ExpiresAtUtc, int? MaximumUses) : IRequest<CreatedMeetingAccessLinkDto>;
 public sealed record RevokeMeetingAccessLinkCommand(int MeetingId, int LinkId) : IRequest;
+public sealed record RotateMeetingAccessLinkCommand(int MeetingId, int LinkId) : IRequest<CreatedMeetingAccessLinkDto>;
 
 internal static class MeetingValidationRules
 {
@@ -213,20 +217,33 @@ public sealed class AddMeetingParticipantCommandHandler(IMeetingRepository meeti
 }
 
 public sealed class UpdateMeetingParticipantCommandHandler(IMeetingRepository meetings, ICurrentUserService user,
-    IOrganizationPermissionChecker permissions, IUnitOfWork unitOfWork) : IRequestHandler<UpdateMeetingParticipantCommand>
+    IOrganizationPermissionChecker permissions, IMeetingGuestAccessRepository guestAccess,
+    IUnitOfWork unitOfWork) : IRequestHandler<UpdateMeetingParticipantCommand>
 {
     public async Task Handle(UpdateMeetingParticipantCommand request, CancellationToken ct)
     { var meeting = await new MeetingCommandAccess(meetings, user, permissions).LoadManageableAsync(request.MeetingId, ct);
+      var participant = meeting.Participants.SingleOrDefault(x => x.Id == request.ParticipantId);
       UpdateMeetingCommandHandler.Execute(() => meeting.UpdateParticipant(request.ParticipantId, request.AccessLevel, request.BadgeDefinitionId, request.State));
+      if (participant?.NormalizedEmail is not null && request.State is MeetingParticipantState.Admitted or MeetingParticipantState.Denied or MeetingParticipantState.Revoked or MeetingParticipantState.Removed)
+      {
+          var kind = request.State switch { MeetingParticipantState.Admitted => MeetingGuestDecisionKind.Admitted,
+              MeetingParticipantState.Denied => MeetingGuestDecisionKind.Denied,
+              MeetingParticipantState.Removed => MeetingGuestDecisionKind.Removed, _ => MeetingGuestDecisionKind.Revoked };
+          await guestAccess.AddDecisionAsync(new MeetingGuestDecision(meeting.Id, request.ParticipantId, user.UserId, kind), ct);
+          if (request.State is not MeetingParticipantState.Admitted)
+              foreach (var session in await guestAccess.GetActiveSessionsAsync(request.ParticipantId, ct)) { session.Revoke(DateTime.UtcNow); guestAccess.UpdateSession(session); }
+      }
       meetings.Update(meeting); await unitOfWork.SaveChangesAsync(ct); }
 }
 
 public sealed class CreateMeetingAccessLinkCommandHandler(IMeetingRepository meetings, ICurrentUserService user,
-    IOrganizationPermissionChecker permissions, IUnitOfWork unitOfWork) : IRequestHandler<CreateMeetingAccessLinkCommand, CreatedMeetingAccessLinkDto>
+    IOrganizationPermissionChecker permissions, IUnitOfWork unitOfWork, IEmailService emailService,
+    IClientUrlProvider clientUrl) : IRequestHandler<CreateMeetingAccessLinkCommand, CreatedMeetingAccessLinkDto>
 {
     public async Task<CreatedMeetingAccessLinkDto> Handle(CreateMeetingAccessLinkCommand request, CancellationToken ct)
     {
         var meeting = await new MeetingCommandAccess(meetings, user, permissions).LoadManageableAsync(request.MeetingId, ct);
+        if (!meeting.GuestsAllowed) throw new BusinessException("MEETING_GUESTS_DISABLED", "Enable guests in the meeting agreement before creating guest access.");
         var token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
         var hash = Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(token)));
         MeetingAccessLink? link = null;
@@ -234,6 +251,18 @@ public sealed class CreateMeetingAccessLinkCommandHandler(IMeetingRepository mee
             request.LockedEmail, request.DefaultAccessLevel, request.BadgeDefinitionId,
             request.ExpiresAtUtc.UtcDateTime, request.MaximumUses));
         meetings.Update(meeting); await unitOfWork.SaveChangesAsync(ct);
+        if (request.Mode == MeetingAccessLinkMode.PrivateInvitation && !string.IsNullOrWhiteSpace(request.LockedEmail))
+        {
+            var template = await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "Email", "Templates", "MeetingInvitation.html"), ct);
+            var joinUrl = $"{clientUrl.BaseUrl}/meetings/join#token={Uri.EscapeDataString(token)}";
+            template = template.Replace("{{MeetingTitle}}", WebUtility.HtmlEncode(meeting.Title))
+                .Replace("{{HostName}}", WebUtility.HtmlEncode(user.Email))
+                .Replace("{{Email}}", WebUtility.HtmlEncode(request.LockedEmail.Trim()))
+                .Replace("{{JoinUrl}}", WebUtility.HtmlEncode(joinUrl))
+                .Replace("{{Expiry}}", link!.ExpiresAtUtc.ToString("f"))
+                .Replace("{{CurrentYear}}", DateTime.UtcNow.Year.ToString());
+            await emailService.SendAsync(request.LockedEmail.Trim(), $"Invitation: {meeting.Title}", template, ct);
+        }
         return new(link!.Id, token, link.ExpiresAtUtc);
     }
 }
@@ -245,4 +274,21 @@ public sealed class RevokeMeetingAccessLinkCommandHandler(IMeetingRepository mee
     { var meeting = await new MeetingCommandAccess(meetings, user, permissions).LoadManageableAsync(request.MeetingId, ct);
       UpdateMeetingCommandHandler.Execute(() => meeting.RevokeAccessLink(request.LinkId, DateTime.UtcNow));
       meetings.Update(meeting); await unitOfWork.SaveChangesAsync(ct); }
+}
+
+public sealed class RotateMeetingAccessLinkCommandHandler(IMeetingRepository meetings, ICurrentUserService user,
+    IOrganizationPermissionChecker permissions, IUnitOfWork unitOfWork) : IRequestHandler<RotateMeetingAccessLinkCommand, CreatedMeetingAccessLinkDto>
+{
+    public async Task<CreatedMeetingAccessLinkDto> Handle(RotateMeetingAccessLinkCommand request, CancellationToken ct)
+    {
+        var meeting = await new MeetingCommandAccess(meetings, user, permissions).LoadManageableAsync(request.MeetingId, ct);
+        var old = meeting.AccessLinks.SingleOrDefault(x => x.Id == request.LinkId && !x.IsDeleted)
+            ?? throw new NotFoundException("MEETING_ACCESS_LINK_NOT_FOUND", "Meeting access link not found.");
+        meeting.RevokeAccessLink(old.Id, DateTime.UtcNow);
+        var token = MeetingGuestAccessRules.RandomToken();
+        var replacement = meeting.AddAccessLink(MeetingGuestAccessRules.Hash(token), old.Mode, old.LockedEmail,
+            old.DefaultAccessLevel, old.BadgeDefinitionId, old.ExpiresAtUtc, old.MaximumUses);
+        meetings.Update(meeting); await unitOfWork.SaveChangesAsync(ct);
+        return new(replacement.Id, token, replacement.ExpiresAtUtc);
+    }
 }

@@ -127,7 +127,7 @@ public sealed class GetMeetingDetailQueryHandler(ISqlConnectionFactory sql, ICur
             SELECT b."Id", b."Label", b."Color", b."Icon" FROM "MeetingBadgeDefinitions" b
             WHERE b."MeetingId" = @MeetingId AND b."IsDeleted" = FALSE ORDER BY b."Id";
             SELECT p."Id", p."UserId", COALESCE(p."DisplayName", u."FirstName" || ' ' || u."LastName") AS "DisplayName",
-                   COALESCE(p."NormalizedEmail", u."Email") AS "Email", p."AccessLevel",
+                   COALESCE(p."NormalizedEmail", u."Email") AS "Email", (p."NormalizedEmail" IS NOT NULL) AS "IsGuest", p."AccessLevel",
                    p."BadgeDefinitionId", p."State"
             FROM "MeetingParticipants" p LEFT JOIN "Users" u ON u."Id" = p."UserId"
             WHERE p."MeetingId" = @MeetingId AND p."IsDeleted" = FALSE ORDER BY p."AccessLevel", p."Id";

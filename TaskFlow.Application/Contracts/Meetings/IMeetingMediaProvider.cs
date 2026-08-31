@@ -2,6 +2,8 @@ namespace TaskFlow.Application.Contracts.Meetings;
 
 public interface IMeetingMediaProvider
 {
+    string WebSocketUrl { get; }
+
     MeetingJoinToken CreateJoinToken(MeetingJoinTokenRequest request);
 
     MeetingProviderWebhook VerifyWebhook(string rawBody, string authorizationHeader);

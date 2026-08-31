@@ -32,6 +32,7 @@ builder.Services.Configure<PlannerOptions>(
     builder.Configuration.GetSection(PlannerOptions.SectionName));
 builder.Services.AddScoped<PlannerFeatureFilter>();
 builder.Services.AddScoped<MeetingFeatureFilter>();
+builder.Services.AddScoped<MeetingGuestFeatureFilter>();
 
 builder.Services.AddRateLimiter(options =>
 {
@@ -41,6 +42,16 @@ builder.Services.AddRateLimiter(options =>
             factory: _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+    options.AddPolicy("meeting-guest", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 12,
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0,
                 AutoReplenishment = true
@@ -151,6 +162,7 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     options.KnownProxies.Clear();
 });
 var app = builder.Build();
+var isTestingEnvironment = app.Environment.IsEnvironment("Testing");
 
 // Middlewares
 
@@ -247,6 +259,9 @@ try
 }
 catch (Exception exception)
 {
+    // Integration hosts must receive startup failures; swallowing them leaves WebApplicationFactory
+    // with a disposed provider and hides the real configuration/model error behind ObjectDisposedException.
+    if (isTestingEnvironment) throw;
     var failure = ContainsException<AddressInUseException>(exception)
         ?
             "TaskFlow API could not start because its configured port is already in use. " +

@@ -2,6 +2,16 @@
 
 > Keep the Current Status section up to date at the end of every session.
 
+## ✅ Organization Meetings Phase 3 — secure invitations and guest access (2026-08-31)
+
+Phases 0–3 are DONE and Phase 4 is READY. Added hash-only private/reusable meeting links with
+one-time disclosure, rotation, invitation mail, expiry and distinct-participant use limits; persisted
+HMAC-hashed meeting OTPs with cooldown, expiry and attempt caps; opaque one-meeting guest sessions;
+optional exact-email registered binding; and audited admit/deny/revoke/remove decisions that revoke
+sessions when access is withdrawn. The additive `AddMeetingGuestAccess` migration has no model drift.
+All 52 backend tests pass, including disposable-PostgreSQL HTTP coverage for wrong codes, link capacity,
+organization-route denial and revocation invalidation.
+
 ## ✅ Organization Meetings Phase 2 — management and scheduling UI (2026-08-30)
 
 The approved cross-repository product, security, architecture and Phase 0–7 delivery contract is in

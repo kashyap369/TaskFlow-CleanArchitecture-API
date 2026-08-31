@@ -28,6 +28,7 @@ using TaskFlow.Domain.Enums.WorkManagement;
 using TaskFlow.Domain.ValueObjects;
 using TaskFlow.Infra.Persistence.Context;
 using TaskFlow.Application.Contracts.Storage;
+using TaskFlow.Application.Contracts.Email;
 using TaskEntity = TaskFlow.Domain.Entities.WorkManagement.Tasks.Task;
 
 namespace TaskFlow.Tests.Api;
@@ -55,6 +56,7 @@ public sealed class PlannerApiIntegrationTests : IClassFixture<PlannerApiFixture
             scheduledStartUtc = "2026-10-01T09:00:00Z",
             scheduledEndUtc = "2026-10-01T10:00:00Z",
             timeZone = "UTC",
+            guestsAllowed = true,
             retentionDays = 90,
             participantUserIds = new[] { _fixture.CapacityMemberUserId }
         });
@@ -94,6 +96,79 @@ public sealed class PlannerApiIntegrationTests : IClassFixture<PlannerApiFixture
         var detail = await owner.GetFromJsonAsync<MeetingDetailResponse>($"api/meeting/{meetingId}");
         Assert.NotNull(detail); Assert.Equal(4, detail.Status); Assert.NotNull(detail.ActualStartUtc);
         Assert.NotNull(detail.ActualEndUtc); Assert.Equal(2, detail.Participants.Count);
+    }
+
+    [Fact]
+    public async Task MeetingGuests_VerifyEmail_GetScopedSession_AndRespectRevokeAndUseLimits()
+    {
+        using var owner = _fixture.CreateClient(_fixture.CapacityOwnerUserId);
+        using var guest = _fixture.CreateAnonymousClient();
+        var created = await owner.PostAsJsonAsync("api/meeting", new
+        {
+            organizationId = _fixture.CapacityOrganizationId, title = "Guest security review",
+            timeZone = "UTC", guestsAllowed = true, retentionDays = 90
+        });
+        var meetingId = await created.Content.ReadFromJsonAsync<int>();
+        var linkResponse = await owner.PostAsJsonAsync($"api/meeting/{meetingId}/access-links", new
+        {
+            meetingId, mode = 2, lockedEmail = (string?)null, defaultAccessLevel = 3,
+            badgeDefinitionId = (int?)null, expiresAtUtc = DateTimeOffset.UtcNow.AddHours(1), maximumUses = 1
+        });
+        using var linkJson = JsonDocument.Parse(await linkResponse.Content.ReadAsStringAsync());
+        var token = linkJson.RootElement.GetProperty("token").GetString()!;
+        Assert.Equal(HttpStatusCode.NoContent, (await guest.PostAsJsonAsync("api/meeting/guest/access/request-code", new { token, email = "guest@example.test" })).StatusCode);
+        var code = _fixture.Email.LastCode;
+        Assert.Matches("^[0-9]{6}$", code);
+        Assert.Equal(HttpStatusCode.BadRequest, (await guest.PostAsJsonAsync("api/meeting/guest/access/verify-code", new
+        { token, email = "guest@example.test", code = "000000", displayName = "Guest Person", bindRegisteredAccount = false })).StatusCode);
+        var verifiedResponse = await guest.PostAsJsonAsync("api/meeting/guest/access/verify-code", new
+        { token, email = "guest@example.test", code, displayName = "Guest Person", bindRegisteredAccount = false });
+        Assert.Equal(HttpStatusCode.OK, verifiedResponse.StatusCode);
+        using var verified = JsonDocument.Parse(await verifiedResponse.Content.ReadAsStringAsync());
+        var sessionToken = verified.RootElement.GetProperty("sessionToken").GetString()!;
+        guest.DefaultRequestHeaders.Add("X-Meeting-Guest-Session", sessionToken);
+        Assert.Equal(HttpStatusCode.OK, (await guest.GetAsync("api/meeting/guest/session")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await guest.GetAsync($"api/meeting/{meetingId}")).StatusCode);
+
+        await guest.PostAsJsonAsync("api/meeting/guest/access/request-code", new { token, email = "guest@example.test" });
+        Assert.NotEqual(HttpStatusCode.NoContent, (await guest.PostAsJsonAsync("api/meeting/guest/access/request-code", new { token, email = "other@example.test" })).StatusCode);
+        var detail = await owner.GetFromJsonAsync<MeetingDetailResponse>($"api/meeting/{meetingId}");
+        var guestParticipant = Assert.Single(detail!.Participants, participant => participant.Email == "GUEST@EXAMPLE.TEST");
+        Assert.Equal(HttpStatusCode.NoContent, (await owner.PutAsJsonAsync($"api/meeting/{meetingId}/participants/{guestParticipant.Id}", new
+        { meetingId, participantId = guestParticipant.Id, accessLevel = 3, badgeDefinitionId = (int?)null, state = 3 })).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await guest.GetAsync("api/meeting/guest/session")).StatusCode);
+
+        using var registered = _fixture.CreateClient(_fixture.CapacityMemberUserId);
+        var registeredEmail = $"planner-{_fixture.CapacityMemberUserId}@example.test";
+        var privateLinkResponse = await owner.PostAsJsonAsync($"api/meeting/{meetingId}/access-links", new
+        {
+            meetingId, mode = 1, lockedEmail = registeredEmail, defaultAccessLevel = 4,
+            badgeDefinitionId = (int?)null, expiresAtUtc = DateTimeOffset.UtcNow.AddHours(1), maximumUses = 1
+        });
+        using var privateLinkJson = JsonDocument.Parse(await privateLinkResponse.Content.ReadAsStringAsync());
+        var privateToken = privateLinkJson.RootElement.GetProperty("token").GetString()!;
+        Assert.Equal(HttpStatusCode.BadRequest, (await registered.PostAsJsonAsync("api/meeting/guest/access/request-code", new
+        { token = privateToken, email = "wrong@example.test" })).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await registered.PostAsJsonAsync("api/meeting/guest/access/request-code", new
+        { token = privateToken, email = registeredEmail })).StatusCode);
+        var registeredCode = _fixture.Email.LastCode;
+        Assert.Equal(HttpStatusCode.OK, (await registered.PostAsJsonAsync("api/meeting/guest/access/verify-code", new
+        { token = privateToken, email = registeredEmail, code = registeredCode, displayName = "Registered Guest", bindRegisteredAccount = true })).StatusCode);
+        detail = await owner.GetFromJsonAsync<MeetingDetailResponse>($"api/meeting/{meetingId}");
+        Assert.Contains(detail!.Participants, participant => participant.UserId == _fixture.CapacityMemberUserId && participant.IsGuest && participant.Email == registeredEmail.ToUpperInvariant());
+
+        var unboundLinkResponse = await owner.PostAsJsonAsync($"api/meeting/{meetingId}/access-links", new
+        {
+            meetingId, mode = 2, lockedEmail = (string?)null, defaultAccessLevel = 4,
+            badgeDefinitionId = (int?)null, expiresAtUtc = DateTimeOffset.UtcNow.AddHours(1), maximumUses = 1
+        });
+        using var unboundLinkJson = JsonDocument.Parse(await unboundLinkResponse.Content.ReadAsStringAsync());
+        var unboundToken = unboundLinkJson.RootElement.GetProperty("token").GetString()!;
+        Assert.Equal(HttpStatusCode.NoContent, (await registered.PostAsJsonAsync("api/meeting/guest/access/request-code", new
+        { token = unboundToken, email = "unbound@example.test" })).StatusCode);
+        var unboundCode = _fixture.Email.LastCode;
+        Assert.Equal(HttpStatusCode.OK, (await registered.PostAsJsonAsync("api/meeting/guest/access/verify-code", new
+        { token = unboundToken, email = "unbound@example.test", code = unboundCode, displayName = "Unbound Guest", bindRegisteredAccount = false })).StatusCode);
     }
 
     [Fact]
@@ -557,7 +632,7 @@ public sealed class PlannerApiIntegrationTests : IClassFixture<PlannerApiFixture
     private sealed record CalendarEntryResponse(int Id, string OccurrenceId);
     private sealed record MeetingDetailResponse(int Status, DateTime? ActualStartUtc,
         DateTime? ActualEndUtc, List<MeetingParticipantResponse> Participants);
-    private sealed record MeetingParticipantResponse(int Id);
+    private sealed record MeetingParticipantResponse(int Id, int? UserId, string? Email, bool IsGuest);
 }
 
 public sealed class PlannerApiFixture : IAsyncLifetime
@@ -574,6 +649,7 @@ public sealed class PlannerApiFixture : IAsyncLifetime
     public int CapacityOwnerUserId { get; private set; }
     public int CapacityMemberUserId { get; private set; }
     public int OtherOrganizationOwnerUserId { get; private set; }
+    public PlannerTestEmailService Email { get; } = new();
 
     public async Task InitializeAsync()
     {
@@ -621,12 +697,16 @@ public sealed class PlannerApiFixture : IAsyncLifetime
                         ["ObjectStorage:Provider"] = "Local",
                         ["ObjectStorage:LocalPath"] = "App_Data/integration-test-objects",
                         ["Meetings:Enabled"] = "true",
+                        ["Meetings:GuestsEnabled"] = "true",
+                        ["OneTimeCodeSettings:SecretKey"] = "integration-test-code-secret-at-least-32-characters",
                     });
                 });
                 builder.ConfigureTestServices(services =>
                 {
                     services.RemoveAll<IObjectStorage>();
                     services.AddSingleton<IObjectStorage, PlannerTestObjectStorage>();
+                    services.RemoveAll<IEmailService>();
+                    services.AddSingleton<IEmailService>(Email);
                     services.AddAuthentication(options =>
                         {
                             options.DefaultAuthenticateScheme = TestAuthenticationHandler.SchemeName;
@@ -774,6 +854,9 @@ public sealed class PlannerApiFixture : IAsyncLifetime
         return client;
     }
 
+    public HttpClient CreateAnonymousClient() => (_factory ?? throw new InvalidOperationException("Fixture is not ready."))
+        .CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
     public async Task DisposeAsync()
     {
         _factory?.Dispose();
@@ -819,6 +902,14 @@ public sealed class PlannerTestObjectStorage : IObjectStorage
         Task.FromResult(_objects[objectKey]);
     public Task DeleteAsync(string objectKey, CancellationToken cancellationToken = default)
     { _objects.TryRemove(objectKey, out _); return Task.CompletedTask; }
+}
+
+public sealed class PlannerTestEmailService : IEmailService
+{
+    public string LastBody { get; private set; } = string.Empty;
+    public string LastCode => System.Text.RegularExpressions.Regex.Match(LastBody, @">([0-9]{6})<").Groups[1].Value;
+    public Task SendAsync(string to, string subject, string body, CancellationToken cancellationToken = default)
+    { LastBody = body; return Task.CompletedTask; }
 }
 
 internal sealed class TestAuthenticationHandler : AuthenticationHandler<AuthenticationSchemeOptions>

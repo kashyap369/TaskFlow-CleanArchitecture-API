@@ -86,6 +86,7 @@ namespace TaskFlow.Infra.DependencyInjection
                     "OneTimeCodeSettings:SecretKey must contain at least 32 characters.")
                 .ValidateOnStart();
             services.AddSingleton<IOneTimeCodeProtector, OneTimeCodeProtector>();
+            services.AddSingleton<IMeetingGuestCodeProtector, MeetingGuestCodeProtector>();
 
             // Read side (Dapper): a connection factory the query
             // handlers use to run raw SQL straight into DTOs.
@@ -212,6 +213,7 @@ namespace TaskFlow.Infra.DependencyInjection
 
             services.AddScoped<ICalendarEntryRepository, CalendarEntryRepository>();
             services.AddScoped<IMeetingRepository, MeetingRepository>();
+            services.AddScoped<IMeetingGuestAccessRepository, MeetingGuestAccessRepository>();
 
             // Register the Wrok management  repositories
             services.AddScoped<

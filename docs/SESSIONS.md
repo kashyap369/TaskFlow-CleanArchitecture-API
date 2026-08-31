@@ -1,5 +1,15 @@
 # TaskFlow — Session Log
 
+## 2026-08-31 (Organization Meetings Phase 3 — secure guest access)
+
+- Added hash-only private/reusable invitations, rotation, email delivery, meeting-specific OTP
+  challenges and separate opaque guest sessions; no guest path issues a normal TaskFlow JWT.
+- Added stable guest participants, optional exact-email account binding and audited organizer
+  admit/deny/revoke/remove decisions. Revocation immediately invalidates active guest sessions.
+- Added the `AddMeetingGuestAccess` migration and five isolated public guest routes plus access-link
+  rotation. All 52 tests pass with disposable-PostgreSQL guest/session isolation coverage; EF reports
+  no pending model changes. Phase 4 is READY.
+
 ## 2026-08-30 (Organization Meetings Phase 2 — frontend management handoff)
 
 - Angular now consumes nine core meeting routes through lazy organization list/detail surfaces,

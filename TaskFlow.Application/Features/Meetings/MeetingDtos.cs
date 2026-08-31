@@ -16,7 +16,7 @@ public sealed record MeetingDetailDto(int Id, int OrganizationId, int CreatedByU
     int RetentionDays, bool CanManage, IReadOnlyList<MeetingBadgeDto> Badges,
     IReadOnlyList<MeetingParticipantDto> Participants);
 public sealed record MeetingBadgeDto(int Id, string Label, string Color, string? Icon);
-public sealed record MeetingParticipantDto(int Id, int? UserId, string? DisplayName, string? Email,
+public sealed record MeetingParticipantDto(int Id, int? UserId, string? DisplayName, string? Email, bool IsGuest,
     MeetingAccessLevel AccessLevel, int? BadgeDefinitionId, MeetingParticipantState State);
 public sealed record MeetingAccessLinkDto(int Id, MeetingAccessLinkMode Mode, string? LockedEmail,
     MeetingAccessLevel DefaultAccessLevel, int? BadgeDefinitionId, DateTime ExpiresAtUtc,

@@ -58,4 +58,22 @@ public sealed class MeetingTests
         var badge = meeting.AddBadge("Product lead", "indigo", "BriefcaseBusiness");
         Assert.Equal("Product lead", badge.Label);
     }
+
+    [Fact]
+    public void GuestIdentity_IsStable_AndLinkUseLimitCannotBeExceeded()
+    {
+        var meeting = new Meeting(7, 11, "Guest review", null, null, null, "UTC", "guest-review",
+            true, true, true, true, true, false, 90);
+        var link = meeting.AddAccessLink(new string('C', 64), MeetingAccessLinkMode.Reusable, null,
+            MeetingAccessLevel.Participant, null, DateTime.UtcNow.AddHours(1), 1);
+        var first = meeting.AddGuestParticipant("GUEST@EXAMPLE.TEST", "Guest Person",
+            MeetingAccessLevel.Participant, null);
+        var duplicate = meeting.AddGuestParticipant("guest@example.test", "Another Name",
+            MeetingAccessLevel.Participant, null);
+        Assert.Same(first, duplicate);
+        link.RegisterUse(DateTime.UtcNow);
+        Assert.False(link.IsAvailable(DateTime.UtcNow));
+        Assert.False(link.IsActive(DateTime.UtcNow.AddHours(2)));
+        Assert.Throws<InvalidOperationException>(() => link.RegisterUse(DateTime.UtcNow));
+    }
 }

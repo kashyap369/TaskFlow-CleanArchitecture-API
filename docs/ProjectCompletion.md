@@ -10,10 +10,10 @@
 > | **Frontend** | `D:\Projects\TMS\TaskFlowUI\TaskFlowApp` — Angular 20, standalone + signals, Atomic Design, multi-portal |
 > | **Dev URLs** | API `https://localhost:7086/api` · UI `http://localhost:4200` (CORS allows only this origin) |
 >
-> **Last verified implementation:** 2026-08-30, after Organization Meetings Phase 2.
-> Planner Phases 17–23 are complete; see [PLANNER.md](PLANNER.md). The API exposes 138 endpoints;
-> the UI consumes 132. Nine meeting-management routes now power Phase 2; four badge/link metadata
-> routes remain staged for Phase 3, and the two long-standing deliberate skips remain unchanged.
+> **Last verified implementation:** 2026-08-31, after Organization Meetings Phase 3.
+> Planner Phases 17–23 are complete; see [PLANNER.md](PLANNER.md). The API exposes 144 endpoints;
+> the UI consumes 142. All 19 meeting routes are now bound; only the two long-standing deliberate
+> skips remain unchanged.
 
 ---
 
@@ -57,10 +57,10 @@ has been exercised against a running API — not that the code compiles.
 | | Backend | Frontend |
 |---|---|---|
 | **Phases complete** | **13 of 13** (+ a security pass and an IDOR fix) | **27 session phases**; roadmap Phases 0–8 ✅ (Phase 6 admin extras closed by session Phase 27) |
-| **Version status** | **Pre-Planner product complete; Planner Phases 17–23 and Meetings Phases 0–2 complete** | **All three portals complete; Planner Phases 17–23 and Meetings Phases 0–2 complete** |
-| **Endpoints** | **138** exposed (17 controllers; excludes the Angular-template `WeatherForecastController`) | **132 consumed.** Four meeting badge/link metadata routes are staged for Phase 3; the 2 deliberate skips below remain |
-| **Quality gates** | `dotnet test` ✅ **49/49** · build ✅ · EF model drift ✅ | `ng lint` **0 errors** · production build ✅ · **262/262** browser specs · WCAG AA on all 42 token pairings |
-| **Biggest gap** | **Meetings Phase 3 — secure invitations, share links and guest sessions** | **Meetings Phase 3 — guest link and lobby experience** |
+| **Version status** | **Pre-Planner product complete; Planner Phases 17–23 and Meetings Phases 0–3 complete** | **All three portals complete; Planner Phases 17–23 and Meetings Phases 0–3 complete** |
+| **Endpoints** | **144** exposed (18 controllers; excludes the Angular-template `WeatherForecastController`) | **142 consumed.** All 19 meeting routes are bound; the 2 deliberate skips below remain |
+| **Quality gates** | `dotnet test` ✅ **52/52** · build ✅ · EF model drift ✅ | `ng lint` **0 errors** · production build ✅ · **267/267** browser specs · WCAG AA on all 42 token pairings |
+| **Biggest gap** | **Meetings Phase 4 — custom LiveKit room and attendance** | **Meetings Phase 4 — prejoin and custom room experience** |
 | **Vision coverage** (§3.0) | **Organization 100% · Reporting 100% · Individual 100%** | **All three portals complete** — Organization, Individual and Admin |
 
 > **2026-07-26 — the two sides are now in sync.** Backend Phases 10–13 closed every ⛔/⚠️/⬜ row, and
@@ -87,7 +87,8 @@ Both are live and correct; nothing is blocked on them.
 | Phase 0 — LiveKit feasibility | ✅ | ✅ | Pinned provider stack and SDKs, provider-neutral backend boundary, scoped-token and signed/idempotent-webhook proofs, plus a development-only two-browser mic/camera/screen-share/reconnect harness. No production route or schema change. |
 | Phase 1 — authoritative meeting core | ✅ | — | Aggregate/lifecycle, additive migration, three permissions and 13 feature-gated management/metadata routes. Real PostgreSQL coverage proves participant access and organization isolation. |
 | Phase 2 — management and scheduling | ✅ | ✅ | Lazy list/detail, create/edit/lifecycle and registered-participant UI consume nine routes; scheduled/live meetings derive once into Calendar. |
-| Phases 3–7 — product delivery | ⬜ | ⬜ | Phase 3 is READY; the canonical contract is [MEETINGS.md](MEETINGS.md). |
+| Phase 3 — secure guest access | ✅ | ✅ | Hash-only private/reusable links, meeting OTPs, opaque guest sessions, organizer decisions and a public lobby. All 19 meeting routes are bound. |
+| Phases 4–7 — product delivery | ⬜ | ⬜ | Phase 4 is READY; the canonical contract is [MEETINGS.md](MEETINGS.md). |
 
 ### 3.0 Vision coverage — `OVERVIEW.md` read as a spec
 
@@ -193,7 +194,8 @@ a running API.
 | **Calendar task scheduling** | `PUT /task/{id}/schedule` | ✅ | ✅ | ⬜ | Phase 2: focused date-only command, `ManageTasks`, shared filters, details, authorized drag/resize and visible rollback; automated end-to-end gates pass, live API/browser mutation not rerun in this session |
 | **Calendar-owned events** | `GET /calendar/organization/{id}`, `POST`/`PUT /calendar`, `DELETE /calendar/{id}` | ✅ | ✅ | ✅ | Phase 4: organization events, member leave, holidays, UTC/timezone-aware timed entries, all-day validation and bounded Daily/Weekly/Monthly recurrence under `ManageCalendar` |
 | **Meeting lifecycle** | 7 on `/meeting` for create/list/detail/update/start/end/cancel | ✅ | ✅ | ⬜ | Phase 2: lazy list/detail, validated instant/scheduled create/edit and permission-aware start/end/cancel. Automated gates pass; a credentialed live mutation was not run. |
-| **Meeting badges, participants and access links** | 6 on `/meeting/{id}` metadata routes | ✅ | 🟡 | ⬜ | Initial badge definitions plus registered-member add/revoke are surfaced. Separate badge creation and all three access-link routes stay staged for Phase 3. |
+| **Meeting badges, participants and access links** | 7 on `/meeting/{id}` metadata routes | ✅ | ✅ | ⬜ | Badge creation, registered/guest participant decisions and private/reusable link list/create/rotate/revoke are surfaced. Raw tokens appear once. |
+| **Public meeting guest access** | 5 on `/meeting/guest` | ✅ | ✅ | ⬜ | Fragment-only invite capture, email-code verification, optional exact-email account binding, opaque tab session restore, display-name confirmation and scoped lobby. Automated HTTP/browser gates pass; no production guest was created. |
 | **Personal tasks** | `POST /task/personal`, `GET /task/mine/personal` | ✅ | ✅ | ✅ | Member portal **My tasks** page: filters, paging, create/edit drawer, lifecycle |
 | **Personal projects** | `POST /project/personal`, `GET /project/mine/personal` + shared project CRUD | ✅ | ✅ | ✅ | Creator-only projects; My Tasks can filter/create within a private project |
 | **Planner resources and secure files** | 8 on `/planner/projects/{id}/board/resources` | ✅ | ✅ | ✅ | Notes, links, documents, private authorized preview/download, update, unlink/relink, and delete; binaries stay outside scene JSON |
@@ -384,6 +386,7 @@ Docker + CI/CD.
 
 | Date | Side | Change |
 |---|---|---|
+| 2026-08-31 | **Both** | **Completed Organization Meetings Phase 3.** Added hash-only private/reusable invitations, rotation/revocation, invitation and OTP mail, stable guest participants, exact-email optional account binding, opaque one-meeting guest sessions and audited organizer admit/deny/revoke/remove decisions. Angular now manages badges/links and provides a fragment-scrubbing public verification/lobby flow outside protected layouts. Routes are **144 total / 142 consumed**; all 19 meeting routes are bound. Backend tests pass **52/52**, frontend specs **267/267**, and production build, lint/design lint, detector, 42 contrast checks, responsive browser QA and EF drift pass. Phase 4 is READY. |
 | 2026-08-30 | UI | **Completed Organization Meetings Phase 2.** Added lazy Meetings navigation/list/detail, Upcoming/Live/Past search/filter/paging, validated instant/scheduled create/edit, lifecycle actions, registered-participant access and truthful later-phase placeholders. Calendar derives timed meetings without duplicate rows. Nine meeting routes are now bound (**132/138 consumed**); the four badge/link metadata routes stay staged for Phase 3. All **262/262** specs, production build, lint/design lint, detector and all 42 contrast checks pass. |
 | 2026-08-30 | API | **Completed Organization Meetings Phase 1.** Added the meeting lifecycle aggregate with badge/participant/hash-only access-link/attendance foundations, additive `AddMeetingCore` migration, `CreateMeetings`/`ManageMeetings`/`RecordMeetings`, validated staged feature configuration, and 13 authenticated management/metadata routes. Raw access tokens are returned once and never exposed by later reads. Routes are now **138 total / 123 consumed**; backend build and all **49/49** tests pass, disposable PostgreSQL proves participant access plus outsider/cross-organization denial, and EF reports no drift. Phase 2 is READY. |
 | 2026-08-30 | **Both** | **Completed Organization Meetings Phase 0.** Pinned LiveKit Server `1.13.6`, .NET server SDK `1.2.3`, JavaScript client `2.22.1` and Redis `8.2.9-alpine`; added the provider-neutral media boundary, local Compose/config, five-minute scoped-token proof and signed/idempotent-webhook proof. A development-only Angular harness verified two isolated browser contexts exchanging microphone/camera, screen sharing and fresh-token reconnect with real webhook delivery. Production endpoint counts remain **125 / 123**; backend tests pass 42/42, frontend specs 258/258, builds/lint/design/contrast and EF drift pass. Phase 1 is READY. |

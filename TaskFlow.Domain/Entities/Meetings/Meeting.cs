@@ -117,6 +117,32 @@ public sealed class Meeting : AuditableEntity, IAggregateRoot
         return participant;
     }
 
+    public MeetingParticipant AddGuestParticipant(string normalizedEmail, string displayName,
+        MeetingAccessLevel accessLevel, int? badgeDefinitionId)
+    {
+        var existing = _participants.FirstOrDefault(x => !x.IsDeleted && x.NormalizedEmail == normalizedEmail.Trim().ToUpperInvariant());
+        if (existing is not null) return existing;
+        if (accessLevel == MeetingAccessLevel.Host) throw new InvalidOperationException("Guests cannot be meeting hosts.");
+        if (badgeDefinitionId.HasValue && !_badges.Any(x => x.Id == badgeDefinitionId && !x.IsDeleted))
+            throw new InvalidOperationException("Meeting badge not found.");
+        var participant = MeetingParticipant.Guest(normalizedEmail, displayName, accessLevel, badgeDefinitionId);
+        _participants.Add(participant); MarkAsUpdated(); return participant;
+    }
+
+    public void BindGuestParticipant(int participantId, int userId)
+    {
+        var participant = _participants.Single(x => x.Id == participantId && !x.IsDeleted);
+        if (_participants.Any(x => x.Id != participantId && !x.IsDeleted && x.UserId == userId))
+            throw new InvalidOperationException("This account is already assigned to the meeting.");
+        participant.BindRegisteredUser(userId); MarkAsUpdated();
+    }
+
+    public void ConfirmGuestDisplayName(int participantId, string displayName)
+    {
+        var participant = _participants.Single(x => x.Id == participantId && !x.IsDeleted);
+        participant.ConfirmDisplayName(displayName); MarkAsUpdated();
+    }
+
     public void UpdateParticipant(int participantId, MeetingAccessLevel accessLevel,
         int? badgeDefinitionId, MeetingParticipantState state)
     {

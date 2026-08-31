@@ -37,6 +37,30 @@ public sealed class MeetingParticipant : AuditableEntity
     internal static MeetingParticipant RegisteredHost(int userId) => new(userId, MeetingAccessLevel.Host, null, MeetingParticipantState.Admitted);
     internal static MeetingParticipant Registered(int userId, MeetingAccessLevel accessLevel, int? badgeDefinitionId) =>
         new(userId, accessLevel, badgeDefinitionId, MeetingParticipantState.Invited);
+    internal static MeetingParticipant Guest(string normalizedEmail, string displayName,
+        MeetingAccessLevel accessLevel, int? badgeDefinitionId)
+    {
+        if (string.IsNullOrWhiteSpace(normalizedEmail)) throw new ArgumentException("Guest email is required.");
+        if (string.IsNullOrWhiteSpace(displayName) || displayName.Trim().Length > 120)
+            throw new ArgumentException("Guest display name must be 1-120 characters.");
+        return new MeetingParticipant
+        {
+            NormalizedEmail = normalizedEmail.Trim().ToUpperInvariant(),
+            DisplayName = displayName.Trim(), AccessLevel = accessLevel,
+            BadgeDefinitionId = badgeDefinitionId, State = MeetingParticipantState.Invited
+        };
+    }
+    internal void BindRegisteredUser(int userId)
+    {
+        if (userId <= 0) throw new ArgumentOutOfRangeException(nameof(userId));
+        UserId = userId; MarkAsUpdated();
+    }
+    internal void ConfirmDisplayName(string displayName)
+    {
+        if (string.IsNullOrWhiteSpace(displayName) || displayName.Trim().Length > 120)
+            throw new ArgumentException("Display name must be 1-120 characters.");
+        DisplayName = displayName.Trim(); MarkAsUpdated();
+    }
     internal void Update(MeetingAccessLevel accessLevel, int? badgeDefinitionId, MeetingParticipantState state)
     { AccessLevel = accessLevel; BadgeDefinitionId = badgeDefinitionId; State = state; MarkAsUpdated(); }
 }
@@ -67,6 +91,65 @@ public sealed class MeetingAccessLink : AuditableEntity
     }
     internal void Revoke(DateTime utcNow)
     { if (!RevokedAtUtc.HasValue) { RevokedAtUtc = DateTime.SpecifyKind(utcNow, DateTimeKind.Utc); MarkAsUpdated(); } }
+    public bool IsActive(DateTime utcNow) => RevokedAtUtc is null && utcNow < ExpiresAtUtc;
+    public bool HasCapacity => !MaximumUses.HasValue || UseCount < MaximumUses.Value;
+    public bool IsAvailable(DateTime utcNow) => IsActive(utcNow) && HasCapacity;
+    public void RegisterUse(DateTime utcNow)
+    {
+        if (!IsAvailable(utcNow)) throw new InvalidOperationException("Meeting access link is no longer available.");
+        UseCount++; MarkAsUpdated();
+    }
+}
+
+public sealed class MeetingGuestChallenge : AuditableEntity
+{
+    public int MeetingId { get; private set; }
+    public int AccessLinkId { get; private set; }
+    public string NormalizedEmail { get; private set; } = string.Empty;
+    public string CodeHash { get; private set; } = string.Empty;
+    public DateTime ExpiresAtUtc { get; private set; }
+    public DateTime ResendAvailableAtUtc { get; private set; }
+    public int FailedAttempts { get; private set; }
+    public int MaxAttempts { get; private set; }
+    public DateTime? ConsumedAtUtc { get; private set; }
+    private MeetingGuestChallenge() { }
+    public MeetingGuestChallenge(int meetingId, int accessLinkId, string normalizedEmail, string codeHash,
+        DateTime expiresAtUtc, DateTime resendAvailableAtUtc, int maxAttempts)
+    {
+        MeetingId = meetingId; AccessLinkId = accessLinkId;
+        NormalizedEmail = normalizedEmail.Trim().ToUpperInvariant(); CodeHash = codeHash;
+        ExpiresAtUtc = DateTime.SpecifyKind(expiresAtUtc, DateTimeKind.Utc);
+        ResendAvailableAtUtc = DateTime.SpecifyKind(resendAvailableAtUtc, DateTimeKind.Utc);
+        MaxAttempts = maxAttempts;
+    }
+    public bool CanAttempt(DateTime utcNow) => ConsumedAtUtc is null && utcNow < ExpiresAtUtc && FailedAttempts < MaxAttempts;
+    public void Fail(DateTime utcNow) { if (!CanAttempt(utcNow)) return; FailedAttempts++; if (FailedAttempts >= MaxAttempts) ConsumedAtUtc = utcNow; MarkAsUpdated(); }
+    public void Consume(DateTime utcNow) { ConsumedAtUtc ??= DateTime.SpecifyKind(utcNow, DateTimeKind.Utc); MarkAsUpdated(); }
+}
+
+public sealed class MeetingGuestSession : AuditableEntity
+{
+    public int MeetingId { get; private set; }
+    public int ParticipantId { get; private set; }
+    public string TokenHash { get; private set; } = string.Empty;
+    public DateTime ExpiresAtUtc { get; private set; }
+    public DateTime? RevokedAtUtc { get; private set; }
+    private MeetingGuestSession() { }
+    public MeetingGuestSession(int meetingId, int participantId, string tokenHash, DateTime expiresAtUtc)
+    { MeetingId = meetingId; ParticipantId = participantId; TokenHash = tokenHash; ExpiresAtUtc = DateTime.SpecifyKind(expiresAtUtc, DateTimeKind.Utc); }
+    public bool IsActive(DateTime utcNow) => RevokedAtUtc is null && utcNow < ExpiresAtUtc;
+    public void Revoke(DateTime utcNow) { RevokedAtUtc ??= DateTime.SpecifyKind(utcNow, DateTimeKind.Utc); MarkAsUpdated(); }
+}
+
+public sealed class MeetingGuestDecision : AuditableEntity
+{
+    public int MeetingId { get; private set; }
+    public int ParticipantId { get; private set; }
+    public int ActorUserId { get; private set; }
+    public MeetingGuestDecisionKind Kind { get; private set; }
+    private MeetingGuestDecision() { }
+    public MeetingGuestDecision(int meetingId, int participantId, int actorUserId, MeetingGuestDecisionKind kind)
+    { MeetingId = meetingId; ParticipantId = participantId; ActorUserId = actorUserId; Kind = kind; }
 }
 
 public sealed class MeetingAttendance : AuditableEntity

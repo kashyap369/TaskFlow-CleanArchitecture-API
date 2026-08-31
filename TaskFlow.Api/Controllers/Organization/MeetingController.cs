@@ -41,6 +41,10 @@ public sealed class MeetingController(IMediator mediator) : ControllerBase
     public async Task<IActionResult> End(int meetingId, CancellationToken ct)
     { await mediator.Send(new EndMeetingCommand(meetingId), ct); return NoContent(); }
 
+    [HttpPost("{meetingId:int}/join-token")]
+    public async Task<IActionResult> JoinToken(int meetingId, CancellationToken ct) =>
+        Ok(await mediator.Send(new GetMeetingJoinTokenCommand(meetingId), ct));
+
     [HttpPost("{meetingId:int}/cancel")]
     public async Task<IActionResult> Cancel(int meetingId, CancellationToken ct)
     { await mediator.Send(new CancelMeetingCommand(meetingId), ct); return NoContent(); }
@@ -69,4 +73,8 @@ public sealed class MeetingController(IMediator mediator) : ControllerBase
     [HttpDelete("{meetingId:int}/access-links/{linkId:int}")]
     public async Task<IActionResult> RevokeAccessLink(int meetingId, int linkId, CancellationToken ct)
     { await mediator.Send(new RevokeMeetingAccessLinkCommand(meetingId, linkId), ct); return NoContent(); }
+
+    [HttpPost("{meetingId:int}/access-links/{linkId:int}/rotate")]
+    public async Task<IActionResult> RotateAccessLink(int meetingId, int linkId, CancellationToken ct) =>
+        Ok(await mediator.Send(new RotateMeetingAccessLinkCommand(meetingId, linkId), ct));
 }

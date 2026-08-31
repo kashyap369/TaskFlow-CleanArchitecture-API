@@ -76,3 +76,39 @@ public sealed class MeetingAttendanceConfiguration : IEntityTypeConfiguration<Me
         builder.HasOne<MeetingParticipant>().WithMany().HasForeignKey(x => x.ParticipantId).OnDelete(DeleteBehavior.Restrict);
     }
 }
+
+public sealed class MeetingGuestChallengeConfiguration : IEntityTypeConfiguration<MeetingGuestChallenge>
+{
+    public void Configure(EntityTypeBuilder<MeetingGuestChallenge> builder)
+    {
+        builder.ToTable("MeetingGuestChallenges"); builder.HasKey(x => x.Id); builder.Ignore(x => x.DomainEvents);
+        builder.Property(x => x.NormalizedEmail).HasMaxLength(320).IsRequired(); builder.Property(x => x.CodeHash).HasMaxLength(64).IsRequired();
+        builder.HasIndex(x => new { x.AccessLinkId, x.NormalizedEmail, x.CreatedAt });
+        builder.HasOne<Meeting>().WithMany().HasForeignKey(x => x.MeetingId).OnDelete(DeleteBehavior.Cascade);
+        builder.HasOne<MeetingAccessLink>().WithMany().HasForeignKey(x => x.AccessLinkId).OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+public sealed class MeetingGuestSessionConfiguration : IEntityTypeConfiguration<MeetingGuestSession>
+{
+    public void Configure(EntityTypeBuilder<MeetingGuestSession> builder)
+    {
+        builder.ToTable("MeetingGuestSessions"); builder.HasKey(x => x.Id); builder.Ignore(x => x.DomainEvents);
+        builder.Property(x => x.TokenHash).HasMaxLength(64).IsRequired(); builder.HasIndex(x => x.TokenHash).IsUnique();
+        builder.HasIndex(x => new { x.MeetingId, x.ParticipantId, x.ExpiresAtUtc });
+        builder.HasOne<Meeting>().WithMany().HasForeignKey(x => x.MeetingId).OnDelete(DeleteBehavior.Cascade);
+        builder.HasOne<MeetingParticipant>().WithMany().HasForeignKey(x => x.ParticipantId).OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+public sealed class MeetingGuestDecisionConfiguration : IEntityTypeConfiguration<MeetingGuestDecision>
+{
+    public void Configure(EntityTypeBuilder<MeetingGuestDecision> builder)
+    {
+        builder.ToTable("MeetingGuestDecisions"); builder.HasKey(x => x.Id); builder.Ignore(x => x.DomainEvents);
+        builder.Property(x => x.Kind).HasConversion<int>(); builder.HasIndex(x => new { x.MeetingId, x.ParticipantId, x.CreatedAt });
+        builder.HasOne<Meeting>().WithMany().HasForeignKey(x => x.MeetingId).OnDelete(DeleteBehavior.Cascade);
+        builder.HasOne<MeetingParticipant>().WithMany().HasForeignKey(x => x.ParticipantId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<User>().WithMany().HasForeignKey(x => x.ActorUserId).OnDelete(DeleteBehavior.Restrict);
+    }
+}

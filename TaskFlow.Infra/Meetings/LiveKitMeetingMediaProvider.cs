@@ -15,6 +15,8 @@ public sealed class LiveKitMeetingMediaProvider : IMeetingMediaProvider
         _webhookReceiver = new WebhookReceiver(_settings.ApiKey, _settings.ApiSecret);
     }
 
+    public string WebSocketUrl => _settings.Url;
+
     public MeetingJoinToken CreateJoinToken(MeetingJoinTokenRequest request)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(request.RoomName);

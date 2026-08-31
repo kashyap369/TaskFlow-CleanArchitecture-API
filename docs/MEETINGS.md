@@ -1,6 +1,6 @@
 # TaskFlow Meetings — Canonical End-to-End Delivery Plan
 
-> **Status:** PHASES 0–2 DONE — Phase 3 is READY.
+> **Status:** PHASES 0–3 DONE — Phase 4 is IN PROGRESS.
 >
 > **Canonical scope:** Angular in `D:\Projects\TMS\TaskFlowUI\TaskFlowApp`, ASP.NET Core API in
 > `D:\Projects\TMS\TaskFlow`, PostgreSQL for durable state, TaskFlow private object storage for
@@ -416,8 +416,8 @@ Official references to re-verify during implementation:
 | 0 | Architecture contract and LiveKit feasibility spike | None | DONE |
 | 1 | Meeting domain, persistence, permissions and core API | Phase 0 | DONE |
 | 2 | Organization meeting management UI and scheduling | Phase 1 | DONE |
-| 3 | Secure email invitations, share links and guest lobby | Phase 2 | READY |
-| 4 | Custom LiveKit room for registered users and guests | Phase 3 | NOT STARTED |
+| 3 | Secure email invitations, share links and guest lobby | Phase 2 | DONE |
+| 4 | Custom LiveKit room for registered users and guests | Phase 3 | IN PROGRESS |
 | 5 | Durable chat, notes, files and complete meeting archive | Phase 4 | NOT STARTED |
 | 6 | Consent-aware recording, Egress and playback | Phase 5 | NOT STARTED |
 | 7 | Security, scale, observability and production rollout | Phase 6 | NOT STARTED |
@@ -581,6 +581,33 @@ use count and revoke; OTP endpoints resist enumeration/brute force; guests canno
 other-meeting APIs; reload/reverification behavior is documented; mail, integration and browser tests
 cover registered match, unregistered guest, wrong email/code, expired/revoked link and duplicate use.
 
+**Completion evidence (2026-08-31):**
+
+- Added private invitations and reusable links with email locking, expiry, use limits, access/badge
+  defaults, one-time raw-token disclosure, invitation mail, rotation and revocation. PostgreSQL stores
+  only token hashes; distinct verified participants consume capacity once, and a previously verified
+  email may reverify without consuming another use.
+- Added meeting-only six-digit challenges with HMAC hashes, ten-minute expiry, sixty-second resend
+  cooldown, five-attempt cap and a dedicated public rate policy. Verification creates a stable guest
+  participant and a separate opaque `X-Meeting-Guest-Session`; it never issues a TaskFlow JWT. An
+  authenticated account is bound only after explicit confirmation and an exact verified-email match.
+- Added the public `/meetings/join` flow outside protected layouts. The invitation token is accepted
+  only from the URL fragment, copied into tab-scoped pending storage and scrubbed from the address bar
+  before inspection. A verified guest session restores on reload until expiry or organizer revocation;
+  after expiry, the guest must reverify through an active original link. Private links remain locked to
+  their email throughout this flow.
+- Added organizer link management and guest admit/deny/revoke/remove controls. Non-admit decisions
+  revoke active guest sessions, and guest sessions cannot authorize organization or other-meeting API
+  access. The lobby truthfully keeps room media unavailable until Phase 4.
+- Added the additive `AddMeetingGuestAccess` migration, invitation/code email templates, focused domain
+  and protector tests, and disposable-PostgreSQL HTTP coverage for wrong code, anonymous verification,
+  link capacity, organization-route denial and session invalidation after revocation. Backend tests pass
+  `52/52`; frontend specs pass `267/267`; production build, Angular/design lint, Impeccable detector and
+  all `42` contrast checks pass. Responsive browser verification proved immediate fragment scrubbing,
+  clean invalid/revoked handling and no horizontal overflow at 390px.
+- Official LiveKit client/token/webhook contracts were rechecked; `livekit-client` remains pinned at
+  `2.22.1` and isolated behind the Phase 0 probe. Phase 3 adds no media-provider dependency.
+
 ### Phase 4 — Custom LiveKit room
 
 **Goal:** registered participants and verified guests can hold a reliable TaskFlow-branded call.
@@ -691,6 +718,20 @@ Until approved, phases use the conservative defaults stated in this document and
 guest/recording behavior disabled in production.
 
 ## 13. Evidence and decision log
+
+- **2026-08-31 — Phase 4 in progress:** added server-derived, opaque, short-lived join credentials
+  for both assigned members and verified/admitted guest sessions, plus isolated authenticated and
+  guest room routes consuming the TaskFlow-owned LiveKit wrapper. The API and production Angular
+  build pass. Full Phase 4 completion remains pending: Docker/LiveKit is not installed on this host,
+  so the required multi-browser call, reconnect, moderation and signed-attendance evidence cannot
+  yet be run; the remaining room controls, moderation endpoints and attendance webhook persistence
+  must be completed before this phase can be marked DONE.
+
+- **2026-08-31 — Phase 3 completed:** shipped hash-only private/reusable invitations, meeting-specific
+  OTP verification, tab-scoped guest sessions, organizer guest decisions and the public guest lobby.
+  The API now exposes 19 meeting routes and Angular consumes all 19; backend tests pass `52/52`,
+  frontend specs pass `267/267`, and build/lint/design/contrast/EF-drift/browser gates are green.
+  Phase 4 is READY.
 
 - **2026-08-30 — Phase 2 completed:** shipped the organization Meetings navigation, list/detail,
   validated management/lifecycle and registered-participant UI, plus duplicate-free Calendar
