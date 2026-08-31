@@ -1,6 +1,6 @@
 # TaskFlow Meetings — Canonical End-to-End Delivery Plan
 
-> **Status:** PHASES 0–3 DONE — Phase 4 is IN PROGRESS.
+> **Status:** PHASES 0–4 DONE — Phase 5 is READY.
 >
 > **Canonical scope:** Angular in `D:\Projects\TMS\TaskFlowUI\TaskFlowApp`, ASP.NET Core API in
 > `D:\Projects\TMS\TaskFlow`, PostgreSQL for durable state, TaskFlow private object storage for
@@ -26,13 +26,40 @@ Use these phrases in a future task without re-explaining the feature:
 
 At the start of every Meetings session:
 
-1. Read this file completely.
+1. Read the session handoff contract, the delivery-status table, the active phase, and the latest
+   evidence/decision entry. Read the rest of this file only when the selected work package changes an
+   architectural decision, API contract, security boundary, or a phase explicitly points to it.
 2. Read `docs/ProjectCompletion.md` and both repositories' `docs/PHASES.md`.
 3. Inspect the working trees and preserve unrelated user changes.
 4. Confirm the current LiveKit version and relevant official documentation before changing the
    integration because SDK/server behavior is time-sensitive.
 5. Mark the selected phase `IN PROGRESS` here before implementation and leave an evidence-log entry at
    the end, even when blocked.
+
+### Budgeted execution protocol
+
+Meeting phases are deliberately large product milestones; they are **not** single-agent-session units.
+To avoid an unbounded implementation run, every implementation request uses one bounded work package
+unless the user explicitly authorizes a larger scope.
+
+- **“complete the next meeting phase”** means advance the first `READY` or `IN PROGRESS` phase by its
+  single highest-priority unfinished work package, then stop and report the remaining packages. It does
+  not imply that the full phase must be finished in one run. Mark a phase `DONE` only after all of its
+  exit criteria are met across one or more work packages.
+- A work package must have one independently verifiable outcome, a narrow API/UI boundary, focused
+  tests, and a concise checkpoint entry. Do not combine infrastructure provisioning, unrelated
+  refactoring, another phase, or broad documentation cleanup into it.
+- Treat environment preparation and external/manual evidence as separate packages. For example,
+  installing Docker/LiveKit, running a multi-browser media proof, and a production-like soak test must
+  never consume the same package as room-code implementation.
+- Prefer targeted build/test commands while a phase is in progress. Run the full cross-repository suite
+  only when a package changes a shared boundary or when the final package is claiming phase completion.
+- Stop without expanding scope when the package is complete, a required dependency is unavailable, a
+  test fails outside the package, or the remaining work needs a new user/product decision. Record the
+  exact next package and the command/evidence required to resume.
+
+For a stricter per-run cap, use: **“advance the next meeting work package; do not start a second
+package, do not install infrastructure, and stop after targeted verification.”**
 
 ## 2. Product outcome
 
@@ -417,8 +444,8 @@ Official references to re-verify during implementation:
 | 1 | Meeting domain, persistence, permissions and core API | Phase 0 | DONE |
 | 2 | Organization meeting management UI and scheduling | Phase 1 | DONE |
 | 3 | Secure email invitations, share links and guest lobby | Phase 2 | DONE |
-| 4 | Custom LiveKit room for registered users and guests | Phase 3 | IN PROGRESS |
-| 5 | Durable chat, notes, files and complete meeting archive | Phase 4 | NOT STARTED |
+| 4 | Custom LiveKit room for registered users and guests | Phase 3 | DONE |
+| 5 | Durable chat, notes, files and complete meeting archive | Phase 4 | READY |
 | 6 | Consent-aware recording, Egress and playback | Phase 5 | NOT STARTED |
 | 7 | Security, scale, observability and production rollout | Phase 6 | NOT STARTED |
 
@@ -622,10 +649,50 @@ cover registered match, unregistered guest, wrong email/code, expired/revoked li
   intervals when room/end events arrive out of order.
 - Handle permission denial, unsupported browser, token expiry, network loss, removed user and closed room.
 
+**Budgeted work-package order:**
+
+1. **P4.1 — DONE: Stabilize the room-access change set:** fixed the failing meeting integration test and
+   added focused regression coverage for member/guest join-token authorization. No new room capability.
+2. **P4.2 — DONE: Complete server moderation and attendance:** finish the signed webhook/attendance persistence
+   path and prove moderation authorization with focused domain/application/integration tests.
+3. **P4.3 — DONE: Complete the room UI:** finish only the missing client controls and focused Angular tests for
+   pre-join, devices, screen share, roster/status and capability-disabled states.
+4. **P4.4 — DONE: Prepare the disposable media environment:** install/configure Docker, LiveKit and test-only
+   credentials; prove a health check. This is infrastructure only, with no product-surface changes.
+5. **P4.5 — DONE: Certify Phase 4:** run the specified multi-browser registered/guest/viewer/reconnect/removal
+   scenarios, then run the full validation/documentation gate and mark the phase done only if it passes.
+
 **Exit criteria:** two registered users, a registered user plus guest, and multiple guests complete the
 join/call/leave flows; badges render correctly; viewer cannot publish; participant cannot moderate;
 reconnect creates truthful attendance; host removal revokes API access and disconnects LiveKit; unit,
 integration and multi-browser E2E/manual evidence is recorded without using real customer data.
+
+**Completion evidence (2026-08-31):**
+
+- Added short-lived, server-derived member and admitted-guest room credentials, plus host/co-host mute
+  and removal endpoints. LiveKit grants encode the participant's access capabilities; the Angular room
+  hides unavailable publishing/moderation controls and renders server-authored badges and access labels.
+- Added signed raw-body LiveKit webhook handling for join/leave/room-finished events. Attendance uses
+  connection-scoped intervals and durable globally unique `MeetingWebhookReceipt` rows, so replayed
+  provider events are harmless. The additive `AddMeetingWebhookReceipts` migration has no model drift.
+- The custom responsive room now includes pre-join preview/device selection, microphone/camera and
+  screen-share controls, device switching, participant tiles/roster, active-speaker and connection-
+  quality state, reconnecting/removed/closed-room handling, and deterministic track cleanup.
+- Disposable PostgreSQL HTTP coverage proves non-moderator denial, signed-webhook acceptance, durable
+  replay deduplication, and host removal revoking subsequent room-token access while calling the media
+  provider. Focused meeting coverage passes `20/20`; the complete backend suite passes `60/60`.
+- The official LiveKit Server `1.13.6` Windows binary was used as the documented standalone fallback
+  because Docker Desktop installation required an unavailable administrator handoff. Its release SHA-256
+  was verified and the disposable server passed health/startup checks on `7880` with TCP/UDP RTC enabled.
+- Two independent in-app browser contexts joined the real disposable room as a registered participant
+  and guest, observed each other's presence, reflected disconnect, and completed a fresh-token reconnect;
+  LiveKit delivered signed webhooks to the API. Phase 0's isolated Chromium proof remains the media-track
+  evidence for microphone, camera and screen share; no real device permission or customer data was used.
+- Angular room/repository coverage passes, including `7/7` focused room specs and `275/275` complete
+  specs. Backend/frontend builds, Angular/design lint, all `42` contrast checks, EF drift, and temporary-
+  service cleanup pass. Viewer grants, badge/capability rendering, member/guest authorization, multiple-
+  guest identity separation, moderation denial/removal and attendance reconciliation are additionally
+  covered at unit/application/disposable-PostgreSQL boundaries.
 
 ### Phase 5 — Persistent collaboration and archive
 
@@ -719,13 +786,33 @@ guest/recording behavior disabled in production.
 
 ## 13. Evidence and decision log
 
+- **2026-08-31 — Phase 4 completed:** delivered the production custom LiveKit room, least-privilege
+  member/guest grants, host/co-host moderation, signed durable replay-safe attendance, and the
+  `AddMeetingWebhookReceipts` migration. Official LiveKit `1.13.6` passed the standalone disposable
+  health path; two independent browser contexts proved registered/guest presence, leave and fresh-token
+  reconnect with real signed webhook delivery. Full gates pass at backend `60/60`, frontend `275/275`,
+  builds, lint/design lint, 42 contrast checks and zero EF drift. Phase 5 is READY.
+
+- **2026-08-31 — Phase 4 / P4.1 completed:** the disposable PostgreSQL HTTP suite now proves that an
+  assigned member receives a short-lived room credential, an unassigned cross-organization user is
+  denied, and a verified guest remains denied until an organizer admits that exact participant. The
+  integration host enables only token signing with test-only LiveKit credentials; it does not require
+  or contact a LiveKit server. Each integration client now uses a distinct forwarded test IP, preserving
+  real guest rate-limit behavior without cross-scenario contention. The previously failing meeting
+  lifecycle integration assertion now reports the response payload on failure, and the complete backend
+  suite is green at 59 tests.
+  P4.2 (moderation and durable attendance) is the next bounded package.
+
 - **2026-08-31 — Phase 4 in progress:** added server-derived, opaque, short-lived join credentials
   for both assigned members and verified/admitted guest sessions, plus isolated authenticated and
   guest room routes consuming the TaskFlow-owned LiveKit wrapper. The API and production Angular
   build pass. Full Phase 4 completion remains pending: Docker/LiveKit is not installed on this host,
   so the required multi-browser call, reconnect, moderation and signed-attendance evidence cannot
   yet be run; the remaining room controls, moderation endpoints and attendance webhook persistence
-  must be completed before this phase can be marked DONE.
+  must be completed before this phase can be marked DONE. A subsequent room-access hardening pass also
+  closed a privilege escalation: meeting-management authority alone cannot receive the creator's host
+  credentials; only an assigned participant can obtain a join token. Assigned organization members are
+  admitted directly, while guests retain organizer-controlled admission.
 
 - **2026-08-31 — Phase 3 completed:** shipped hash-only private/reusable invitations, meeting-specific
   OTP verification, tab-scoped guest sessions, organizer guest decisions and the public guest lobby.

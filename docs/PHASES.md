@@ -2,15 +2,15 @@
 
 > Keep the Current Status section up to date at the end of every session.
 
-## ✅ Organization Meetings Phase 3 — secure invitations and guest access (2026-08-31)
+## ✅ Organization Meetings Phase 4 — custom LiveKit room (2026-08-31)
 
-Phases 0–3 are DONE and Phase 4 is READY. Added hash-only private/reusable meeting links with
-one-time disclosure, rotation, invitation mail, expiry and distinct-participant use limits; persisted
-HMAC-hashed meeting OTPs with cooldown, expiry and attempt caps; opaque one-meeting guest sessions;
-optional exact-email registered binding; and audited admit/deny/revoke/remove decisions that revoke
-sessions when access is withdrawn. The additive `AddMeetingGuestAccess` migration has no model drift.
-All 52 backend tests pass, including disposable-PostgreSQL HTTP coverage for wrong codes, link capacity,
-organization-route denial and revocation invalidation.
+Phases 0–4 are DONE and Phase 5 is READY. Added least-privilege registered/guest room credentials,
+host/co-host mute and removal, signed raw-body webhook processing, connection-scoped attendance and
+durable replay receipts through `AddMeetingWebhookReceipts`. Disposable PostgreSQL proves moderator
+authorization, replay safety, removal disconnect/revocation and attendance persistence; official
+LiveKit Server `1.13.6` passed its standalone health path and two independent browser contexts proved
+registered/guest presence, leave and fresh-token reconnect with signed webhook delivery. Backend build,
+all 60 tests and EF drift pass. The full room UI and frontend evidence are recorded in the sibling repo.
 
 ## ✅ Organization Meetings Phase 2 — management and scheduling UI (2026-08-30)
 

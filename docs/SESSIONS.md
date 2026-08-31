@@ -1,5 +1,35 @@
 # TaskFlow — Session Log
 
+## 2026-08-31 (Organization Meetings Phase 4 — completed end to end)
+
+- Completed P4.2–P4.5: server-authorized mute/remove, signed LiveKit attendance webhooks, durable
+  event receipts, connection-scoped reconciliation and the additive `AddMeetingWebhookReceipts`
+  migration. Disposable PostgreSQL proves denial, replay safety, persistence and removal revocation.
+- Official LiveKit Server `1.13.6` passed the standalone disposable health path. Two independent
+  in-app browser contexts proved registered/guest presence, leave and fresh-token reconnect with real
+  webhook delivery; the established Phase 0 harness remains the microphone/camera/screen-share proof.
+- Backend tests pass 60/60; build and EF drift pass. The frontend room, full 275-spec suite, production
+  build, lint/design lint and all 42 contrast checks pass. Phase 5 is READY.
+
+## 2026-08-31 (Organization Meetings Phase 4 — P4.1 room-token regression proof)
+
+- Completed the bounded P4.1 package without adding a new room capability. The disposable PostgreSQL
+  HTTP test now proves that assigned members get room credentials, unassigned users are forbidden, and
+  verified guests cannot receive credentials until the organizer admits them.
+- The integration host uses test-only LiveKit signing settings, so this validates API authorization
+  without a running media server. Each test client now has a distinct forwarded test IP, avoiding
+  unrelated guest scenarios contending for one real rate-limit partition. The full backend suite passes
+  59/59. P4.2 moderation and durable attendance remains next; Phase 4 is still IN PROGRESS.
+
+## 2026-08-31 (Organization Meetings Phase 4 — room-access hardening)
+
+- Corrected a privilege boundary in authenticated room-token issuance: a user who can manage a meeting
+  but is not assigned to it is denied instead of inheriting the creator's host participant/token.
+  Explicitly assigned organization members are admitted directly; guests retain verified,
+  organizer-controlled admission.
+- Backend tests pass 52/52. The full Phase 4 moderator, signed attendance webhook and multi-browser
+  evidence gates are still outstanding, so Phase 4 remains IN PROGRESS.
+
 ## 2026-08-31 (Organization Meetings Phase 3 — secure guest access)
 
 - Added hash-only private/reusable invitations, rotation, email delivery, meeting-specific OTP

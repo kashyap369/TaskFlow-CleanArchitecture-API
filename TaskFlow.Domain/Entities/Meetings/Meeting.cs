@@ -86,6 +86,51 @@ public sealed class Meeting : AuditableEntity, IAggregateRoot
         MarkAsUpdated();
     }
 
+    public void EndFromProvider(DateTime utcNow)
+    {
+        if (Status == MeetingStatus.Live)
+        {
+            Status = MeetingStatus.Ended;
+            ActualEndUtc = AsUtc(utcNow);
+            MarkAsUpdated();
+        }
+        CloseOpenAttendance(utcNow);
+    }
+
+    public void RegisterParticipantJoined(int participantId, string connectionId,
+        string? participantSid, DateTime joinedAtUtc)
+    {
+        if (!_participants.Any(x => x.Id == participantId && !x.IsDeleted)) return;
+        var existing = _attendance.SingleOrDefault(x => x.ProviderConnectionId == connectionId);
+        if (existing is not null)
+        {
+            existing.ReconcileJoin(participantSid, joinedAtUtc);
+            return;
+        }
+        _attendance.Add(new MeetingAttendance(participantId, connectionId, participantSid, joinedAtUtc));
+        MarkAsUpdated();
+    }
+
+    public void RegisterParticipantLeft(int participantId, string connectionId,
+        string? participantSid, DateTime leftAtUtc)
+    {
+        if (!_participants.Any(x => x.Id == participantId && !x.IsDeleted)) return;
+        var existing = _attendance.SingleOrDefault(x => x.ProviderConnectionId == connectionId);
+        if (existing is null)
+        {
+            existing = new MeetingAttendance(participantId, connectionId, participantSid, leftAtUtc);
+            _attendance.Add(existing);
+        }
+        existing.Close(leftAtUtc);
+        MarkAsUpdated();
+    }
+
+    public void CloseOpenAttendance(DateTime leftAtUtc)
+    {
+        foreach (var interval in _attendance.Where(x => x.LeftAtUtc is null)) interval.Close(leftAtUtc);
+        MarkAsUpdated();
+    }
+
     public void Cancel()
     {
         if (Status is not (MeetingStatus.Draft or MeetingStatus.Scheduled))

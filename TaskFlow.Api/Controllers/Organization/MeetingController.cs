@@ -45,6 +45,16 @@ public sealed class MeetingController(IMediator mediator) : ControllerBase
     public async Task<IActionResult> JoinToken(int meetingId, CancellationToken ct) =>
         Ok(await mediator.Send(new GetMeetingJoinTokenCommand(meetingId), ct));
 
+    [HttpPost("{meetingId:int}/room/participants/{participantId:int}/remove")]
+    public async Task<IActionResult> RemoveFromRoom(int meetingId, int participantId, CancellationToken ct)
+    { await mediator.Send(new RemoveMeetingRoomParticipantCommand(meetingId, participantId), ct); return NoContent(); }
+
+    [HttpPost("{meetingId:int}/room/participants/{participantId:int}/mute")]
+    public async Task<IActionResult> MuteInRoom(int meetingId, int participantId,
+        MuteMeetingRoomParticipantRequest request, CancellationToken ct)
+    { await mediator.Send(new MuteMeetingRoomParticipantCommand(meetingId, participantId,
+        request.ParticipantIdentity, request.TrackSid, request.Muted), ct); return NoContent(); }
+
     [HttpPost("{meetingId:int}/cancel")]
     public async Task<IActionResult> Cancel(int meetingId, CancellationToken ct)
     { await mediator.Send(new CancelMeetingCommand(meetingId), ct); return NoContent(); }
@@ -78,3 +88,5 @@ public sealed class MeetingController(IMediator mediator) : ControllerBase
     public async Task<IActionResult> RotateAccessLink(int meetingId, int linkId, CancellationToken ct) =>
         Ok(await mediator.Send(new RotateMeetingAccessLinkCommand(meetingId, linkId), ct));
 }
+
+public sealed record MuteMeetingRoomParticipantRequest(string ParticipantIdentity, string TrackSid, bool Muted);

@@ -11,6 +11,14 @@ public sealed class MeetingRepository(TaskFlowDbContext context) : IMeetingRepos
         context.Meetings.Include(x => x.Badges).Include(x => x.Participants)
             .Include(x => x.AccessLinks).Include(x => x.Attendance)
             .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+    public Task<Meeting?> GetByRoomNameAsync(string roomName, CancellationToken cancellationToken = default) =>
+        context.Meetings.Include(x => x.Badges).Include(x => x.Participants)
+            .Include(x => x.Attendance)
+            .FirstOrDefaultAsync(x => x.RoomName == roomName, cancellationToken);
+    public Task<bool> HasWebhookReceiptAsync(string providerEventId, CancellationToken cancellationToken = default) =>
+        context.MeetingWebhookReceipts.AnyAsync(x => x.ProviderEventId == providerEventId, cancellationToken);
+    public Task AddWebhookReceiptAsync(MeetingWebhookReceipt receipt, CancellationToken cancellationToken = default) =>
+        context.MeetingWebhookReceipts.AddAsync(receipt, cancellationToken).AsTask();
     public Task AddAsync(Meeting meeting, CancellationToken cancellationToken = default) =>
         context.Meetings.AddAsync(meeting, cancellationToken).AsTask();
     public void Update(Meeting meeting) => context.Meetings.Update(meeting);

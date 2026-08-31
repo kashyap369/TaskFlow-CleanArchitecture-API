@@ -46,9 +46,20 @@ public sealed class MeetingGuestController(IMediator mediator, IOptions<MeetingS
     public async Task<IActionResult> JoinToken(CancellationToken ct) => Ok(await mediator.Send(
         new GetGuestMeetingJoinTokenCommand(GuestSessionToken()), ct));
 
+    [HttpPost("room/participants/{participantId:int}/remove")]
+    public async Task<IActionResult> RemoveFromRoom(int participantId, CancellationToken ct)
+    { await mediator.Send(new RemoveGuestMeetingRoomParticipantCommand(GuestSessionToken(), participantId), ct); return NoContent(); }
+
+    [HttpPost("room/participants/{participantId:int}/mute")]
+    public async Task<IActionResult> MuteInRoom(int participantId,
+        MuteGuestMeetingRoomParticipantRequest request, CancellationToken ct)
+    { await mediator.Send(new MuteGuestMeetingRoomParticipantCommand(GuestSessionToken(), participantId,
+        request.ParticipantIdentity, request.TrackSid, request.Muted), ct); return NoContent(); }
+
     private string GuestSessionToken() => Request.Headers["X-Meeting-Guest-Session"].FirstOrDefault() ?? string.Empty;
 }
 
 public sealed record VerifyMeetingGuestCodeRequest(string Token, string Email, string Code,
     string DisplayName, bool BindRegisteredAccount = false);
 public sealed record ConfirmGuestDisplayNameRequest(string DisplayName);
+public sealed record MuteGuestMeetingRoomParticipantRequest(string ParticipantIdentity, string TrackSid, bool Muted);

@@ -77,6 +77,19 @@ public sealed class MeetingAttendanceConfiguration : IEntityTypeConfiguration<Me
     }
 }
 
+public sealed class MeetingWebhookReceiptConfiguration : IEntityTypeConfiguration<MeetingWebhookReceipt>
+{
+    public void Configure(EntityTypeBuilder<MeetingWebhookReceipt> builder)
+    {
+        builder.ToTable("MeetingWebhookReceipts"); builder.HasKey(x => x.Id); builder.Ignore(x => x.DomainEvents);
+        builder.Property(x => x.ProviderEventId).HasMaxLength(120).IsRequired();
+        builder.Property(x => x.EventType).HasMaxLength(80).IsRequired();
+        builder.HasIndex(x => x.ProviderEventId).IsUnique();
+        builder.HasIndex(x => new { x.MeetingId, x.OccurredAtUtc });
+        builder.HasOne<Meeting>().WithMany().HasForeignKey(x => x.MeetingId).OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
 public sealed class MeetingGuestChallengeConfiguration : IEntityTypeConfiguration<MeetingGuestChallenge>
 {
     public void Configure(EntityTypeBuilder<MeetingGuestChallenge> builder)

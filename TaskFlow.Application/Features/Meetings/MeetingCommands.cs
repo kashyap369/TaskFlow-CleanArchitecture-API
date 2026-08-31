@@ -2,6 +2,8 @@ using System.Security.Cryptography;
 using System.Net;
 using FluentValidation;
 using MediatR;
+using Microsoft.Extensions.Logging;
+using TaskFlow.Application.Contracts.Meetings;
 using TaskFlow.Application.Contracts.Configuration;
 using TaskFlow.Application.Contracts.Email;
 using TaskFlow.Application.Contracts.Security;
@@ -187,9 +189,27 @@ public sealed class StartMeetingCommandHandler(IMeetingRepository meetings, ICur
     : MeetingLifecycleHandler(meetings, user, permissions, unitOfWork), IRequestHandler<StartMeetingCommand>
 { public Task Handle(StartMeetingCommand request, CancellationToken ct) => Mutate(request.Id, x => x.Start(DateTime.UtcNow), ct); }
 public sealed class EndMeetingCommandHandler(IMeetingRepository meetings, ICurrentUserService user,
-    IOrganizationPermissionChecker permissions, IUnitOfWork unitOfWork)
+    IOrganizationPermissionChecker permissions, IUnitOfWork unitOfWork, IMeetingMediaProvider mediaProvider,
+    ILogger<EndMeetingCommandHandler> logger)
     : MeetingLifecycleHandler(meetings, user, permissions, unitOfWork), IRequestHandler<EndMeetingCommand>
-{ public Task Handle(EndMeetingCommand request, CancellationToken ct) => Mutate(request.Id, x => x.End(DateTime.UtcNow), ct); }
+{
+    public async Task Handle(EndMeetingCommand request, CancellationToken ct)
+    {
+        var meeting = await meetings.GetByIdAsync(request.Id, ct)
+            ?? throw new NotFoundException("MEETING_NOT_FOUND", "Meeting not found.");
+        await Mutate(request.Id, x => { x.End(DateTime.UtcNow); x.CloseOpenAttendance(DateTime.UtcNow); }, ct);
+        if (mediaProvider.IsEnabled)
+        {
+            try { await mediaProvider.CloseRoomAsync(meeting.RoomName, ct); }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                // The TaskFlow lifecycle remains authoritative. LiveKit rooms also close after their
+                // configured empty timeout; webhook reconciliation finalizes any open attendance.
+                logger.LogError(exception, "Could not close media room for meeting {MeetingId}", meeting.Id);
+            }
+        }
+    }
+}
 public sealed class CancelMeetingCommandHandler(IMeetingRepository meetings, ICurrentUserService user,
     IOrganizationPermissionChecker permissions, IUnitOfWork unitOfWork)
     : MeetingLifecycleHandler(meetings, user, permissions, unitOfWork), IRequestHandler<CancelMeetingCommand>

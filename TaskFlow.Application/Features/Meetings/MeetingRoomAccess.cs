@@ -1,4 +1,5 @@
 using MediatR;
+using System.Text.Json;
 using TaskFlow.Application.Contracts.Meetings;
 using TaskFlow.Application.Contracts.Security;
 using TaskFlow.Application.Exceptions;
@@ -15,7 +16,8 @@ public sealed record GetGuestMeetingJoinTokenCommand(string SessionToken) : IReq
 // It never decides capabilities or sees a provider secret/room identifier.
 public sealed record MeetingRoomTokenDto(string WebSocketUrl, string Token, DateTimeOffset ExpiresAtUtc,
     int MeetingId, int ParticipantId, string DisplayName, MeetingAccessLevel AccessLevel,
-    string? BadgeLabel, bool CanPublish, bool CanShareScreen, bool CanModerate);
+    string? BadgeLabel, bool CanPublish, bool CanShareScreen, bool CanModerate,
+    string ParticipantIdentity, string MeetingTitle);
 
 internal static class MeetingRoomAccessRules
 {
@@ -38,12 +40,20 @@ internal static class MeetingRoomAccessRules
         var canPublish = participant.AccessLevel != MeetingAccessLevel.Viewer && meeting.ParticipantsCanPublish;
         var canShareScreen = canPublish && meeting.ParticipantsCanShareScreen;
         var canModerate = participant.AccessLevel is MeetingAccessLevel.Host or MeetingAccessLevel.CoHost;
-        var issued = provider.CreateJoinToken(new MeetingJoinTokenRequest(
-            meeting.RoomName, $"m{meeting.Id}-p{participant.Id}-{Guid.NewGuid():N}", displayName,
-            TimeSpan.FromMinutes(10), canPublish, true, false, canModerate));
         var badge = meeting.Badges.FirstOrDefault(x => x.Id == participant.BadgeDefinitionId)?.Label;
+        var identity = $"m{meeting.Id}-p{participant.Id}-{Guid.NewGuid():N}";
+        var metadata = JsonSerializer.Serialize(new
+        {
+            participantId = participant.Id,
+            accessLevel = participant.AccessLevel,
+            badgeLabel = badge
+        });
+        var issued = provider.CreateJoinToken(new MeetingJoinTokenRequest(
+            meeting.RoomName, identity, displayName,
+            TimeSpan.FromMinutes(10), canPublish, true, false, canModerate, metadata));
         return new(provider.WebSocketUrl, issued.Value, issued.ExpiresAtUtc, meeting.Id, participant.Id,
-            displayName, participant.AccessLevel, badge, canPublish, canShareScreen, canModerate);
+            displayName, participant.AccessLevel, badge, canPublish, canShareScreen, canModerate,
+            identity, meeting.Title);
     }
 }
 
@@ -56,9 +66,8 @@ public sealed class GetMeetingJoinTokenCommandHandler(IMeetingRepository meeting
         var meeting = await meetings.GetByIdAsync(request.MeetingId, ct)
             ?? throw new NotFoundException("MEETING_NOT_FOUND", "Meeting not found.");
         var participant = meeting.Participants.SingleOrDefault(x => x.UserId == user.UserId && !x.IsDeleted);
-        if (participant is null && meeting.CreatedByUserId != user.UserId)
+        if (participant is null)
             throw new ForbiddenException("MEETING_ROOM_ACCESS_DENIED", "You are not assigned to this meeting.");
-        participant ??= meeting.Participants.Single(x => x.UserId == meeting.CreatedByUserId && !x.IsDeleted);
         var displayName = participant.DisplayName;
         if (string.IsNullOrWhiteSpace(displayName))
             displayName = user.Email.Split('@')[0];

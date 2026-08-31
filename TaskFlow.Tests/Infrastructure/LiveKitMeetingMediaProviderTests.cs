@@ -65,6 +65,18 @@ public sealed class LiveKitMeetingMediaProviderTests
         Assert.ThrowsAny<Exception>(() => provider.VerifyWebhook(body + " ", authorization));
     }
 
+    [Fact]
+    public async Task DisabledProvider_DoesNotRequireLiveKitSecrets_AndCloseRoomIsANoOp()
+    {
+        var provider = new LiveKitMeetingMediaProvider(Options.Create(new LiveKitSettings { Enabled = false }));
+
+        Assert.False(provider.IsEnabled);
+        await provider.CloseRoomAsync("meeting-disabled");
+        Assert.Throws<InvalidOperationException>(() => provider.CreateJoinToken(new MeetingJoinTokenRequest(
+            "meeting-disabled", "participant", "Participant", TimeSpan.FromMinutes(5),
+            CanPublish: false, CanSubscribe: true, CanPublishData: false, IsRoomAdmin: false)));
+    }
+
     private static LiveKitMeetingMediaProvider CreateProvider() =>
         new(Options.Create(new LiveKitSettings
         {

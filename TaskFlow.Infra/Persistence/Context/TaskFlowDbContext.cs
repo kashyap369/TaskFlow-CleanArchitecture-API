@@ -68,6 +68,7 @@ public sealed class TaskFlowDbContext : DbContext
     public DbSet<MeetingParticipant> MeetingParticipants => Set<MeetingParticipant>();
     public DbSet<MeetingAccessLink> MeetingAccessLinks => Set<MeetingAccessLink>();
     public DbSet<MeetingAttendance> MeetingAttendance => Set<MeetingAttendance>();
+    public DbSet<MeetingWebhookReceipt> MeetingWebhookReceipts => Set<MeetingWebhookReceipt>();
     public DbSet<MeetingGuestChallenge> MeetingGuestChallenges => Set<MeetingGuestChallenge>();
     public DbSet<MeetingGuestSession> MeetingGuestSessions => Set<MeetingGuestSession>();
     public DbSet<MeetingGuestDecision> MeetingGuestDecisions => Set<MeetingGuestDecision>();

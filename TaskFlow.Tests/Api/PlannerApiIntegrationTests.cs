@@ -29,6 +29,7 @@ using TaskFlow.Domain.ValueObjects;
 using TaskFlow.Infra.Persistence.Context;
 using TaskFlow.Application.Contracts.Storage;
 using TaskFlow.Application.Contracts.Email;
+using TaskFlow.Application.Contracts.Meetings;
 using TaskEntity = TaskFlow.Domain.Entities.WorkManagement.Tasks.Task;
 
 namespace TaskFlow.Tests.Api;
@@ -91,8 +92,9 @@ public sealed class PlannerApiIntegrationTests : IClassFixture<PlannerApiFixture
 
         Assert.Equal(HttpStatusCode.NoContent,
             (await owner.PostAsync($"api/meeting/{meetingId}/start", null)).StatusCode);
-        Assert.Equal(HttpStatusCode.NoContent,
-            (await owner.PostAsync($"api/meeting/{meetingId}/end", null)).StatusCode);
+        var endResponse = await owner.PostAsync($"api/meeting/{meetingId}/end", null);
+        Assert.True(endResponse.StatusCode == HttpStatusCode.NoContent,
+            $"Meeting end failed: {endResponse.StatusCode} {await endResponse.Content.ReadAsStringAsync()}");
         var detail = await owner.GetFromJsonAsync<MeetingDetailResponse>($"api/meeting/{meetingId}");
         Assert.NotNull(detail); Assert.Equal(4, detail.Status); Assert.NotNull(detail.ActualStartUtc);
         Assert.NotNull(detail.ActualEndUtc); Assert.Equal(2, detail.Participants.Count);
@@ -169,6 +171,120 @@ public sealed class PlannerApiIntegrationTests : IClassFixture<PlannerApiFixture
         var unboundCode = _fixture.Email.LastCode;
         Assert.Equal(HttpStatusCode.OK, (await registered.PostAsJsonAsync("api/meeting/guest/access/verify-code", new
         { token = unboundToken, email = "unbound@example.test", code = unboundCode, displayName = "Unbound Guest", bindRegisteredAccount = false })).StatusCode);
+    }
+
+    [Fact]
+    public async Task MeetingRoomTokens_RequireAssignedMemberOrAdmittedGuest()
+    {
+        using var owner = _fixture.CreateClient(_fixture.CapacityOwnerUserId);
+        using var member = _fixture.CreateClient(_fixture.CapacityMemberUserId);
+        using var outsider = _fixture.CreateClient(_fixture.OtherOrganizationOwnerUserId);
+        using var guest = _fixture.CreateAnonymousClient();
+
+        var created = await owner.PostAsJsonAsync("api/meeting", new
+        {
+            organizationId = _fixture.CapacityOrganizationId,
+            title = "Room authorization review",
+            timeZone = "UTC",
+            guestsAllowed = true,
+            retentionDays = 90,
+            participantUserIds = new[] { _fixture.CapacityMemberUserId }
+        });
+        Assert.Equal(HttpStatusCode.OK, created.StatusCode);
+        var meetingId = await created.Content.ReadFromJsonAsync<int>();
+        Assert.Equal(HttpStatusCode.NoContent, (await owner.PostAsync($"api/meeting/{meetingId}/start", null)).StatusCode);
+
+        var memberToken = await member.PostAsync($"api/meeting/{meetingId}/join-token", null);
+        Assert.Equal(HttpStatusCode.OK, memberToken.StatusCode);
+        using (var token = JsonDocument.Parse(await memberToken.Content.ReadAsStringAsync()))
+        {
+            Assert.Equal(meetingId, token.RootElement.GetProperty("meetingId").GetInt32());
+            Assert.True(token.RootElement.GetProperty("participantId").GetInt32() > 0);
+            Assert.True(token.RootElement.GetProperty("canPublish").GetBoolean());
+            Assert.False(string.IsNullOrWhiteSpace(token.RootElement.GetProperty("token").GetString()));
+        }
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await outsider.PostAsync($"api/meeting/{meetingId}/join-token", null)).StatusCode);
+
+        var link = await owner.PostAsJsonAsync($"api/meeting/{meetingId}/access-links", new
+        {
+            meetingId,
+            mode = 2,
+            lockedEmail = (string?)null,
+            defaultAccessLevel = 3,
+            badgeDefinitionId = (int?)null,
+            expiresAtUtc = DateTimeOffset.UtcNow.AddHours(1),
+            maximumUses = 1
+        });
+        using var linkJson = JsonDocument.Parse(await link.Content.ReadAsStringAsync());
+        var rawToken = linkJson.RootElement.GetProperty("token").GetString()!;
+        Assert.Equal(HttpStatusCode.NoContent, (await guest.PostAsJsonAsync("api/meeting/guest/access/request-code",
+            new { token = rawToken, email = "room-guest@example.test" })).StatusCode);
+        var verify = await guest.PostAsJsonAsync("api/meeting/guest/access/verify-code", new
+        {
+            token = rawToken, email = "room-guest@example.test", code = _fixture.Email.LastCode,
+            displayName = "Room guest", bindRegisteredAccount = false
+        });
+        using var verified = JsonDocument.Parse(await verify.Content.ReadAsStringAsync());
+        var sessionToken = verified.RootElement.GetProperty("sessionToken").GetString()!;
+        guest.DefaultRequestHeaders.Add("X-Meeting-Guest-Session", sessionToken);
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await guest.PostAsync("api/meeting/guest/join-token", null)).StatusCode);
+        var detail = await owner.GetFromJsonAsync<MeetingDetailResponse>($"api/meeting/{meetingId}");
+        var guestParticipant = Assert.Single(detail!.Participants, participant => participant.Email == "ROOM-GUEST@EXAMPLE.TEST");
+        Assert.Equal(HttpStatusCode.NoContent, (await owner.PutAsJsonAsync($"api/meeting/{meetingId}/participants/{guestParticipant.Id}", new
+        {
+            meetingId, participantId = guestParticipant.Id, accessLevel = 3, badgeDefinitionId = (int?)null, state = 2
+        })).StatusCode);
+
+        var guestToken = await guest.PostAsync("api/meeting/guest/join-token", null);
+        Assert.Equal(HttpStatusCode.OK, guestToken.StatusCode);
+        using var guestTokenJson = JsonDocument.Parse(await guestToken.Content.ReadAsStringAsync());
+        Assert.Equal(meetingId, guestTokenJson.RootElement.GetProperty("meetingId").GetInt32());
+        Assert.False(string.IsNullOrWhiteSpace(guestTokenJson.RootElement.GetProperty("token").GetString()));
+    }
+
+    [Fact]
+    public async Task MeetingRoom_ModerationAndSignedAttendanceAreServerAuthorizedAndDurable()
+    {
+        using var owner = _fixture.CreateClient(_fixture.CapacityOwnerUserId);
+        using var member = _fixture.CreateClient(_fixture.CapacityMemberUserId);
+        var created = await owner.PostAsJsonAsync("api/meeting", new
+        {
+            organizationId = _fixture.CapacityOrganizationId, title = "Moderation integration",
+            timeZone = "UTC", guestsAllowed = true, retentionDays = 90,
+            participantUserIds = new[] { _fixture.CapacityMemberUserId }
+        });
+        var meetingId = await created.Content.ReadFromJsonAsync<int>();
+        Assert.Equal(HttpStatusCode.NoContent, (await owner.PostAsync($"api/meeting/{meetingId}/start", null)).StatusCode);
+        var detail = await owner.GetFromJsonAsync<MeetingDetailResponse>($"api/meeting/{meetingId}");
+        var host = Assert.Single(detail!.Participants, x => x.UserId == _fixture.CapacityOwnerUserId);
+        var target = Assert.Single(detail.Participants, x => x.UserId == _fixture.CapacityMemberUserId);
+
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await member.PostAsync($"api/meeting/{meetingId}/room/participants/{host.Id}/remove", null)).StatusCode);
+
+        using var tokenResponse = JsonDocument.Parse(await (await owner.PostAsync(
+            $"api/meeting/{meetingId}/join-token", null)).Content.ReadAsStringAsync());
+        var identity = tokenResponse.RootElement.GetProperty("participantIdentity").GetString()!;
+        var before = await _fixture.ReadMeetingEvidenceAsync(meetingId);
+        owner.DefaultRequestHeaders.Authorization = AuthenticationHeaderValue.Parse(TestMeetingMediaProvider.Authorization);
+        var joinedAt = DateTimeOffset.UtcNow.AddMinutes(-2);
+        var webhook = new
+        {
+            eventId = $"joined-{meetingId}", eventType = "participant_joined", roomName = before.RoomName,
+            participantIdentity = identity, participantSid = "PA_integration", occurredAtUtc = joinedAt
+        };
+        Assert.Equal(HttpStatusCode.OK, (await owner.PostAsJsonAsync("api/meeting/webhooks/livekit", webhook)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await owner.PostAsJsonAsync("api/meeting/webhooks/livekit", webhook)).StatusCode);
+        var attendance = await _fixture.ReadMeetingEvidenceAsync(meetingId);
+        Assert.Equal(1, attendance.AttendanceCount); Assert.Equal(1, attendance.ReceiptCount);
+
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await owner.PostAsync($"api/meeting/{meetingId}/room/participants/{target.Id}/remove", null)).StatusCode);
+        Assert.Contains($"m{meetingId}-p{target.Id}-", _fixture.Media.RemovedPrefixes);
+        Assert.Equal(HttpStatusCode.Unauthorized,
+            (await member.PostAsync($"api/meeting/{meetingId}/join-token", null)).StatusCode);
     }
 
     [Fact]
@@ -641,6 +757,7 @@ public sealed class PlannerApiFixture : IAsyncLifetime
         $"taskflow_planner_test_{Guid.NewGuid():N}";
     private string _adminConnectionString = string.Empty;
     private WebApplicationFactory<Program>? _factory;
+    private int _nextClientIp;
 
     public int ProjectId { get; private set; }
     public int ConcurrentProjectId { get; private set; }
@@ -650,6 +767,7 @@ public sealed class PlannerApiFixture : IAsyncLifetime
     public int CapacityMemberUserId { get; private set; }
     public int OtherOrganizationOwnerUserId { get; private set; }
     public PlannerTestEmailService Email { get; } = new();
+    public TestMeetingMediaProvider Media { get; } = new();
 
     public async Task InitializeAsync()
     {
@@ -698,6 +816,10 @@ public sealed class PlannerApiFixture : IAsyncLifetime
                         ["ObjectStorage:LocalPath"] = "App_Data/integration-test-objects",
                         ["Meetings:Enabled"] = "true",
                         ["Meetings:GuestsEnabled"] = "true",
+                        ["LiveKit:Enabled"] = "true",
+                        ["LiveKit:Url"] = "ws://livekit.integration.test",
+                        ["LiveKit:ApiKey"] = "integration-key",
+                        ["LiveKit:ApiSecret"] = "integration-test-livekit-secret-at-least-32-characters",
                         ["OneTimeCodeSettings:SecretKey"] = "integration-test-code-secret-at-least-32-characters",
                     });
                 });
@@ -707,6 +829,8 @@ public sealed class PlannerApiFixture : IAsyncLifetime
                     services.AddSingleton<IObjectStorage, PlannerTestObjectStorage>();
                     services.RemoveAll<IEmailService>();
                     services.AddSingleton<IEmailService>(Email);
+                    services.RemoveAll<IMeetingMediaProvider>();
+                    services.AddSingleton<IMeetingMediaProvider>(Media);
                     services.AddAuthentication(options =>
                         {
                             options.DefaultAuthenticateScheme = TestAuthenticationHandler.SchemeName;
@@ -842,20 +966,34 @@ public sealed class PlannerApiFixture : IAsyncLifetime
             ?? throw new InvalidOperationException("Test project insert did not return an id."));
     }
 
+    public async Task<MeetingEvidence> ReadMeetingEvidenceAsync(int meetingId)
+    {
+        await using var scope = (_factory ?? throw new InvalidOperationException("Fixture is not ready."))
+            .Services.CreateAsyncScope();
+        var context = scope.ServiceProvider.GetRequiredService<TaskFlowDbContext>();
+        var roomName = await context.Meetings.Where(x => x.Id == meetingId).Select(x => x.RoomName).SingleAsync();
+        var attendanceCount = await context.MeetingAttendance.CountAsync(x => x.MeetingId == meetingId);
+        var receiptCount = await context.MeetingWebhookReceipts.CountAsync(x => x.MeetingId == meetingId);
+        return new(roomName, attendanceCount, receiptCount);
+    }
+
     public HttpClient CreateClient(int ownerUserId, string role = SystemRoleNames.User)
     {
-        var client = (_factory ?? throw new InvalidOperationException("Fixture is not ready."))
-            .CreateClient(new WebApplicationFactoryClientOptions
-            {
-                AllowAutoRedirect = false,
-            });
+        var client = CreateTestClient();
         client.DefaultRequestHeaders.Add(TestAuthenticationHandler.UserIdHeader, ownerUserId.ToString());
         client.DefaultRequestHeaders.Add(TestAuthenticationHandler.RoleHeader, role);
         return client;
     }
 
-    public HttpClient CreateAnonymousClient() => (_factory ?? throw new InvalidOperationException("Fixture is not ready."))
+    public HttpClient CreateAnonymousClient() => CreateTestClient();
+
+    private HttpClient CreateTestClient()
+    {
+        var client = (_factory ?? throw new InvalidOperationException("Fixture is not ready."))
         .CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        client.DefaultRequestHeaders.Add("X-Forwarded-For", $"198.51.100.{Interlocked.Increment(ref _nextClientIp)}");
+        return client;
+    }
 
     public async Task DisposeAsync()
     {
@@ -885,6 +1023,42 @@ public sealed class PlannerApiFixture : IAsyncLifetime
 
         throw new DirectoryNotFoundException("Could not locate the TaskFlow repository root.");
     }
+}
+
+public sealed record MeetingEvidence(string RoomName, int AttendanceCount, int ReceiptCount);
+
+public sealed class TestMeetingMediaProvider : IMeetingMediaProvider
+{
+    public const string Authorization = "Test meeting-webhook-signature";
+    public bool IsEnabled => true;
+    public string WebSocketUrl => "ws://livekit.integration.test";
+    public System.Collections.Concurrent.ConcurrentBag<string> RemovedPrefixes { get; } = [];
+
+    public MeetingJoinToken CreateJoinToken(MeetingJoinTokenRequest request) =>
+        new($"test-token-{request.ParticipantIdentity}", DateTimeOffset.UtcNow.Add(request.Lifetime));
+
+    public Task RemoveParticipantsAsync(string roomName, string participantIdentityPrefix,
+        CancellationToken cancellationToken = default)
+    { RemovedPrefixes.Add(participantIdentityPrefix); return Task.CompletedTask; }
+
+    public Task MuteTrackAsync(string roomName, string participantIdentity, string trackSid, bool muted,
+        CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+    public Task CloseRoomAsync(string roomName, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+    public MeetingProviderWebhook VerifyWebhook(string rawBody, string authorizationHeader)
+    {
+        if (!string.Equals(authorizationHeader, Authorization, StringComparison.Ordinal))
+            throw new InvalidOperationException("Invalid test webhook signature.");
+        var payload = JsonSerializer.Deserialize<TestWebhookPayload>(rawBody,
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+            ?? throw new InvalidOperationException("Invalid test webhook payload.");
+        return new(payload.EventId, payload.EventType, payload.RoomName, payload.ParticipantIdentity,
+            payload.ParticipantSid, payload.OccurredAtUtc);
+    }
+
+    private sealed record TestWebhookPayload(string EventId, string EventType, string RoomName,
+        string? ParticipantIdentity, string? ParticipantSid, DateTimeOffset? OccurredAtUtc);
 }
 
 public sealed class PlannerTestObjectStorage : IObjectStorage

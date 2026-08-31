@@ -36,7 +36,9 @@ public sealed class MeetingParticipant : AuditableEntity
     { UserId = userId; AccessLevel = accessLevel; BadgeDefinitionId = badgeDefinitionId; State = state; }
     internal static MeetingParticipant RegisteredHost(int userId) => new(userId, MeetingAccessLevel.Host, null, MeetingParticipantState.Admitted);
     internal static MeetingParticipant Registered(int userId, MeetingAccessLevel accessLevel, int? badgeDefinitionId) =>
-        new(userId, accessLevel, badgeDefinitionId, MeetingParticipantState.Invited);
+        // Organization members are explicitly assigned by an authorized organizer. Unlike an
+        // email guest, they do not wait for an email-verification/admission workflow.
+        new(userId, accessLevel, badgeDefinitionId, MeetingParticipantState.Admitted);
     internal static MeetingParticipant Guest(string normalizedEmail, string displayName,
         MeetingAccessLevel accessLevel, int? badgeDefinitionId)
     {
@@ -163,5 +165,32 @@ public sealed class MeetingAttendance : AuditableEntity
     private MeetingAttendance() { }
     internal MeetingAttendance(int participantId, string connectionId, string? participantSid, DateTime joinedAtUtc)
     { ParticipantId = participantId; ProviderConnectionId = connectionId; ProviderParticipantSid = participantSid; JoinedAtUtc = DateTime.SpecifyKind(joinedAtUtc, DateTimeKind.Utc); }
+    internal void ReconcileJoin(string? participantSid, DateTime joinedAtUtc)
+    {
+        var occurred = DateTime.SpecifyKind(joinedAtUtc, DateTimeKind.Utc);
+        if (occurred < JoinedAtUtc) JoinedAtUtc = occurred;
+        if (!string.IsNullOrWhiteSpace(participantSid)) ProviderParticipantSid = participantSid;
+        MarkAsUpdated();
+    }
     internal void Close(DateTime leftAtUtc) { LeftAtUtc ??= DateTime.SpecifyKind(leftAtUtc, DateTimeKind.Utc); MarkAsUpdated(); }
+}
+
+public sealed class MeetingWebhookReceipt : AuditableEntity
+{
+    public int MeetingId { get; private set; }
+    public string ProviderEventId { get; private set; } = string.Empty;
+    public string EventType { get; private set; } = string.Empty;
+    public DateTime OccurredAtUtc { get; private set; }
+
+    private MeetingWebhookReceipt() { }
+    public MeetingWebhookReceipt(int meetingId, string providerEventId, string eventType, DateTime occurredAtUtc)
+    {
+        if (meetingId <= 0) throw new ArgumentOutOfRangeException(nameof(meetingId));
+        ArgumentException.ThrowIfNullOrWhiteSpace(providerEventId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(eventType);
+        MeetingId = meetingId;
+        ProviderEventId = providerEventId.Trim();
+        EventType = eventType.Trim();
+        OccurredAtUtc = DateTime.SpecifyKind(occurredAtUtc, DateTimeKind.Utc);
+    }
 }
