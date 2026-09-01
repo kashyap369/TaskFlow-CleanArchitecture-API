@@ -132,8 +132,35 @@ public sealed class MeetingController(IMediator mediator, Microsoft.Extensions.O
 
     [HttpGet("{meetingId:int}/archive")]
     public async Task<IActionResult> Archive(int meetingId, CancellationToken ct) => Ok(await mediator.Send(new GetMeetingArchiveQuery(meetingId), ct));
+
+    [HttpGet("{meetingId:int}/recordings")]
+    [ServiceFilter(typeof(MeetingRecordingFeatureFilter))]
+    public async Task<IActionResult> Recordings(int meetingId, CancellationToken ct) => Ok(await mediator.Send(new GetMeetingRecordingsQuery(meetingId), ct));
+
+    [HttpPost("{meetingId:int}/recordings")]
+    [ServiceFilter(typeof(MeetingRecordingFeatureFilter))]
+    public async Task<IActionResult> RequestRecording(int meetingId, CancellationToken ct) => Ok(await mediator.Send(new RequestMeetingRecordingCommand(meetingId, meetingSettings.Value.RecordingConsentTimeoutSeconds), ct));
+
+    [HttpPost("{meetingId:int}/recordings/{recordingId:int}/consent")]
+    [ServiceFilter(typeof(MeetingRecordingFeatureFilter))]
+    public async Task<IActionResult> RecordingConsent(int meetingId, int recordingId, MeetingRecordingConsentRequest request, CancellationToken ct) => Ok(await mediator.Send(new ConsentMeetingRecordingCommand(meetingId, recordingId, request.Accepted), ct));
+
+    [HttpPost("{meetingId:int}/recordings/{recordingId:int}/stop")]
+    [ServiceFilter(typeof(MeetingRecordingFeatureFilter))]
+    public async Task<IActionResult> StopRecording(int meetingId, int recordingId, CancellationToken ct) => Ok(await mediator.Send(new StopMeetingRecordingCommand(meetingId, recordingId), ct));
+
+    [HttpGet("{meetingId:int}/recordings/{recordingId:int}/content")]
+    [ServiceFilter(typeof(MeetingRecordingFeatureFilter))]
+    public async Task<IActionResult> RecordingContent(int meetingId, int recordingId, CancellationToken ct)
+    { var recording = await mediator.Send(new DownloadMeetingRecordingQuery(meetingId, recordingId), ct); Response.Headers.XContentTypeOptions = "nosniff"; return File(recording.Content, recording.ContentType, recording.FileName, enableRangeProcessing: true); }
+
+    [HttpDelete("{meetingId:int}/recordings/{recordingId:int}")]
+    [ServiceFilter(typeof(MeetingRecordingFeatureFilter))]
+    public async Task<IActionResult> DeleteRecording(int meetingId, int recordingId, CancellationToken ct)
+    { await mediator.Send(new DeleteMeetingRecordingCommand(meetingId, recordingId), ct); return NoContent(); }
 }
 
 public sealed record MuteMeetingRoomParticipantRequest(string ParticipantIdentity, string TrackSid, bool Muted);
 public sealed record SendMeetingMessageRequest(Guid ClientMessageId, string Body, int? ReplyToMessageId = null);
 public sealed record UpdateMeetingNoteRequest(string Content, int ExpectedVersion);
+public sealed record MeetingRecordingConsentRequest(bool Accepted);

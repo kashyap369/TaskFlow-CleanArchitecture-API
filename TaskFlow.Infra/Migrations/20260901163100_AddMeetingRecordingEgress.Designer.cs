@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using TaskFlow.Infra.Persistence.Context;
@@ -11,9 +12,11 @@ using TaskFlow.Infra.Persistence.Context;
 namespace TaskFlow.Infra.Migrations
 {
     [DbContext(typeof(TaskFlowDbContext))]
-    partial class TaskFlowDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260901163100_AddMeetingRecordingEgress")]
+    partial class AddMeetingRecordingEgress
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1013,10 +1016,6 @@ namespace TaskFlow.Infra.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("MeetingId")
-                        .IsUnique()
-                        .HasFilter("\"IsDeleted\" = FALSE AND \"Status\" IN (1, 2, 3, 4)");
 
                     b.HasIndex("ProviderEgressId")
                         .IsUnique()

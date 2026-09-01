@@ -190,7 +190,7 @@ public sealed class StartMeetingCommandHandler(IMeetingRepository meetings, ICur
 { public Task Handle(StartMeetingCommand request, CancellationToken ct) => Mutate(request.Id, x => x.Start(DateTime.UtcNow), ct); }
 public sealed class EndMeetingCommandHandler(IMeetingRepository meetings, ICurrentUserService user,
     IOrganizationPermissionChecker permissions, IUnitOfWork unitOfWork, IMeetingMediaProvider mediaProvider,
-    ILogger<EndMeetingCommandHandler> logger)
+    IMeetingRecordingRepository recordings, ILogger<EndMeetingCommandHandler> logger)
     : MeetingLifecycleHandler(meetings, user, permissions, unitOfWork), IRequestHandler<EndMeetingCommand>
 {
     public async Task Handle(EndMeetingCommand request, CancellationToken ct)
@@ -198,6 +198,19 @@ public sealed class EndMeetingCommandHandler(IMeetingRepository meetings, ICurre
         var meeting = await meetings.GetByIdAsync(request.Id, ct)
             ?? throw new NotFoundException("MEETING_NOT_FOUND", "Meeting not found.");
         await Mutate(request.Id, x => { x.End(DateTime.UtcNow); x.CloseOpenAttendance(DateTime.UtcNow); }, ct);
+        var activeRecording = await recordings.GetActiveAsync(request.Id, ct);
+        if (activeRecording is not null && activeRecording.Status is MeetingRecordingStatus.Starting or MeetingRecordingStatus.Recording &&
+            !string.IsNullOrWhiteSpace(activeRecording.ProviderEgressId))
+        {
+            try
+            {
+                await mediaProvider.StopRoomRecordingAsync(activeRecording.ProviderEgressId, ct);
+                activeRecording.MarkProcessing(DateTime.UtcNow); recordings.Update(activeRecording);
+                await unitOfWork.SaveChangesAsync(ct);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            { logger.LogError(exception, "Could not stop recording for meeting {MeetingId}", meeting.Id); }
+        }
         if (mediaProvider.IsEnabled)
         {
             try { await mediaProvider.CloseRoomAsync(meeting.RoomName, ct); }

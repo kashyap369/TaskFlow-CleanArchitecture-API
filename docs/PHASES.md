@@ -2,6 +2,26 @@
 
 > Keep the Current Status section up to date at the end of every session.
 
+## 🟡 Organization Meetings Phase 6 — implementation complete, certification pending (2026-09-01)
+
+Consent-aware recording is implemented end to end in the repositories: immutable current-participant
+consent, late-join gating, host start/stop/end orchestration, pinned LiveKit Egress, replay-safe webhook
+and recovery reconciliation, private member/guest playback, creator deletion and storage-first
+retention. The additive recording migrations include a partial unique index preventing concurrent
+active recordings. Backend build, all 65 tests and EF drift pass; the sibling Angular repository passes
+all 278 specs, production build, lint/design lint and 42 contrast checks. Phase 6 remains IN PROGRESS
+until a Docker-capable staging environment proves a playable room-composite MP4 and declared capacity,
+and legal/product approves the target geography's disclosure, consent and retention policy.
+
+## ⚠️ Organization Meetings production verification follow-up (2026-09-01)
+
+Production successfully created meeting `#3`, assigned the Shubham Kashyap account, started the
+meeting and loaded the deployed Phase 5 collaboration surface. Realtime media is not yet available:
+the API reports `LiveKit media is not enabled`, leaving pre-join disabled until a public LiveKit/
+Redis/TURN deployment and production credentials are configured. The UI also retains hidden start/end
+required validators after switching from scheduled to ready-anytime, so only scheduled creation works.
+These are Phase 7 rollout/hardening items; Phase 5 remains complete and Phase 6 certification remains pending.
+
 ## ✅ Organization Meetings Phase 5 — persistent collaboration and archive (2026-09-01)
 
 Phases 0–5 are DONE and Phase 6 is READY. Added durable idempotent chat, one optimistic-versioned

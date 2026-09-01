@@ -97,6 +97,19 @@ public sealed class MeetingGuestController(IMediator mediator, IOptions<MeetingS
     [HttpGet("archive")]
     public async Task<IActionResult> Archive(CancellationToken ct) => Ok(await mediator.Send(new GetGuestMeetingArchiveQuery(GuestSessionToken()), ct));
 
+    [HttpGet("recordings")]
+    [ServiceFilter(typeof(MeetingRecordingFeatureFilter))]
+    public async Task<IActionResult> Recordings(CancellationToken ct) => Ok(await mediator.Send(new GetGuestMeetingRecordingsQuery(GuestSessionToken()), ct));
+
+    [HttpPost("recordings/{recordingId:int}/consent")]
+    [ServiceFilter(typeof(MeetingRecordingFeatureFilter))]
+    public async Task<IActionResult> RecordingConsent(int recordingId, MeetingRecordingConsentRequest request, CancellationToken ct) => Ok(await mediator.Send(new ConsentGuestMeetingRecordingCommand(GuestSessionToken(), recordingId, request.Accepted), ct));
+
+    [HttpGet("recordings/{recordingId:int}/content")]
+    [ServiceFilter(typeof(MeetingRecordingFeatureFilter))]
+    public async Task<IActionResult> RecordingContent(int recordingId, CancellationToken ct)
+    { var recording = await mediator.Send(new DownloadGuestMeetingRecordingQuery(GuestSessionToken(), recordingId), ct); Response.Headers.XContentTypeOptions = "nosniff"; return File(recording.Content, recording.ContentType, recording.FileName, enableRangeProcessing: true); }
+
     private string GuestSessionToken() => Request.Headers["X-Meeting-Guest-Session"].FirstOrDefault() ?? string.Empty;
 }
 

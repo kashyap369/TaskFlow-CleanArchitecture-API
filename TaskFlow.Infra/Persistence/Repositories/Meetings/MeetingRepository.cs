@@ -63,3 +63,26 @@ public sealed class MeetingCollaborationRepository(TaskFlowDbContext context) : 
     public void UpdateNote(MeetingNote note) => context.MeetingNotes.Update(note);
     public void UpdateAsset(MeetingAsset asset) => context.MeetingAssets.Update(asset);
 }
+
+public sealed class MeetingRecordingRepository(TaskFlowDbContext context) : IMeetingRecordingRepository
+{
+    public Task<MeetingRecording?> GetByIdAsync(int meetingId, int recordingId, CancellationToken cancellationToken = default) =>
+        context.MeetingRecordings.Include(x => x.Consents)
+            .FirstOrDefaultAsync(x => x.MeetingId == meetingId && x.Id == recordingId, cancellationToken);
+    public Task<MeetingRecording?> GetActiveAsync(int meetingId, CancellationToken cancellationToken = default) =>
+        context.MeetingRecordings.Include(x => x.Consents).OrderByDescending(x => x.Id)
+            .FirstOrDefaultAsync(x => x.MeetingId == meetingId &&
+                (x.Status == Domain.Enums.Meetings.MeetingRecordingStatus.PendingConsent ||
+                 x.Status == Domain.Enums.Meetings.MeetingRecordingStatus.Starting ||
+                 x.Status == Domain.Enums.Meetings.MeetingRecordingStatus.Recording ||
+                 x.Status == Domain.Enums.Meetings.MeetingRecordingStatus.Processing), cancellationToken);
+    public Task<MeetingRecording?> GetByProviderEgressIdAsync(string providerEgressId, CancellationToken cancellationToken = default) =>
+        context.MeetingRecordings.Include(x => x.Consents)
+            .FirstOrDefaultAsync(x => x.ProviderEgressId == providerEgressId, cancellationToken);
+    public async Task<IReadOnlyList<MeetingRecording>> GetForMeetingAsync(int meetingId, CancellationToken cancellationToken = default) =>
+        await context.MeetingRecordings.Include(x => x.Consents).Where(x => x.MeetingId == meetingId)
+            .OrderByDescending(x => x.CreatedAt).ToListAsync(cancellationToken);
+    public Task AddAsync(MeetingRecording recording, CancellationToken cancellationToken = default) =>
+        context.MeetingRecordings.AddAsync(recording, cancellationToken).AsTask();
+    public void Update(MeetingRecording recording) => context.MeetingRecordings.Update(recording);
+}

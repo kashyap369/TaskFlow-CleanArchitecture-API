@@ -1,7 +1,7 @@
-# Meeting Phase 0 — local LiveKit probe
+# TaskFlow Meetings — local LiveKit and Egress
 
-This stack exists only for the Phase 0 feasibility harness. It is not a production topology and does
-not include Egress. The disposable Angular page is `http://localhost:4200/dev/meetings-livekit`.
+This stack is the local media and recording environment. It is not a production topology. Phase 6
+adds a version-pinned Egress worker and shared private recording-output mount.
 
 ## Pinned components
 
@@ -11,10 +11,26 @@ not include Egress. The disposable Angular page is `http://localhost:4200/dev/me
 | `livekit-client` | 2.22.1 | Apache-2.0 | Browser media client, isolated behind TaskFlow's room service |
 | `Livekit.Server.Sdk.Dotnet` | 1.2.3 | Apache-2.0 | Token signing and raw webhook verification in Infrastructure |
 | Redis | 8.2.9 Alpine | AGPL-3.0 | Local LiveKit coordination; no TaskFlow persistence |
+| LiveKit Egress | 1.12.0 | Apache-2.0 | Room-composite MP4 recording into TaskFlow private storage |
 
 These versions were checked against the upstream release pages on 2026-08-30. Recheck all four before
 upgrading. TaskFlow's Application project depends only on `IMeetingMediaProvider`; LiveKit DTOs stay in
 Infrastructure, and Angular LiveKit types stay in `MeetingRoomService`.
+
+## Recording capacity and staging gate
+
+Room-composite Egress runs Chromium plus GStreamer and is CPU intensive. TaskFlow's supported initial
+ceiling is **one simultaneous 720p room-composite recording per 4-vCPU/4-GiB Egress instance**. Before
+enabling recording in staging, run one 30-minute meeting with four publishers plus screen sharing,
+verify the MP4, then repeat at the declared simultaneous ceiling while tracking Egress CPU, memory,
+queue time, webhook completion, and object size. Reject rollout if CPU remains above 80%, memory above
+85%, a job waits more than 30 seconds, or an output is missing/unplayable. Scale horizontally through
+the shared Redis plane; do not raise the ceiling without new evidence.
+
+The disclosure shown in both lobbies is a conservative product default, not legal advice. Production
+`Meetings:RecordingEnabled` remains false until the target geography, retention/deletion policy, and
+disclosure have been reviewed by the product owner and qualified counsel. Consent decisions are
+immutable audit records; a decline or timeout prevents Egress from starting.
 
 ## Start
 

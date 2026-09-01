@@ -185,6 +185,8 @@ namespace TaskFlow.Infra.DependencyInjection
                     "Meetings:GuestsEnabled requires Meetings:Enabled.")
                 .Validate(settings => !settings.RecordingEnabled || settings.Enabled,
                     "Meetings:RecordingEnabled requires Meetings:Enabled.")
+                .Validate(settings => settings.RecordingConsentTimeoutSeconds is >= 15 and <= 300,
+                    "Meetings:RecordingConsentTimeoutSeconds must be between 15 and 300.")
                 .ValidateOnStart();
             // Register the organization repositories
             services.AddScoped<
@@ -215,7 +217,9 @@ namespace TaskFlow.Infra.DependencyInjection
             services.AddScoped<IMeetingRepository, MeetingRepository>();
             services.AddScoped<IMeetingGuestAccessRepository, MeetingGuestAccessRepository>();
             services.AddScoped<IMeetingCollaborationRepository, MeetingCollaborationRepository>();
+            services.AddScoped<IMeetingRecordingRepository, MeetingRecordingRepository>();
             services.AddHostedService<MeetingRetentionCleanupService>();
+            services.AddHostedService<MeetingRecordingRecoveryService>();
 
             // Register the Wrok management  repositories
             services.AddScoped<

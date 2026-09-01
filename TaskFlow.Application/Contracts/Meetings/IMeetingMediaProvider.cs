@@ -15,6 +15,14 @@ public interface IMeetingMediaProvider
 
     Task CloseRoomAsync(string roomName, CancellationToken cancellationToken = default);
 
+    Task<MeetingEgressStartResult> StartRoomRecordingAsync(string roomName, string storageKey,
+        CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+    Task StopRoomRecordingAsync(string providerEgressId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+    Task<MeetingEgressStatusResult?> GetRoomRecordingStatusAsync(string providerEgressId,
+        CancellationToken cancellationToken = default) => Task.FromResult<MeetingEgressStatusResult?>(null);
+
     MeetingProviderWebhook VerifyWebhook(string rawBody, string authorizationHeader);
 }
 
@@ -39,4 +47,14 @@ public sealed record MeetingProviderWebhook(
     string? RoomName,
     string? ParticipantIdentity,
     string? ParticipantSid,
-    DateTimeOffset? OccurredAtUtc);
+    DateTimeOffset? OccurredAtUtc,
+    string? EgressId = null,
+    string? EgressStatus = null,
+    string? EgressError = null,
+    long? EgressFileSize = null,
+    long? EgressDurationMilliseconds = null);
+
+public sealed record MeetingEgressStartResult(string ProviderEgressId);
+public enum MeetingEgressState { Starting, Recording, Processing, Ready, Failed }
+public sealed record MeetingEgressStatusResult(MeetingEgressState State, string? Error = null,
+    long? FileSize = null, long? DurationMilliseconds = null);

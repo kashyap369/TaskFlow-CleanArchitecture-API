@@ -33,11 +33,17 @@ public sealed class MeetingRetentionCleanupService(IServiceScopeFactory scopes,
         foreach (var meetingId in ids)
         {
             var assets = await db.MeetingAssets.Where(x => x.MeetingId == meetingId).ToListAsync(ct);
+            var recordings = await db.MeetingRecordings.Where(x => x.MeetingId == meetingId).ToListAsync(ct);
             var storageComplete = true;
             foreach (var asset in assets) try { await storage.DeleteAsync(asset.StorageKey, ct); }
                 catch (Exception error) { storageComplete = false; logger.LogWarning(error, "Could not delete expired meeting object for meeting {MeetingId}.", meetingId); }
+            foreach (var recording in recordings.Where(x => x.Status == MeetingRecordingStatus.Ready))
+                try { await storage.DeleteAsync(recording.StorageKey, ct); }
+                catch (Exception error) { storageComplete = false; logger.LogWarning(error, "Could not delete expired meeting recording for meeting {MeetingId}.", meetingId); }
             if (!storageComplete) continue;
             foreach (var asset in assets) asset.SoftDelete();
+            foreach (var recording in recordings) recording.SoftDelete();
+            foreach (var consent in await db.MeetingRecordingConsents.Where(x => x.MeetingId == meetingId).ToListAsync(ct)) consent.SoftDelete();
             foreach (var message in await db.MeetingMessages.Where(x => x.MeetingId == meetingId).ToListAsync(ct)) message.SoftDelete();
             foreach (var note in await db.MeetingNotes.Where(x => x.MeetingId == meetingId).ToListAsync(ct)) note.SoftDelete();
             foreach (var revision in await db.MeetingNoteRevisions.Where(x => x.MeetingId == meetingId).ToListAsync(ct)) revision.SoftDelete();

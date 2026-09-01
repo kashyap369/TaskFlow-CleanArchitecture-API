@@ -76,6 +76,8 @@ public sealed class TaskFlowDbContext : DbContext
     public DbSet<MeetingNote> MeetingNotes => Set<MeetingNote>();
     public DbSet<MeetingNoteRevision> MeetingNoteRevisions => Set<MeetingNoteRevision>();
     public DbSet<MeetingAsset> MeetingAssets => Set<MeetingAsset>();
+    public DbSet<MeetingRecording> MeetingRecordings => Set<MeetingRecording>();
+    public DbSet<MeetingRecordingConsent> MeetingRecordingConsents => Set<MeetingRecordingConsent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

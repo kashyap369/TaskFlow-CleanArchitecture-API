@@ -7,6 +7,7 @@ using Microsoft.Extensions.Options;
 using TaskFlow.Api.Meetings;
 using TaskFlow.Application.Contracts.Meetings;
 using TaskFlow.Infra.Meetings;
+using TaskFlow.Infra.Storage;
 
 namespace TaskFlow.Tests.Infrastructure;
 
@@ -68,7 +69,7 @@ public sealed class LiveKitMeetingMediaProviderTests
     [Fact]
     public async Task DisabledProvider_DoesNotRequireLiveKitSecrets_AndCloseRoomIsANoOp()
     {
-        var provider = new LiveKitMeetingMediaProvider(Options.Create(new LiveKitSettings { Enabled = false }));
+        var provider = new LiveKitMeetingMediaProvider(Options.Create(new LiveKitSettings { Enabled = false }), Storage());
 
         Assert.False(provider.IsEnabled);
         await provider.CloseRoomAsync("meeting-disabled");
@@ -85,5 +86,8 @@ public sealed class LiveKitMeetingMediaProviderTests
             ApiKey = ApiKey,
             ApiSecret = ApiSecret,
             WebhookToleranceSeconds = 300
-        }));
+        }), Storage());
+
+    private static IOptions<ObjectStorageSettings> Storage() =>
+        Options.Create(new ObjectStorageSettings { Provider = "Local", LocalPath = "App_Data/objects" });
 }

@@ -1,6 +1,13 @@
 # TaskFlow Meetings — Canonical End-to-End Delivery Plan
 
-> **Status:** PHASES 0–5 DONE — Phase 6 is READY.
+> **Status:** PHASES 0–5 DONE — Phase 6 is IN PROGRESS.
+>
+> **Production validation (2026-09-01):** meeting create, registered-participant assignment and start
+> work on `taskflow.inksphere.space`, and the deployed Phase 5 collaboration API/UI loads. Realtime
+> calling is not production-enabled: the join-token path reports `LiveKit media is not enabled` and
+> the pre-join action stays disabled. Also, clearing “Schedule for a specific time” leaves stale
+> required validators on the hidden start/end controls, so ready-anytime creation is blocked while
+> scheduled creation works. Track both as Phase 7 rollout/hardening work; they do not reopen Phase 5.
 >
 > **Canonical scope:** Angular in `D:\Projects\TMS\TaskFlowUI\TaskFlowApp`, ASP.NET Core API in
 > `D:\Projects\TMS\TaskFlow`, PostgreSQL for durable state, TaskFlow private object storage for
@@ -446,7 +453,7 @@ Official references to re-verify during implementation:
 | 3 | Secure email invitations, share links and guest lobby | Phase 2 | DONE |
 | 4 | Custom LiveKit room for registered users and guests | Phase 3 | DONE |
 | 5 | Durable chat, notes, files and complete meeting archive | Phase 4 | DONE |
-| 6 | Consent-aware recording, Egress and playback | Phase 5 | READY |
+| 6 | Consent-aware recording, Egress and playback | Phase 5 | IN PROGRESS |
 | 7 | Security, scale, observability and production rollout | Phase 6 | NOT STARTED |
 
 Only one phase may be `IN PROGRESS`. A phase becomes `DONE` only when all exit criteria and evidence are
@@ -749,6 +756,13 @@ ordered archive with who shared what and when.
 - Add authorized archive playback/download and creator delete with storage cleanup.
 - Document Egress CPU/concurrency expectations and establish a staging capacity test.
 
+**Implementation checkpoint (2026-09-01):** application and local-infrastructure work is complete.
+The API now owns consent, Egress orchestration/reconciliation, private playback and deletion; Angular
+binds all nine member/guest routes with consent gates, recording indicators and archive controls.
+`AddMeetingRecordingEgress` plus `EnforceSingleActiveMeetingRecording` provide the schema and a
+database-enforced one-active-recording invariant. Production enablement remains gated on a real
+container/staging playable-MP4 and capacity run plus jurisdiction-specific legal/product approval.
+
 **Exit criteria:** no unauthorized or unconsented recording can start; all clients show recording state;
 start/stop/end paths produce exactly one playable authorized archive record; failed Egress is recoverable
 and does not claim success; guest/archive access is scoped; storage deletion is verified; legal/product
@@ -764,6 +778,11 @@ review of disclosure and retention is recorded before production enablement.
   declared supported ceilings; document capacity rather than claiming unlimited scale.
 - Add structured metrics/traces/logs without sensitive content and actionable alerts/runbooks.
 - Verify TURN behavior from restrictive networks and desktop/mobile supported browsers.
+- Fix ready-anytime meeting creation so removing the schedule also removes the hidden start/end
+  required validators; add a browser regression test for scheduled-to-ready transitions.
+- Provision the production LiveKit/Redis/TURN topology and set `LiveKit__Enabled=true`, a trusted
+  public `LiveKit__Url` using `wss://`, and environment-owned API credentials. Prove join-token
+  issuance before attempting the two-device media test.
 - Add critical E2E coverage: create → invite → guest OTP → join → call → collaborate → record → end →
   archive, plus revoke/remove/denial paths.
 - Roll out behind `Meetings:Enabled`, then guests, then recording. Staging soak precedes production.
@@ -810,11 +829,25 @@ guest/recording behavior disabled in production.
 
 ## 13. Evidence and decision log
 
+- **2026-09-01 — Phase 6 implementation complete; external certification pending:** added immutable
+  participant consent, host-only start/stop, late-join blocking, LiveKit room-composite MP4 Egress,
+  idempotent webhook/recovery reconciliation, private member/guest playback and storage-first delete.
+  Local Compose pins Egress `1.12.0` and documents a conservative one-720p-job-per-4-vCPU/4-GB policy.
+  API routes are `178/175` exposed/consumed; backend tests pass `65/65`, frontend specs `278/278`,
+  builds, lint/design lint, all 42 contrast checks and EF drift pass. Docker is unavailable on this
+  workstation, so no real Egress container/playable archive/capacity result was fabricated. Recording
+  stays disabled for production until that staging proof and the open geography/consent review exist.
 - **2026-09-01 — Phase 5 completed:** delivered canonical member/guest chat, optimistic shared notes,
   private scanned meeting files, ordered archives and storage-safe retention cleanup through the
   `AddMeetingCollaborationArchive` migration and 18 bound routes. Persist-first LiveKit announcements
   reconcile clients without becoming history authority. Full gates pass at backend `62/62`, frontend
   `276/276`, builds, lint/design lint, 42 contrast checks and zero EF drift. Phase 6 is READY.
+- **2026-09-01 — production meeting audit:** pushed/deployed Phase 5 and created production meeting
+  `#3`, added the Shubham Kashyap account and started the meeting successfully. The collaboration
+  panel then loaded without its earlier archive-route error. The room cannot issue a join token
+  because production LiveKit is disabled, so PC/mobile media is not yet testable. Ready-anytime form
+  submission also remains invalid after schedule removal because hidden date controls retain required
+  validators. Both follow-ups are recorded under Phase 7; scheduled creation remains operational.
 
 - **2026-08-31 — Phase 4 completed:** delivered the production custom LiveKit room, least-privilege
   member/guest grants, host/co-host moderation, signed durable replay-safe attendance, and the

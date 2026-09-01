@@ -10,9 +10,9 @@
 > | **Frontend** | `D:\Projects\TMS\TaskFlowUI\TaskFlowApp` — Angular 20, standalone + signals, Atomic Design, multi-portal |
 > | **Dev URLs** | API `https://localhost:7086/api` · UI `http://localhost:4200` (CORS allows only this origin) |
 >
-> **Last verified implementation:** 2026-09-01, through Organization Meetings Phase 5.
-> Planner Phases 17–23 are complete; see [PLANNER.md](PLANNER.md). The API exposes 169 endpoints;
-> the UI consumes 166. The remaining three are the signed provider webhook and the two long-standing
+> **Last verified implementation:** 2026-09-01, Organization Meetings Phase 6 code complete with external certification pending.
+> Planner Phases 17–23 are complete; see [PLANNER.md](PLANNER.md). The API exposes 178 endpoints;
+> the UI consumes 175. The remaining three are the signed provider webhook and the two long-standing
 > deliberate skips below.
 
 ---
@@ -58,10 +58,10 @@ has been exercised against a running API — not that the code compiles.
 | | Backend | Frontend |
 |---|---|---|
 | **Phases complete** | **13 of 13** (+ a security pass and an IDOR fix) | **27 session phases**; roadmap Phases 0–8 ✅ (Phase 6 admin extras closed by session Phase 27) |
-| **Version status** | **Pre-Planner product complete; Planner Phases 17–23 and Meetings Phases 0–5 complete** | **All three portals complete; Planner Phases 17–23 and Meetings Phases 0–5 complete** |
-| **Endpoints** | **169** exposed (19 controllers; excludes the Angular-template `WeatherForecastController`) | **166 consumed.** The provider webhook is server-to-server; the 2 deliberate skips below remain |
-| **Quality gates** | `dotnet test` ✅ **62/62** · build ✅ · EF model drift ✅ | `ng lint` **0 errors** · production build ✅ · **276/276** browser specs · WCAG AA on all 42 token pairings |
-| **Biggest gap** | **Meetings Phase 6 — recording, Egress and playback** | **Meetings Phase 6 — recording, Egress and playback** |
+| **Version status** | **Pre-Planner product complete; Planner Phases 17–23 and Meetings Phase 6 implemented, certification pending** | **All three portals complete; Planner Phases 17–23 and Meetings Phase 6 implemented, certification pending** |
+| **Endpoints** | **178** exposed (19 controllers; excludes the Angular-template `WeatherForecastController`) | **175 consumed.** The provider webhook is server-to-server; the 2 deliberate skips below remain |
+| **Quality gates** | `dotnet test` ✅ **65/65** · build ✅ · EF model drift ✅ | `ng lint` **0 errors** · production build ✅ · **278/278** browser specs · WCAG AA on all 42 token pairings |
+| **Biggest gap** | **Docker/staging Egress proof, legal approval and production LiveKit enablement** | **Ready-anytime validator fix plus staged two-client recording/archive proof** |
 | **Vision coverage** (§3.0) | **Organization 100% · Reporting 100% · Individual 100%** | **All three portals complete** — Organization, Individual and Admin |
 
 > **2026-07-26 — the two sides are now in sync.** Backend Phases 10–13 closed every ⛔/⚠️/⬜ row, and
@@ -91,7 +91,8 @@ Both are live and correct; nothing is blocked on them.
 | Phase 3 — secure guest access | ✅ | ✅ | Hash-only private/reusable links, meeting OTPs, opaque guest sessions, organizer decisions and a public lobby. All 19 meeting routes are bound. |
 | Phase 4 — custom LiveKit room | ✅ | ✅ | Least-privilege member/guest grants, custom pre-join/room media UX, capability-aware moderation, signed replay-safe durable attendance, disposable LiveKit health, and two-client presence/leave/reconnect evidence are complete. |
 | Phase 5 — collaboration and archive | ✅ | ✅ | Idempotent persisted chat, optimistic shared-note revisions, private scanned files, member/guest capability parity, complete ordered archives and storage-safe retention cleanup. |
-| Phases 6–7 — product delivery | ⬜ | ⬜ | The canonical contract is [MEETINGS.md](MEETINGS.md). |
+| Phase 6 — recording, Egress and playback | 🟡 | 🟡 | Application/UI and local Egress configuration are complete. Real staging playable-MP4/capacity evidence and jurisdiction-specific legal/product approval still gate completion and production enablement. |
+| Phase 7 — hardening and rollout | ⬜ | ⬜ | The canonical contract is [MEETINGS.md](MEETINGS.md). |
 
 ### 3.0 Vision coverage — `OVERVIEW.md` read as a spec
 
@@ -237,6 +238,16 @@ a running API.
 ---
 
 ## 4. Open issues — the blocking list
+
+### 4.0 ⚠️ OPEN (production audit, 2026-09-01) — Meetings media disabled and ready-anytime validation
+
+Production meeting `#3` was created, assigned to Shubham Kashyap and started successfully; the newly
+deployed Phase 5 collaboration surface also loaded. The room join-token request fails with
+`LiveKit media is not enabled`, so the PC/mobile audio-video proof is blocked until a public trusted
+`wss://` LiveKit deployment (with Redis/TURN as required) and environment-owned `LiveKit__Enabled`,
+`LiveKit__Url`, `LiveKit__ApiKey` and `LiveKit__ApiSecret` values are configured. Separately, switching
+the creation form from scheduled to ready-anytime leaves hidden start/end required validators attached
+and prevents submission. Scheduled creation works. Resolve and regression-test both in Meetings Phase 7.
 
 ### 4.1 ✅ RESOLVED (Phase 9, 2026-07-26) — personal-task write path
 `CreateTaskCommand` takes a **non-nullable `int OrganizationId`** and its handler loads the organization,
@@ -390,6 +401,8 @@ Docker + CI/CD.
 
 | Date | Side | Change |
 |---|---|---|
+| 2026-09-01 | **Both** | **Organization Meetings Phase 6 implementation complete; external certification pending.** Added immutable current-participant consent, late-join gates, host-only recording lifecycle, LiveKit room-composite MP4 Egress, webhook/recovery reconciliation, private member/guest playback and storage-first deletion. Angular binds all nine routes with a persistent recording indicator and archive controls. Routes are **178 total / 175 consumed**; backend tests pass **65/65**, frontend specs **278/278**, and builds, lint/design lint, 42 contrast checks and EF drift pass. Docker is unavailable locally, so a real playable archive/capacity run and jurisdiction-specific legal/product approval still gate Phase 6 completion and production recording. |
+| 2026-09-01 | **Both** | **Production Meetings verification follow-up.** Backend Phase 5 commit `d397ea5` was pushed and deployed; production meeting `#3` was created, assigned to Shubham Kashyap and started, and the collaboration panel loaded. Media remains blocked because production reports `LiveKit media is not enabled`; ready-anytime creation is also blocked by stale hidden date validators after schedule removal. Scheduled creation works. Both items are now explicit Phase 7 rollout/hardening work. |
 | 2026-09-01 | **Both** | **Completed Organization Meetings Phase 5.** Added idempotent durable chat, optimistic shared-note revisions, private scanned files, ordered timing/attendance/content archives and storage-first retention cleanup through `AddMeetingCollaborationArchive`. Angular binds all 18 member/guest collaboration routes and uses persist-first LiveKit announcements only for reconciliation. Routes are **169 total / 166 consumed**; the only unconsumed routes remain the server-to-server webhook and two deliberate skips. Disposable PostgreSQL proves retry deduplication, stale-note conflict, outsider asset denial, scanned upload/download and ended archive reconstruction. Backend tests pass **62/62**, frontend specs **276/276**, and builds, lint/design lint, 42 contrast checks and EF drift pass. Phase 6 is READY. |
 | 2026-08-31 | **Both** | **Completed Organization Meetings Phase 4.** Added least-privilege registered/guest join grants, a custom responsive pre-join and room experience, capability-aware host/co-host mute/remove, signed raw-body LiveKit webhooks, connection-scoped attendance and durable replay receipts through `AddMeetingWebhookReceipts`. Official LiveKit Server `1.13.6` passed the standalone disposable health path; two independent browser contexts proved registered/guest presence, leave and fresh-token reconnect with real webhook delivery. Routes are **151 total / 148 consumed**; the only unconsumed routes are the server-to-server webhook and two deliberate skips. Backend tests pass **60/60**, frontend specs **275/275**, and builds, lint/design lint, 42 contrast checks and EF drift pass. Phase 5 is READY. |
 | 2026-08-31 | API | **Advanced Organization Meetings Phase 4 P4.1.** Stabilized the meeting integration assertion and added disposable-PostgreSQL HTTP coverage for assigned-member token issuance, unassigned-user denial, and verified-guest denial until organizer admission. The test host signs credentials using test-only LiveKit settings without contacting a media server and assigns each client a distinct forwarded test IP, preserving real guest rate limits without cross-test contention. No endpoint or UI-count change; backend tests pass **59/59**. P4.2 moderation and attendance is next. |

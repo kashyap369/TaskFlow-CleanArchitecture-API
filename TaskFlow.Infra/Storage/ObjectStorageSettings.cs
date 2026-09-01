@@ -16,6 +16,8 @@ public sealed class ObjectStorageSettings
 
     public string Bucket { get; set; } = string.Empty;
 
+    public string Region { get; set; } = "us-east-1";
+
     public bool UseSsl { get; set; } = true;
 
     public bool ForcePathStyle { get; set; } = true;

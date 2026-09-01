@@ -1,5 +1,28 @@
 # TaskFlow — Session Log
 
+## 2026-09-01 (Organization Meetings Phase 6 — implementation complete, certification pending)
+
+- Added immutable per-participant consent, host-only recording lifecycle, late-join consent gates,
+  LiveKit room-composite Egress, idempotent webhook/recovery reconciliation and end-meeting stop.
+- Added private member/guest archive playback, creator storage-first delete, retention cleanup, nine
+  bound routes and additive recording migrations with a database-level single-active-recording guard.
+- Backend build, 65/65 tests and EF drift pass. Angular passes 278/278 specs, production build,
+  lint/design lint and all 42 contrast checks. Docker is unavailable on this workstation, so the real
+  Egress MP4/capacity run remains a staging certification item; production recording also remains off
+  until the jurisdiction-specific legal/product review is recorded.
+
+## 2026-09-01 (Organization Meetings — production verification follow-up)
+
+- Pushed backend Phase 5 commit `d397ea5`; the production collaboration panel subsequently loaded
+  without the prior missing-route error.
+- Created and started production meeting `#3` and added Shubham Kashyap as an admitted participant.
+  This proves production create/assignment/lifecycle paths, but the room reports `LiveKit media is not
+  enabled`, so PC/mobile audio-video cannot connect until the LiveKit/Redis/TURN service and production
+  `LiveKit__*` configuration are enabled.
+- Found a separate UI regression: unchecking scheduling leaves hidden start/end required validators
+  attached and blocks ready-anytime submission. Scheduled creation works. Both items are assigned to
+  Phase 7 rollout/hardening; no Phase 5 scope was reopened.
+
 ## 2026-09-01 (Organization Meetings Phase 5 — completed end to end)
 
 - Added persist-first idempotent chat, optimistic shared-note revisions, private scanned files and a

@@ -1,0 +1,9 @@
+api_key: devkey
+api_secret: secretsecretsecretsecretsecretsecret
+ws_url: ws://livekit:7880
+log_level: info
+health_port: 8080
+redis:
+  address: redis:6379
+template_port: 7980
+prometheus_port: 9090

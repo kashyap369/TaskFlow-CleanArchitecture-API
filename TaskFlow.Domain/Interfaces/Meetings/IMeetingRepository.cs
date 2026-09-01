@@ -38,3 +38,13 @@ public interface IMeetingCollaborationRepository
     void UpdateNote(MeetingNote note);
     void UpdateAsset(MeetingAsset asset);
 }
+
+public interface IMeetingRecordingRepository
+{
+    Task<MeetingRecording?> GetByIdAsync(int meetingId, int recordingId, CancellationToken cancellationToken = default);
+    Task<MeetingRecording?> GetActiveAsync(int meetingId, CancellationToken cancellationToken = default);
+    Task<MeetingRecording?> GetByProviderEgressIdAsync(string providerEgressId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<MeetingRecording>> GetForMeetingAsync(int meetingId, CancellationToken cancellationToken = default);
+    Task AddAsync(MeetingRecording recording, CancellationToken cancellationToken = default);
+    void Update(MeetingRecording recording);
+}

@@ -171,7 +171,7 @@ public sealed class MuteGuestMeetingRoomParticipantCommandHandler(IMeetingReposi
 }
 
 public sealed class ProcessMeetingProviderWebhookCommandHandler(IMeetingRepository meetings,
-    IUnitOfWork unitOfWork) : IRequestHandler<ProcessMeetingProviderWebhookCommand>
+    IMeetingRecordingRepository recordings, IUnitOfWork unitOfWork) : IRequestHandler<ProcessMeetingProviderWebhookCommand>
 {
     public async Task Handle(ProcessMeetingProviderWebhookCommand request, CancellationToken ct)
     {
@@ -182,6 +182,20 @@ public sealed class ProcessMeetingProviderWebhookCommandHandler(IMeetingReposito
         var meeting = await meetings.GetByRoomNameAsync(webhook.RoomName, ct);
         if (meeting is null) return;
         var occurred = webhook.OccurredAtUtc?.UtcDateTime ?? DateTime.UtcNow;
+
+        if (!string.IsNullOrWhiteSpace(webhook.EgressId))
+        {
+            var recording = await recordings.GetByProviderEgressIdAsync(webhook.EgressId, ct);
+            if (recording is null) return;
+            var status = webhook.EgressStatus ?? string.Empty;
+            if (status.Contains("Active", StringComparison.OrdinalIgnoreCase)) recording.MarkRecording(occurred);
+            else if (status.Contains("Complete", StringComparison.OrdinalIgnoreCase)) recording.MarkReady(occurred, webhook.EgressFileSize, webhook.EgressDurationMilliseconds);
+            else if (status.Contains("Ending", StringComparison.OrdinalIgnoreCase)) recording.MarkProcessing(occurred);
+            else if (status.Contains("Failed", StringComparison.OrdinalIgnoreCase) || status.Contains("Aborted", StringComparison.OrdinalIgnoreCase) || status.Contains("Limit", StringComparison.OrdinalIgnoreCase)) recording.Fail(webhook.EgressError ?? "The recording provider reported a failure.");
+            else return;
+            await meetings.AddWebhookReceiptAsync(new MeetingWebhookReceipt(meeting.Id, webhook.EventId, webhook.EventType, occurred), ct);
+            recordings.Update(recording); await unitOfWork.SaveChangesAsync(ct); return;
+        }
 
         if (string.Equals(webhook.EventType, "room_finished", StringComparison.Ordinal))
             meeting.EndFromProvider(occurred);

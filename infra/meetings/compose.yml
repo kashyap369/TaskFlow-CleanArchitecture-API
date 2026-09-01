@@ -24,3 +24,23 @@ services:
       - "7880:7880"
       - "7881:7881"
       - "50000-50100:50000-50100/udp"
+
+  egress:
+    image: livekit/egress:v1.12.0
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      livekit:
+        condition: service_started
+    environment:
+      EGRESS_CONFIG_FILE: /etc/livekit/egress.yaml
+    volumes:
+      - ./egress.yaml:/etc/livekit/egress.yaml:ro
+      - ../../TaskFlow.Api/App_Data/objects:/out
+    shm_size: 1gb
+    deploy:
+      resources:
+        limits:
+          cpus: "4.0"
+          memory: 4g

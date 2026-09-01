@@ -177,3 +177,35 @@ public sealed class MeetingAssetConfiguration : IEntityTypeConfiguration<Meeting
         builder.HasOne<MeetingParticipant>().WithMany().HasForeignKey(x => x.UploaderParticipantId).OnDelete(DeleteBehavior.Restrict);
     }
 }
+
+public sealed class MeetingRecordingConfiguration : IEntityTypeConfiguration<MeetingRecording>
+{
+    public void Configure(EntityTypeBuilder<MeetingRecording> builder)
+    {
+        builder.ToTable("MeetingRecordings"); builder.HasKey(x => x.Id); builder.Ignore(x => x.DomainEvents);
+        builder.Property(x => x.Status).HasConversion<int>();
+        builder.Property(x => x.StorageKey).HasMaxLength(512).IsRequired();
+        builder.Property(x => x.ProviderEgressId).HasMaxLength(160);
+        builder.Property(x => x.FailureReason).HasMaxLength(500);
+        builder.HasIndex(x => x.StorageKey).IsUnique();
+        builder.HasIndex(x => x.ProviderEgressId).IsUnique().HasFilter("\"ProviderEgressId\" IS NOT NULL");
+        builder.HasIndex(x => x.MeetingId).IsUnique().HasFilter("\"IsDeleted\" = FALSE AND \"Status\" IN (1, 2, 3, 4)");
+        builder.HasIndex(x => new { x.MeetingId, x.Status });
+        builder.HasOne<Meeting>().WithMany().HasForeignKey(x => x.MeetingId).OnDelete(DeleteBehavior.Cascade);
+        builder.HasOne<MeetingParticipant>().WithMany().HasForeignKey(x => x.RequestedByParticipantId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasMany(x => x.Consents).WithOne().HasForeignKey(x => x.MeetingRecordingId).OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+public sealed class MeetingRecordingConsentConfiguration : IEntityTypeConfiguration<MeetingRecordingConsent>
+{
+    public void Configure(EntityTypeBuilder<MeetingRecordingConsent> builder)
+    {
+        builder.ToTable("MeetingRecordingConsents"); builder.HasKey(x => x.Id); builder.Ignore(x => x.DomainEvents);
+        builder.Property(x => x.Status).HasConversion<int>();
+        builder.HasIndex(x => new { x.MeetingRecordingId, x.ParticipantId }).IsUnique();
+        builder.HasIndex(x => new { x.MeetingId, x.ParticipantId, x.CreatedAt });
+        builder.HasOne<Meeting>().WithMany().HasForeignKey(x => x.MeetingId).OnDelete(DeleteBehavior.Cascade);
+        builder.HasOne<MeetingParticipant>().WithMany().HasForeignKey(x => x.ParticipantId).OnDelete(DeleteBehavior.Restrict);
+    }
+}

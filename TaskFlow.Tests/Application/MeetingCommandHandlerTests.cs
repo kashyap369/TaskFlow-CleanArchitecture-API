@@ -64,7 +64,8 @@ public sealed class MeetingCommandHandlerTests
         var user = Substitute.For<ICurrentUserService>();
         user.UserId.Returns(22); user.Email.Returns("manager@example.test");
         var media = Substitute.For<IMeetingMediaProvider>();
-        var handler = new GetMeetingJoinTokenCommandHandler(meetings, user, media);
+        var recordings = Substitute.For<IMeetingRecordingRepository>();
+        var handler = new GetMeetingJoinTokenCommandHandler(meetings, user, media, recordings);
 
         var error = await Assert.ThrowsAsync<ForbiddenException>(() =>
             handler.Handle(new GetMeetingJoinTokenCommand(5), CancellationToken.None));
@@ -103,7 +104,8 @@ public sealed class MeetingCommandHandlerTests
         SetId(meeting, 5); var host = meeting.Participants.Single(); SetId(host, 1); meeting.Start(DateTime.UtcNow);
         var meetings = Substitute.For<IMeetingRepository>(); meetings.GetByRoomNameAsync("meeting-room", Arg.Any<CancellationToken>()).Returns(meeting);
         meetings.HasWebhookReceiptAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(false);
-        var unitOfWork = Substitute.For<IUnitOfWork>(); var handler = new ProcessMeetingProviderWebhookCommandHandler(meetings, unitOfWork);
+        var unitOfWork = Substitute.For<IUnitOfWork>(); var recordings = Substitute.For<IMeetingRecordingRepository>();
+        var handler = new ProcessMeetingProviderWebhookCommandHandler(meetings, recordings, unitOfWork);
         var identity = $"m5-p1-{new string('a', 32)}"; var joined = DateTimeOffset.UtcNow.AddMinutes(-2); var left = DateTimeOffset.UtcNow;
 
         await handler.Handle(new ProcessMeetingProviderWebhookCommand(new MeetingProviderWebhook("e2", "participant_left", "meeting-room", identity, "sid-1", left)), CancellationToken.None);

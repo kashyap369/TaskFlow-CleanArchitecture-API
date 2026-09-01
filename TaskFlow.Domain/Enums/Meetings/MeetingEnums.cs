@@ -6,3 +6,5 @@ public enum MeetingParticipantState { Invited = 1, Admitted = 2, Revoked = 3, De
 public enum MeetingAccessLinkMode { PrivateInvitation = 1, Reusable = 2 }
 public enum MeetingGuestDecisionKind { Admitted = 1, Denied = 2, Revoked = 3, Removed = 4 }
 public enum MeetingAssetScanStatus { Pending = 1, Clean = 2, Rejected = 3, Failed = 4 }
+public enum MeetingRecordingStatus { PendingConsent = 1, Starting = 2, Recording = 3, Processing = 4, Ready = 5, Failed = 6 }
+public enum MeetingRecordingConsentStatus { Pending = 1, Accepted = 2, Declined = 3, TimedOut = 4 }

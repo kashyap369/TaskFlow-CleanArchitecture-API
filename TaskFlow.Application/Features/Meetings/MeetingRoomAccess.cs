@@ -58,7 +58,7 @@ internal static class MeetingRoomAccessRules
 }
 
 public sealed class GetMeetingJoinTokenCommandHandler(IMeetingRepository meetings,
-    ICurrentUserService user, IMeetingMediaProvider provider)
+    ICurrentUserService user, IMeetingMediaProvider provider, IMeetingRecordingRepository recordings)
     : IRequestHandler<GetMeetingJoinTokenCommand, MeetingRoomTokenDto>
 {
     public async Task<MeetingRoomTokenDto> Handle(GetMeetingJoinTokenCommand request, CancellationToken ct)
@@ -71,12 +71,22 @@ public sealed class GetMeetingJoinTokenCommandHandler(IMeetingRepository meeting
         var displayName = participant.DisplayName;
         if (string.IsNullOrWhiteSpace(displayName))
             displayName = user.Email.Split('@')[0];
+        await EnsureRecordingConsentAsync(meeting.Id, participant.Id, recordings, ct);
         return MeetingRoomAccessRules.Create(meeting, participant, displayName, provider);
+    }
+
+    internal static async Task EnsureRecordingConsentAsync(int meetingId, int participantId,
+        IMeetingRecordingRepository recordings, CancellationToken ct)
+    {
+        var active = await recordings.GetActiveAsync(meetingId, ct);
+        if (active is not null && active.Status is MeetingRecordingStatus.PendingConsent or MeetingRecordingStatus.Starting or MeetingRecordingStatus.Recording &&
+            !active.HasAcceptedConsent(participantId))
+            throw new BusinessException("MEETING_RECORDING_CONSENT_REQUIRED", "Accept the recording disclosure before joining this meeting.");
     }
 }
 
 public sealed class GetGuestMeetingJoinTokenCommandHandler(IMeetingGuestAccessRepository guestAccess,
-    IMeetingRepository meetings, IMeetingMediaProvider provider)
+    IMeetingRepository meetings, IMeetingMediaProvider provider, IMeetingRecordingRepository recordings)
     : IRequestHandler<GetGuestMeetingJoinTokenCommand, MeetingRoomTokenDto>
 {
     public async Task<MeetingRoomTokenDto> Handle(GetGuestMeetingJoinTokenCommand request, CancellationToken ct)
@@ -90,6 +100,7 @@ public sealed class GetGuestMeetingJoinTokenCommandHandler(IMeetingGuestAccessRe
             ?? throw new UnauthorizedException("MEETING_GUEST_SESSION_INVALID", "Your meeting access is no longer available.");
         if (participant.State != MeetingParticipantState.Admitted)
             throw new ForbiddenException("MEETING_GUEST_NOT_ADMITTED", "Wait for the host to admit you before joining.");
+        await GetMeetingJoinTokenCommandHandler.EnsureRecordingConsentAsync(meeting.Id, participant.Id, recordings, ct);
         return MeetingRoomAccessRules.Create(meeting, participant, participant.DisplayName ?? "Guest", provider);
     }
 }

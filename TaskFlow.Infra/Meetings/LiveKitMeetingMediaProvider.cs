@@ -1,6 +1,7 @@
 using Livekit.Server.Sdk.Dotnet;
 using Microsoft.Extensions.Options;
 using TaskFlow.Application.Contracts.Meetings;
+using TaskFlow.Infra.Storage;
 
 namespace TaskFlow.Infra.Meetings;
 
@@ -9,14 +10,19 @@ public sealed class LiveKitMeetingMediaProvider : IMeetingMediaProvider
     private readonly LiveKitSettings _settings;
     private readonly WebhookReceiver? _webhookReceiver;
     private readonly RoomServiceClient? _roomService;
+    private readonly EgressServiceClient? _egressService;
+    private readonly ObjectStorageSettings _storage;
 
-    public LiveKitMeetingMediaProvider(IOptions<LiveKitSettings> options)
+    public LiveKitMeetingMediaProvider(IOptions<LiveKitSettings> options,
+        IOptions<ObjectStorageSettings> storage)
     {
         _settings = options.Value;
+        _storage = storage.Value;
         if (_settings.Enabled)
         {
             _webhookReceiver = new WebhookReceiver(_settings.ApiKey, _settings.ApiSecret);
             _roomService = new RoomServiceClient(ToHttpUrl(_settings.Url), _settings.ApiKey, _settings.ApiSecret);
+            _egressService = new EgressServiceClient(ToHttpUrl(_settings.Url), _settings.ApiKey, _settings.ApiSecret);
         }
     }
 
@@ -108,6 +114,60 @@ public sealed class LiveKitMeetingMediaProvider : IMeetingMediaProvider
             await _roomService.DeleteRoom(new DeleteRoomRequest { Room = roomName });
     }
 
+    public async Task<MeetingEgressStartResult> StartRoomRecordingAsync(string roomName,
+        string storageKey, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ArgumentException.ThrowIfNullOrWhiteSpace(roomName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(storageKey);
+        if (_egressService is null) throw new InvalidOperationException("LiveKit media is not enabled.");
+        var output = new EncodedFileOutput { FileType = EncodedFileType.Mp4 };
+        if (_storage.UsesLocalFileSystem)
+        {
+            output.Filepath = $"{_settings.EgressLocalOutputPath.TrimEnd('/')}/{storageKey}";
+        }
+        else
+        {
+            output.Filepath = storageKey;
+            output.S3 = new S3Upload
+            {
+                AccessKey = _storage.AccessKey, Secret = _storage.SecretKey,
+                Bucket = _storage.Bucket, Region = _storage.Region,
+                Endpoint = _storage.Endpoint, ForcePathStyle = _storage.ForcePathStyle
+            };
+        }
+        var request = new RoomCompositeEgressRequest { RoomName = roomName, Layout = "grid" };
+        request.FileOutputs.Add(output);
+        var result = await _egressService.StartRoomCompositeEgress(request);
+        return new MeetingEgressStartResult(result.EgressId);
+    }
+
+    public async Task StopRoomRecordingAsync(string providerEgressId,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ArgumentException.ThrowIfNullOrWhiteSpace(providerEgressId);
+        if (_egressService is null) throw new InvalidOperationException("LiveKit media is not enabled.");
+        await _egressService.StopEgress(new StopEgressRequest { EgressId = providerEgressId });
+    }
+
+    public async Task<MeetingEgressStatusResult?> GetRoomRecordingStatusAsync(string providerEgressId,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (_egressService is null) return null;
+        var response = await _egressService.ListEgress(new ListEgressRequest { EgressId = providerEgressId });
+        var info = response.Items.FirstOrDefault(); if (info is null) return null;
+        var value = info.Status.ToString();
+        var state = value.Contains("Complete", StringComparison.OrdinalIgnoreCase) ? MeetingEgressState.Ready
+            : value.Contains("Failed", StringComparison.OrdinalIgnoreCase) || value.Contains("Aborted", StringComparison.OrdinalIgnoreCase) || value.Contains("Limit", StringComparison.OrdinalIgnoreCase) ? MeetingEgressState.Failed
+            : value.Contains("Ending", StringComparison.OrdinalIgnoreCase) ? MeetingEgressState.Processing
+            : value.Contains("Active", StringComparison.OrdinalIgnoreCase) ? MeetingEgressState.Recording
+            : MeetingEgressState.Starting;
+        return new(state, info.Error, info.FileResults.FirstOrDefault()?.Size,
+            info.EndedAt > info.StartedAt ? (info.EndedAt - info.StartedAt) / 1_000_000 : null);
+    }
+
     public MeetingProviderWebhook VerifyWebhook(string rawBody, string authorizationHeader)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(rawBody);
@@ -122,10 +182,17 @@ public sealed class LiveKitMeetingMediaProvider : IMeetingMediaProvider
         return new MeetingProviderWebhook(
             webhook.Id,
             webhook.Event,
-            webhook.Room?.Name,
+            webhook.Room?.Name ?? webhook.EgressInfo?.RoomName,
             webhook.Participant?.Identity,
             webhook.Participant?.Sid,
-            occurredAtUtc);
+            occurredAtUtc,
+            webhook.EgressInfo?.EgressId,
+            webhook.EgressInfo?.Status.ToString(),
+            webhook.EgressInfo?.Error,
+            webhook.EgressInfo?.FileResults.FirstOrDefault()?.Size,
+            webhook.EgressInfo is null ? null : webhook.EgressInfo.EndedAt > webhook.EgressInfo.StartedAt
+                ? (webhook.EgressInfo.EndedAt - webhook.EgressInfo.StartedAt) / 1_000_000
+                : null);
     }
 
     private static string ToHttpUrl(string webSocketUrl)

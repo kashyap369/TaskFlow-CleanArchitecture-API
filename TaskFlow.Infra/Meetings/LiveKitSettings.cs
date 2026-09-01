@@ -13,4 +13,6 @@ public sealed class LiveKitSettings
     public string ApiSecret { get; set; } = string.Empty;
 
     public int WebhookToleranceSeconds { get; set; } = 300;
+
+    public string EgressLocalOutputPath { get; set; } = "/out";
 }

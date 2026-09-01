@@ -9,4 +9,5 @@ public sealed class MeetingSettings
     public int GuestSessionMinutes { get; set; } = 60;
     public int DefaultRetentionDays { get; set; } = 90;
     public long MaxFileBytes { get; set; } = 25 * 1024 * 1024;
+    public int RecordingConsentTimeoutSeconds { get; set; } = 60;
 }
