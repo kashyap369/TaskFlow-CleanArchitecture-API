@@ -56,6 +56,47 @@ public sealed class MeetingGuestController(IMediator mediator, IOptions<MeetingS
     { await mediator.Send(new MuteGuestMeetingRoomParticipantCommand(GuestSessionToken(), participantId,
         request.ParticipantIdentity, request.TrackSid, request.Muted), ct); return NoContent(); }
 
+    [HttpGet("messages")]
+    public async Task<IActionResult> Messages([FromQuery] int skip = 0, [FromQuery] int take = 100, CancellationToken ct = default) =>
+        Ok(await mediator.Send(new GetGuestMeetingMessagesQuery(GuestSessionToken(), skip, take), ct));
+
+    [HttpPost("messages")]
+    public async Task<IActionResult> SendMessage(SendMeetingMessageRequest request, CancellationToken ct) =>
+        Ok(await mediator.Send(new SendGuestMeetingMessageCommand(GuestSessionToken(), request.ClientMessageId, request.Body, request.ReplyToMessageId), ct));
+
+    [HttpGet("note")]
+    public async Task<IActionResult> Note(CancellationToken ct) => Ok(await mediator.Send(new GetGuestMeetingNoteQuery(GuestSessionToken()), ct));
+
+    [HttpPut("note")]
+    public async Task<IActionResult> UpdateNote(UpdateMeetingNoteRequest request, CancellationToken ct) =>
+        Ok(await mediator.Send(new UpdateGuestMeetingNoteCommand(GuestSessionToken(), request.Content, request.ExpectedVersion), ct));
+
+    [HttpGet("assets")]
+    public async Task<IActionResult> Assets(CancellationToken ct) => Ok(await mediator.Send(new GetGuestMeetingAssetsQuery(GuestSessionToken()), ct));
+
+    [HttpPost("assets")]
+    public async Task<IActionResult> UploadAsset(IFormFile file, CancellationToken ct)
+    {
+        await using var stream = file.OpenReadStream();
+        return Ok(await mediator.Send(new UploadGuestMeetingAssetCommand(GuestSessionToken(), file.FileName,
+            file.ContentType, file.Length, stream, settings.Value.MaxFileBytes), ct));
+    }
+
+    [HttpGet("assets/{assetId:int}")]
+    public async Task<IActionResult> DownloadAsset(int assetId, CancellationToken ct)
+    {
+        var asset = await mediator.Send(new DownloadGuestMeetingAssetQuery(GuestSessionToken(), assetId), ct);
+        Response.Headers.XContentTypeOptions = "nosniff";
+        return File(asset.Content, asset.ContentType, asset.FileName, enableRangeProcessing: false);
+    }
+
+    [HttpDelete("assets/{assetId:int}")]
+    public async Task<IActionResult> DeleteAsset(int assetId, CancellationToken ct)
+    { await mediator.Send(new DeleteGuestMeetingAssetCommand(GuestSessionToken(), assetId), ct); return NoContent(); }
+
+    [HttpGet("archive")]
+    public async Task<IActionResult> Archive(CancellationToken ct) => Ok(await mediator.Send(new GetGuestMeetingArchiveQuery(GuestSessionToken()), ct));
+
     private string GuestSessionToken() => Request.Headers["X-Meeting-Guest-Session"].FirstOrDefault() ?? string.Empty;
 }
 

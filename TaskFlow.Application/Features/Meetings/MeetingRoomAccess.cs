@@ -50,7 +50,7 @@ internal static class MeetingRoomAccessRules
         });
         var issued = provider.CreateJoinToken(new MeetingJoinTokenRequest(
             meeting.RoomName, identity, displayName,
-            TimeSpan.FromMinutes(10), canPublish, true, false, canModerate, metadata));
+            TimeSpan.FromMinutes(10), canPublish, true, true, canModerate, metadata));
         return new(provider.WebSocketUrl, issued.Value, issued.ExpiresAtUtc, meeting.Id, participant.Id,
             displayName, participant.AccessLevel, badge, canPublish, canShareScreen, canModerate,
             identity, meeting.Title);

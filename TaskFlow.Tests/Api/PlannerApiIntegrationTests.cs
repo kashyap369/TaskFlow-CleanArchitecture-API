@@ -288,6 +288,54 @@ public sealed class PlannerApiIntegrationTests : IClassFixture<PlannerApiFixture
     }
 
     [Fact]
+    public async Task MeetingCollaboration_ReconcilesRetriesConflictsFilesAndEndedArchive()
+    {
+        using var owner = _fixture.CreateClient(_fixture.CapacityOwnerUserId);
+        using var member = _fixture.CreateClient(_fixture.CapacityMemberUserId);
+        using var outsider = _fixture.CreateClient(_fixture.OtherOrganizationOwnerUserId);
+        var created = await owner.PostAsJsonAsync("api/meeting", new
+        {
+            organizationId = _fixture.CapacityOrganizationId, title = "Durable collaboration",
+            timeZone = "UTC", guestsAllowed = true, retentionDays = 90,
+            participantUserIds = new[] { _fixture.CapacityMemberUserId }
+        });
+        var meetingId = await created.Content.ReadFromJsonAsync<int>();
+        Assert.Equal(HttpStatusCode.NoContent, (await owner.PostAsync($"api/meeting/{meetingId}/start", null)).StatusCode);
+
+        var clientMessageId = Guid.NewGuid();
+        var first = await member.PostAsJsonAsync($"api/meeting/{meetingId}/messages", new { clientMessageId, body = "Persist before broadcast" });
+        var retry = await member.PostAsJsonAsync($"api/meeting/{meetingId}/messages", new { clientMessageId, body = "Persist before broadcast" });
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode); Assert.Equal(HttpStatusCode.OK, retry.StatusCode);
+        using var firstJson = JsonDocument.Parse(await first.Content.ReadAsStringAsync());
+        using var retryJson = JsonDocument.Parse(await retry.Content.ReadAsStringAsync());
+        Assert.Equal(firstJson.RootElement.GetProperty("id").GetInt32(), retryJson.RootElement.GetProperty("id").GetInt32());
+        Assert.Equal(HttpStatusCode.Forbidden, (await outsider.GetAsync($"api/meeting/{meetingId}/messages")).StatusCode);
+
+        var note = await member.PutAsJsonAsync($"api/meeting/{meetingId}/note", new { content = "Decision one", expectedVersion = 0 });
+        Assert.Equal(HttpStatusCode.OK, note.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await owner.PutAsJsonAsync($"api/meeting/{meetingId}/note",
+            new { content = "Silent overwrite", expectedVersion = 0 })).StatusCode);
+
+        using var upload = new MultipartFormDataContent();
+        var file = new ByteArrayContent("safe meeting attachment"u8.ToArray());
+        file.Headers.ContentType = new MediaTypeHeaderValue("text/plain"); upload.Add(file, "file", "decisions.txt");
+        var uploaded = await member.PostAsync($"api/meeting/{meetingId}/assets", upload);
+        Assert.Equal(HttpStatusCode.OK, uploaded.StatusCode);
+        using var uploadedJson = JsonDocument.Parse(await uploaded.Content.ReadAsStringAsync());
+        var assetId = uploadedJson.RootElement.GetProperty("id").GetInt32();
+        Assert.Equal(HttpStatusCode.Forbidden, (await outsider.GetAsync($"api/meeting/{meetingId}/assets/{assetId}")).StatusCode);
+
+        Assert.Equal(HttpStatusCode.NoContent, (await owner.PostAsync($"api/meeting/{meetingId}/end", null)).StatusCode);
+        var archive = await member.GetAsync($"api/meeting/{meetingId}/archive");
+        Assert.Equal(HttpStatusCode.OK, archive.StatusCode);
+        var archiveBody = await archive.Content.ReadAsStringAsync();
+        Assert.Contains("Persist before broadcast", archiveBody); Assert.Contains("Decision one", archiveBody); Assert.Contains("decisions.txt", archiveBody);
+        Assert.Equal(HttpStatusCode.BadRequest, (await member.PostAsJsonAsync($"api/meeting/{meetingId}/messages",
+            new { clientMessageId = Guid.NewGuid(), body = "too late" })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await member.GetAsync($"api/meeting/{meetingId}/assets/{assetId}")).StatusCode);
+    }
+
+    [Fact]
     public async Task CalendarEntries_ExpandRecurrence_StayOrganizationScoped_AndDeleteIndependently()
     {
         using var owner = _fixture.CreateClient(_fixture.CapacityOwnerUserId);

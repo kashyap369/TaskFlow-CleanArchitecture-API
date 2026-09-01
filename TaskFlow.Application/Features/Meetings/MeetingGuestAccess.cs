@@ -46,7 +46,7 @@ internal static class MeetingGuestAccessRules
     public static void EnsureAvailable(Meeting meeting, MeetingAccessLink link, string? normalizedEmail = null)
     {
         if (!meeting.GuestsAllowed) throw new BusinessException("MEETING_GUESTS_DISABLED", "Guest access is disabled for this meeting.");
-        if (meeting.Status is MeetingStatus.Ended or MeetingStatus.Cancelled) throw new BusinessException("MEETING_NOT_JOINABLE", "This meeting is no longer accepting guests.");
+        if (meeting.Status == MeetingStatus.Cancelled) throw new BusinessException("MEETING_NOT_JOINABLE", "This meeting is no longer accepting guests.");
         if (!link.IsActive(DateTime.UtcNow)) throw new BusinessException("MEETING_LINK_UNAVAILABLE", "This invitation is expired or revoked.");
         if (normalizedEmail is not null && !link.HasCapacity && !meeting.Participants.Any(x => x.NormalizedEmail == normalizedEmail && !x.IsDeleted))
             throw new BusinessException("MEETING_LINK_UNAVAILABLE", "This invitation has reached its use limit.");

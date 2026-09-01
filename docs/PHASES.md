@@ -2,6 +2,17 @@
 
 > Keep the Current Status section up to date at the end of every session.
 
+## ✅ Organization Meetings Phase 5 — persistent collaboration and archive (2026-09-01)
+
+Phases 0–5 are DONE and Phase 6 is READY. Added durable idempotent chat, one optimistic-versioned
+shared note with immutable revisions, private scanned meeting files, the complete ordered archive and
+six-hour retention cleanup through `AddMeetingCollaborationArchive`. The same capability and retention
+rules govern registered and guest sessions; persist-first LiveKit announcements only trigger canonical
+API reconciliation. All 18 new routes are bound by Angular. Disposable PostgreSQL proves retry
+deduplication, note conflict, outsider denial, scanned upload/download, read-only ended state and
+archive reconstruction. Backend build, all 62 tests and EF drift pass; frontend evidence is recorded
+in the sibling repository.
+
 ## ✅ Organization Meetings Phase 4 — custom LiveKit room (2026-08-31)
 
 Phases 0–4 are DONE and Phase 5 is READY. Added least-privilege registered/guest room credentials,

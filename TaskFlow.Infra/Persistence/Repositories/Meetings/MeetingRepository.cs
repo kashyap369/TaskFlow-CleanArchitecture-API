@@ -44,3 +44,22 @@ public sealed class MeetingGuestAccessRepository(TaskFlowDbContext context) : IM
     public void UpdateChallenge(MeetingGuestChallenge challenge) => context.MeetingGuestChallenges.Update(challenge);
     public void UpdateSession(MeetingGuestSession session) => context.MeetingGuestSessions.Update(session);
 }
+
+public sealed class MeetingCollaborationRepository(TaskFlowDbContext context) : IMeetingCollaborationRepository
+{
+    public Task<MeetingMessage?> GetMessageByClientIdAsync(int meetingId, int participantId, Guid clientMessageId, CancellationToken cancellationToken = default) =>
+        context.MeetingMessages.FirstOrDefaultAsync(x => x.MeetingId == meetingId && x.AuthorParticipantId == participantId && x.ClientMessageId == clientMessageId, cancellationToken);
+    public Task<MeetingNote?> GetNoteAsync(int meetingId, CancellationToken cancellationToken = default) =>
+        context.MeetingNotes.FirstOrDefaultAsync(x => x.MeetingId == meetingId, cancellationToken);
+    public Task<MeetingAsset?> GetAssetAsync(int meetingId, int assetId, CancellationToken cancellationToken = default) =>
+        context.MeetingAssets.FirstOrDefaultAsync(x => x.MeetingId == meetingId && x.Id == assetId, cancellationToken);
+    public async Task<long> GetAssetBytesAsync(int meetingId, CancellationToken cancellationToken = default) =>
+        await context.MeetingAssets.Where(x => x.MeetingId == meetingId)
+            .SumAsync(x => (long?)x.SizeBytes, cancellationToken) ?? 0;
+    public Task AddMessageAsync(MeetingMessage message, CancellationToken cancellationToken = default) => context.MeetingMessages.AddAsync(message, cancellationToken).AsTask();
+    public Task AddNoteAsync(MeetingNote note, CancellationToken cancellationToken = default) => context.MeetingNotes.AddAsync(note, cancellationToken).AsTask();
+    public Task AddNoteRevisionAsync(MeetingNoteRevision revision, CancellationToken cancellationToken = default) => context.MeetingNoteRevisions.AddAsync(revision, cancellationToken).AsTask();
+    public Task AddAssetAsync(MeetingAsset asset, CancellationToken cancellationToken = default) => context.MeetingAssets.AddAsync(asset, cancellationToken).AsTask();
+    public void UpdateNote(MeetingNote note) => context.MeetingNotes.Update(note);
+    public void UpdateAsset(MeetingAsset asset) => context.MeetingAssets.Update(asset);
+}

@@ -125,3 +125,55 @@ public sealed class MeetingGuestDecisionConfiguration : IEntityTypeConfiguration
         builder.HasOne<User>().WithMany().HasForeignKey(x => x.ActorUserId).OnDelete(DeleteBehavior.Restrict);
     }
 }
+
+public sealed class MeetingMessageConfiguration : IEntityTypeConfiguration<MeetingMessage>
+{
+    public void Configure(EntityTypeBuilder<MeetingMessage> builder)
+    {
+        builder.ToTable("MeetingMessages"); builder.HasKey(x => x.Id); builder.Ignore(x => x.DomainEvents);
+        builder.Property(x => x.Body).HasMaxLength(4000).IsRequired();
+        builder.HasIndex(x => new { x.MeetingId, x.AuthorParticipantId, x.ClientMessageId }).IsUnique();
+        builder.HasIndex(x => new { x.MeetingId, x.CreatedAt, x.Id });
+        builder.HasOne<Meeting>().WithMany().HasForeignKey(x => x.MeetingId).OnDelete(DeleteBehavior.Cascade);
+        builder.HasOne<MeetingParticipant>().WithMany().HasForeignKey(x => x.AuthorParticipantId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<MeetingMessage>().WithMany().HasForeignKey(x => x.ReplyToMessageId).OnDelete(DeleteBehavior.SetNull);
+    }
+}
+
+public sealed class MeetingNoteConfiguration : IEntityTypeConfiguration<MeetingNote>
+{
+    public void Configure(EntityTypeBuilder<MeetingNote> builder)
+    {
+        builder.ToTable("MeetingNotes"); builder.HasKey(x => x.Id); builder.Ignore(x => x.DomainEvents);
+        builder.Property(x => x.Content).HasMaxLength(100000).IsRequired(); builder.HasIndex(x => x.MeetingId).IsUnique();
+        builder.HasOne<Meeting>().WithMany().HasForeignKey(x => x.MeetingId).OnDelete(DeleteBehavior.Cascade);
+        builder.HasOne<MeetingParticipant>().WithMany().HasForeignKey(x => x.LastEditedByParticipantId).OnDelete(DeleteBehavior.SetNull);
+    }
+}
+
+public sealed class MeetingNoteRevisionConfiguration : IEntityTypeConfiguration<MeetingNoteRevision>
+{
+    public void Configure(EntityTypeBuilder<MeetingNoteRevision> builder)
+    {
+        builder.ToTable("MeetingNoteRevisions"); builder.HasKey(x => x.Id); builder.Ignore(x => x.DomainEvents);
+        builder.Property(x => x.Content).HasMaxLength(100000).IsRequired();
+        builder.HasIndex(x => new { x.NoteId, x.Version }).IsUnique();
+        builder.HasOne<Meeting>().WithMany().HasForeignKey(x => x.MeetingId).OnDelete(DeleteBehavior.Cascade);
+        builder.HasOne<MeetingNote>().WithMany().HasForeignKey(x => x.NoteId).OnDelete(DeleteBehavior.Cascade);
+        builder.HasOne<MeetingParticipant>().WithMany().HasForeignKey(x => x.EditorParticipantId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+public sealed class MeetingAssetConfiguration : IEntityTypeConfiguration<MeetingAsset>
+{
+    public void Configure(EntityTypeBuilder<MeetingAsset> builder)
+    {
+        builder.ToTable("MeetingAssets"); builder.HasKey(x => x.Id); builder.Ignore(x => x.DomainEvents);
+        builder.Property(x => x.StorageKey).HasMaxLength(512).IsRequired(); builder.Property(x => x.FileName).HasMaxLength(255).IsRequired();
+        builder.Property(x => x.ContentType).HasMaxLength(120).IsRequired(); builder.Property(x => x.Sha256).HasMaxLength(64).IsRequired();
+        builder.Property(x => x.ScanStatus).HasConversion<int>(); builder.HasIndex(x => x.StorageKey).IsUnique();
+        builder.HasIndex(x => new { x.MeetingId, x.CreatedAt }); builder.HasIndex(x => new { x.RetainUntilUtc, x.IsDeleted });
+        builder.HasOne<Meeting>().WithMany().HasForeignKey(x => x.MeetingId).OnDelete(DeleteBehavior.Cascade);
+        builder.HasOne<MeetingParticipant>().WithMany().HasForeignKey(x => x.UploaderParticipantId).OnDelete(DeleteBehavior.Restrict);
+    }
+}

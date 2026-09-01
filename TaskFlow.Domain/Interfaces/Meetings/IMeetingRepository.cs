@@ -24,3 +24,17 @@ public interface IMeetingGuestAccessRepository
     void UpdateChallenge(MeetingGuestChallenge challenge);
     void UpdateSession(MeetingGuestSession session);
 }
+
+public interface IMeetingCollaborationRepository
+{
+    Task<MeetingMessage?> GetMessageByClientIdAsync(int meetingId, int participantId, Guid clientMessageId, CancellationToken cancellationToken = default);
+    Task<MeetingNote?> GetNoteAsync(int meetingId, CancellationToken cancellationToken = default);
+    Task<MeetingAsset?> GetAssetAsync(int meetingId, int assetId, CancellationToken cancellationToken = default);
+    Task<long> GetAssetBytesAsync(int meetingId, CancellationToken cancellationToken = default);
+    Task AddMessageAsync(MeetingMessage message, CancellationToken cancellationToken = default);
+    Task AddNoteAsync(MeetingNote note, CancellationToken cancellationToken = default);
+    Task AddNoteRevisionAsync(MeetingNoteRevision revision, CancellationToken cancellationToken = default);
+    Task AddAssetAsync(MeetingAsset asset, CancellationToken cancellationToken = default);
+    void UpdateNote(MeetingNote note);
+    void UpdateAsset(MeetingAsset asset);
+}

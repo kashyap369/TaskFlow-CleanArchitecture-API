@@ -106,4 +106,18 @@ public sealed class MeetingTests
         Assert.Equal(joinedAt, attendance.JoinedAtUtc);
         Assert.Equal(leftAt, attendance.LeftAtUtc);
     }
+
+    [Fact]
+    public void CollaborationEntities_EnforceMessageAndOptimisticNoteLimits()
+    {
+        var message = new MeetingMessage(5, 2, Guid.NewGuid(), "  durable hello  ");
+        Assert.Equal("durable hello", message.Body);
+        Assert.Throws<ArgumentException>(() => new MeetingMessage(5, 2, Guid.Empty, "hello"));
+        Assert.Throws<ArgumentException>(() => new MeetingMessage(5, 2, Guid.NewGuid(), new string('x', 4001)));
+
+        var note = new MeetingNote(5); note.Update("first revision", 0, 2);
+        Assert.Equal(1, note.Version);
+        Assert.Throws<InvalidOperationException>(() => note.Update("stale overwrite", 0, 2));
+        Assert.Equal("first revision", note.Content);
+    }
 }

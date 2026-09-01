@@ -194,3 +194,80 @@ public sealed class MeetingWebhookReceipt : AuditableEntity
         OccurredAtUtc = DateTime.SpecifyKind(occurredAtUtc, DateTimeKind.Utc);
     }
 }
+
+public sealed class MeetingMessage : AuditableEntity
+{
+    public int MeetingId { get; private set; }
+    public int AuthorParticipantId { get; private set; }
+    public Guid ClientMessageId { get; private set; }
+    public string Body { get; private set; } = string.Empty;
+    public int? ReplyToMessageId { get; private set; }
+    private MeetingMessage() { }
+    public MeetingMessage(int meetingId, int authorParticipantId, Guid clientMessageId,
+        string body, int? replyToMessageId = null)
+    {
+        if (meetingId <= 0) throw new ArgumentOutOfRangeException(nameof(meetingId));
+        if (authorParticipantId <= 0) throw new ArgumentOutOfRangeException(nameof(authorParticipantId));
+        if (clientMessageId == Guid.Empty) throw new ArgumentException("Client message id is required.");
+        if (string.IsNullOrWhiteSpace(body) || body.Trim().Length > 4000)
+            throw new ArgumentException("Message body must be 1-4000 characters.");
+        MeetingId = meetingId; AuthorParticipantId = authorParticipantId;
+        ClientMessageId = clientMessageId; Body = body.Trim(); ReplyToMessageId = replyToMessageId;
+    }
+}
+
+public sealed class MeetingNote : AuditableEntity
+{
+    public int MeetingId { get; private set; }
+    public string Content { get; private set; } = string.Empty;
+    public int Version { get; private set; }
+    public int? LastEditedByParticipantId { get; private set; }
+    private MeetingNote() { }
+    public MeetingNote(int meetingId)
+    { if (meetingId <= 0) throw new ArgumentOutOfRangeException(nameof(meetingId)); MeetingId = meetingId; Version = 0; }
+    public void Update(string content, int expectedVersion, int editorParticipantId)
+    {
+        if (expectedVersion != Version) throw new InvalidOperationException("The meeting note has changed.");
+        if (content.Length > 100_000) throw new ArgumentException("Meeting note cannot exceed 100,000 characters.");
+        Content = content; Version++; LastEditedByParticipantId = editorParticipantId; MarkAsUpdated();
+    }
+}
+
+public sealed class MeetingNoteRevision : AuditableEntity
+{
+    public int MeetingId { get; private set; }
+    public int NoteId { get; private set; }
+    public int Version { get; private set; }
+    public string Content { get; private set; } = string.Empty;
+    public int EditorParticipantId { get; private set; }
+    private MeetingNoteRevision() { }
+    public MeetingNoteRevision(int meetingId, int noteId, int version, string content, int editorParticipantId)
+    { MeetingId = meetingId; NoteId = noteId; Version = version; Content = content; EditorParticipantId = editorParticipantId; }
+}
+
+public sealed class MeetingAsset : AuditableEntity
+{
+    public int MeetingId { get; private set; }
+    public int UploaderParticipantId { get; private set; }
+    public string StorageKey { get; private set; } = string.Empty;
+    public string FileName { get; private set; } = string.Empty;
+    public string ContentType { get; private set; } = string.Empty;
+    public long SizeBytes { get; private set; }
+    public string Sha256 { get; private set; } = string.Empty;
+    public MeetingAssetScanStatus ScanStatus { get; private set; }
+    public DateTime RetainUntilUtc { get; private set; }
+    private MeetingAsset() { }
+    public MeetingAsset(int meetingId, int uploaderParticipantId, string storageKey, string fileName,
+        string contentType, long sizeBytes, string sha256, DateTime retainUntilUtc)
+    {
+        if (meetingId <= 0 || uploaderParticipantId <= 0) throw new ArgumentOutOfRangeException();
+        ArgumentException.ThrowIfNullOrWhiteSpace(storageKey); ArgumentException.ThrowIfNullOrWhiteSpace(fileName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(contentType); ArgumentException.ThrowIfNullOrWhiteSpace(sha256);
+        if (sizeBytes <= 0) throw new ArgumentOutOfRangeException(nameof(sizeBytes));
+        MeetingId = meetingId; UploaderParticipantId = uploaderParticipantId; StorageKey = storageKey;
+        FileName = fileName; ContentType = contentType; SizeBytes = sizeBytes; Sha256 = sha256;
+        RetainUntilUtc = DateTime.SpecifyKind(retainUntilUtc, DateTimeKind.Utc);
+        ScanStatus = MeetingAssetScanStatus.Pending;
+    }
+    public void SetScanStatus(MeetingAssetScanStatus status) { ScanStatus = status; MarkAsUpdated(); }
+}

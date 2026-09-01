@@ -1,5 +1,16 @@
 # TaskFlow — Session Log
 
+## 2026-09-01 (Organization Meetings Phase 5 — completed end to end)
+
+- Added persist-first idempotent chat, optimistic shared-note revisions, private scanned files and a
+  complete attendance/content archive for both registered and guest meeting sessions.
+- Added `AddMeetingCollaborationArchive`, 18 member/guest routes and storage-first six-hour retention
+  cleanup. A failed object deletion leaves records intact for retry; ended meetings are read-only.
+- Disposable PostgreSQL proves retry deduplication, stale-note `409`, outsider asset denial, scanned
+  file upload/download and complete ended archive reconstruction. Backend tests pass 62/62; build and
+  EF drift pass. Angular passes 276/276 specs, production build, lint/design lint and 42 contrast checks.
+  Phase 6 is READY.
+
 ## 2026-08-31 (Organization Meetings Phase 4 — completed end to end)
 
 - Completed P4.2–P4.5: server-authorized mute/remove, signed LiveKit attendance webhooks, durable

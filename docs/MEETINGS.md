@@ -1,6 +1,6 @@
 # TaskFlow Meetings — Canonical End-to-End Delivery Plan
 
-> **Status:** PHASES 0–4 DONE — Phase 5 is READY.
+> **Status:** PHASES 0–5 DONE — Phase 6 is READY.
 >
 > **Canonical scope:** Angular in `D:\Projects\TMS\TaskFlowUI\TaskFlowApp`, ASP.NET Core API in
 > `D:\Projects\TMS\TaskFlow`, PostgreSQL for durable state, TaskFlow private object storage for
@@ -445,8 +445,8 @@ Official references to re-verify during implementation:
 | 2 | Organization meeting management UI and scheduling | Phase 1 | DONE |
 | 3 | Secure email invitations, share links and guest lobby | Phase 2 | DONE |
 | 4 | Custom LiveKit room for registered users and guests | Phase 3 | DONE |
-| 5 | Durable chat, notes, files and complete meeting archive | Phase 4 | READY |
-| 6 | Consent-aware recording, Egress and playback | Phase 5 | NOT STARTED |
+| 5 | Durable chat, notes, files and complete meeting archive | Phase 4 | DONE |
+| 6 | Consent-aware recording, Egress and playback | Phase 5 | READY |
 | 7 | Security, scale, observability and production rollout | Phase 6 | NOT STARTED |
 
 Only one phase may be `IN PROGRESS`. A phase becomes `DONE` only when all exit criteria and evidence are
@@ -711,6 +711,30 @@ does not lose a persisted message; retries do not duplicate it; concurrent note 
 overwrite; unauthorized guests cannot fetch another meeting's assets; meeting end leaves a complete,
 ordered archive with who shared what and when.
 
+**Completion evidence (2026-09-01):**
+
+- Added durable, participant-authored messages with per-author client idempotency keys and ordered
+  history. Angular persists first, then sends a small LiveKit data announcement; receivers reload the
+  canonical API state, so failed or repeated realtime delivery cannot lose or duplicate content.
+- Added one 100,000-character shared note with optimistic versions, immutable revision rows, 700 ms
+  debounced autosave and visible saved/saving/conflict/failure states. A stale expected version returns
+  `409 MEETING_NOTE_CONFLICT` and the client reloads the newer revision instead of overwriting it.
+- Added private meeting assets through the existing local/S3 object-storage and scanner boundaries.
+  PDF/PNG/JPEG/TXT/DOCX extension, MIME and signature checks, the configured 25 MB file ceiling, a
+  ten-file-equivalent per-meeting byte quota, safe names, SHA-256, scan state, authorized download and
+  host/uploader deletion are enforced for registered users and guests.
+- Added the canonical archive with actual start/end, ordered attendance intervals/durations, messages,
+  current note/editor, files/uploader and retention deadline. Collaboration becomes read-only after end;
+  an active link can be reverified for guest archive access until expiry/retention.
+- Added six-hour retention cleanup. It deletes every private object successfully before soft-deleting
+  expired messages, note/revisions, file metadata and attendance; failed object deletion leaves the
+  archive intact for a later retry rather than orphaning storage.
+- Added the additive `AddMeetingCollaborationArchive` migration and 18 registered/guest routes.
+  Disposable PostgreSQL HTTP coverage proves message retry deduplication, outsider asset denial, note
+  conflict, scanned upload/download, ended-meeting write denial and complete archive reconstruction.
+  Backend tests pass `62/62`, frontend specs `276/276`; both builds, Angular/design lint, all `42`
+  contrast checks and EF model drift pass. Phase 6 is READY.
+
 ### Phase 6 — Recording, Egress and playback
 
 **Goal:** hosts can intentionally record and retain a meeting with clear participant awareness.
@@ -785,6 +809,12 @@ Until approved, phases use the conservative defaults stated in this document and
 guest/recording behavior disabled in production.
 
 ## 13. Evidence and decision log
+
+- **2026-09-01 — Phase 5 completed:** delivered canonical member/guest chat, optimistic shared notes,
+  private scanned meeting files, ordered archives and storage-safe retention cleanup through the
+  `AddMeetingCollaborationArchive` migration and 18 bound routes. Persist-first LiveKit announcements
+  reconcile clients without becoming history authority. Full gates pass at backend `62/62`, frontend
+  `276/276`, builds, lint/design lint, 42 contrast checks and zero EF drift. Phase 6 is READY.
 
 - **2026-08-31 — Phase 4 completed:** delivered the production custom LiveKit room, least-privilege
   member/guest grants, host/co-host moderation, signed durable replay-safe attendance, and the

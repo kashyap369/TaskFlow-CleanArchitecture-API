@@ -214,6 +214,8 @@ namespace TaskFlow.Infra.DependencyInjection
             services.AddScoped<ICalendarEntryRepository, CalendarEntryRepository>();
             services.AddScoped<IMeetingRepository, MeetingRepository>();
             services.AddScoped<IMeetingGuestAccessRepository, MeetingGuestAccessRepository>();
+            services.AddScoped<IMeetingCollaborationRepository, MeetingCollaborationRepository>();
+            services.AddHostedService<MeetingRetentionCleanupService>();
 
             // Register the Wrok management  repositories
             services.AddScoped<
