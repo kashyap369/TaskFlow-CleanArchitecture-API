@@ -69,3 +69,21 @@ feasibility run; `compose.yml` remains the supported local team topology.
 - Run Redis for production coordination. TaskFlow PostgreSQL/object storage remain authoritative.
 - Use separate secrets per environment and rotate them through secret management.
 - Deploy Egress separately only in Meeting Phase 6 and size it by simultaneous recording capacity.
+
+## Dokploy production call stack
+
+`dokploy.compose.yml` is the production audio/video stack for the existing Dokploy host. It deploys
+one pinned LiveKit server and a dedicated persistent Redis, joins LiveKit to `dokploy-network` for
+Traefik routing, and publishes WebRTC TCP `7881`, WebRTC UDP `7882`, TURN/UDP `3478`, and the bounded
+TURN relay range `30000–30100/udp`. Configure `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` in the
+Compose environment.
+
+After deployment, add `livekit.inksphere.space` in the Compose **Domains** tab with service `livekit`,
+container port `7880`, HTTPS enabled, then point its DNS A/AAAA record at the Dokploy server and
+redeploy the Compose stack. Ensure the host/cloud firewall accepts TCP `7881` and UDP
+`7882`/`3478`/`30000–30100`.
+The TaskFlow API uses `wss://livekit.inksphere.space` and the same key pair.
+
+This host currently has insufficient safe headroom for Egress: the worker alone requires at least
+4 CPUs and 4 GB RAM. Keep `Meetings__RecordingEnabled=false` here. Deploy `egress.yaml` on a separate
+4-CPU/4-GB-or-larger worker (or upgrade the host) before enabling production recording.
