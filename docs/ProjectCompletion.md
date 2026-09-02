@@ -10,7 +10,9 @@
 > | **Frontend** | `D:\Projects\TMS\TaskFlowUI\TaskFlowApp` — Angular 20, standalone + signals, Atomic Design, multi-portal |
 > | **Dev URLs** | API `https://localhost:7086/api` · UI `http://localhost:4200` (CORS allows only this origin) |
 >
-> **Last verified implementation:** 2026-09-01, Organization Meetings Phase 6 code complete with external certification pending.
+> **Last verified implementation:** 2026-09-02, Organization Meetings implementation retained but
+> deferred; its organization-sidebar entry is hidden pending reliable production LiveKit configuration
+> propagation and multi-client call verification.
 > Planner Phases 17–23 are complete; see [PLANNER.md](PLANNER.md). The API exposes 178 endpoints;
 > the UI consumes 175. The remaining three are the signed provider webhook and the two long-standing
 > deliberate skips below.
@@ -92,7 +94,7 @@ Both are live and correct; nothing is blocked on them.
 | Phase 4 — custom LiveKit room | ✅ | ✅ | Least-privilege member/guest grants, custom pre-join/room media UX, capability-aware moderation, signed replay-safe durable attendance, disposable LiveKit health, and two-client presence/leave/reconnect evidence are complete. |
 | Phase 5 — collaboration and archive | ✅ | ✅ | Idempotent persisted chat, optimistic shared-note revisions, private scanned files, member/guest capability parity, complete ordered archives and storage-safe retention cleanup. |
 | Phase 6 — recording, Egress and playback | 🟡 | 🟡 | Application/UI and local Egress configuration are complete. Real staging playable-MP4/capacity evidence and jurisdiction-specific legal/product approval still gate completion and production enablement. |
-| Phase 7 — hardening and rollout | ⬜ | ⬜ | The canonical contract is [MEETINGS.md](MEETINGS.md). |
+| Phase 7 — hardening and rollout | ⏸️ | ⏸️ | Owner-deferred on 2026-09-02 after Dokploy saved but did not propagate the API's `LiveKit__*` runtime variables. The sidebar entry is hidden; resume from [MEETINGS.md](MEETINGS.md). |
 
 ### 3.0 Vision coverage — `OVERVIEW.md` read as a spec
 
@@ -401,6 +403,7 @@ Docker + CI/CD.
 
 | Date | Side | Change |
 |---|---|---|
+| 2026-09-02 | **Both** | **Organization Meetings deferred by owner.** The implemented API/UI and data are retained, but the organization-sidebar entry is hidden so the feature is not presented as production-ready. Dokploy `v0.29.14` saved the LiveKit settings without propagating them into the API Swarm service; resume only after that boundary is fixed and a real multi-client production call passes. No endpoint count changed. |
 | 2026-09-01 | **Both** | **Organization Meetings Phase 6 implementation complete; external certification pending.** Added immutable current-participant consent, late-join gates, host-only recording lifecycle, LiveKit room-composite MP4 Egress, webhook/recovery reconciliation, private member/guest playback and storage-first deletion. Angular binds all nine routes with a persistent recording indicator and archive controls. Routes are **178 total / 175 consumed**; backend tests pass **65/65**, frontend specs **278/278**, and builds, lint/design lint, 42 contrast checks and EF drift pass. Docker is unavailable locally, so a real playable archive/capacity run and jurisdiction-specific legal/product approval still gate Phase 6 completion and production recording. |
 | 2026-09-01 | **Both** | **Production Meetings verification follow-up.** Backend Phase 5 commit `d397ea5` was pushed and deployed; production meeting `#3` was created, assigned to Shubham Kashyap and started, and the collaboration panel loaded. Media remains blocked because production reports `LiveKit media is not enabled`; ready-anytime creation is also blocked by stale hidden date validators after schedule removal. Scheduled creation works. Both items are now explicit Phase 7 rollout/hardening work. |
 | 2026-09-01 | **Both** | **Completed Organization Meetings Phase 5.** Added idempotent durable chat, optimistic shared-note revisions, private scanned files, ordered timing/attendance/content archives and storage-first retention cleanup through `AddMeetingCollaborationArchive`. Angular binds all 18 member/guest collaboration routes and uses persist-first LiveKit announcements only for reconciliation. Routes are **169 total / 166 consumed**; the only unconsumed routes remain the server-to-server webhook and two deliberate skips. Disposable PostgreSQL proves retry deduplication, stale-note conflict, outsider asset denial, scanned upload/download and ended archive reconstruction. Backend tests pass **62/62**, frontend specs **276/276**, and builds, lint/design lint, 42 contrast checks and EF drift pass. Phase 6 is READY. |

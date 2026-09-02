@@ -411,3 +411,12 @@
 - Backend build, all 49 tests and EF model-drift checks pass. The disposable PostgreSQL HTTP suite
   proves participant archive access, outsider/cross-organization denial, lifecycle timestamps and
   one-time raw-link disclosure. Phase 2 is READY.
+
+## 2026-09-02 (Organization Meetings deferred)
+
+- Confirmed the public LiveKit endpoint and media container were healthy, but Dokploy `v0.29.14`
+  retained the saved `LiveKit__*` values without propagating them into the API Swarm service.
+- Per owner direction, stopped production meeting rollout work. The implementation and data remain
+  intact for later Phase 7 resumption; the frontend sidebar entry is hidden in the sibling repository.
+- Unrelated API functionality remains enabled. Do not resume Meetings until runtime configuration
+  propagation and a real multi-client production call are verified.

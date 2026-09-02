@@ -1,6 +1,13 @@
 # TaskFlow Meetings — Canonical End-to-End Delivery Plan
 
-> **Status:** PHASES 0–5 DONE — Phase 6 is IN PROGRESS.
+> **Deferred on 2026-09-02:** Meetings is temporarily removed from the organization sidebar. The
+> implemented API/UI remains in the repositories for later resumption, but the feature must not be
+> presented as production-ready until LiveKit runtime configuration is reliably propagated to the API
+> and a real multi-client audio/video call passes production verification. Dokploy `v0.29.14` saved
+> the configured `LiveKit__*` values but did not add them to the running Swarm service; the LiveKit
+> server and public domain were healthy. Resume at Phase 7 after correcting that deployment boundary.
+
+> **Status:** DEFERRED — PHASES 0–5 DONE; Phase 6 certification and Phase 7 rollout remain pending.
 >
 > **Production validation (2026-09-01):** meeting create, registered-participant assignment and start
 > work on `taskflow.inksphere.space`, and the deployed Phase 5 collaboration API/UI loads. Realtime

@@ -2,6 +2,13 @@
 
 > Keep the Current Status section up to date at the end of every session.
 
+## ⏸️ Organization Meetings deferred (2026-09-02)
+
+The owner deferred the Meetings feature and the frontend sidebar entry is hidden. Existing meeting
+code and data are retained for a later restart. Do not resume rollout until Dokploy reliably injects
+the saved `LiveKit__*` runtime variables into the API Swarm service and a production multi-client
+audio/video call is verified. All unrelated TaskFlow features remain in scope and available.
+
 ## 🟡 Organization Meetings Phase 6 — implementation complete, certification pending (2026-09-01)
 
 Consent-aware recording is implemented end to end in the repositories: immutable current-participant
