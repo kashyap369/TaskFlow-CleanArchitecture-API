@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using TaskFlow.Api.Constants;
 using TaskFlow.Application.Features.WorkManagement.Projects.Commands.CreateProject;
 using TaskFlow.Application.Features.WorkManagement.Projects.Commands.CreatePersonalProject;
+using TaskFlow.Application.Features.WorkManagement.Projects.Commands.ImportProjectPlan;
 using TaskFlow.Application.Features.WorkManagement.Projects.Commands.DeleteProject;
 using TaskFlow.Application.Features.WorkManagement.Projects.Commands.UpdateProject;
 using TaskFlow.Application.Features.WorkManagement.Projects.Queries.GetOrganizationProjects;
@@ -46,6 +47,19 @@ namespace TaskFlow.Api.Controllers.WorkManagement
             var projectId = await _mediator.Send(command, cancellationToken);
 
             return Ok(projectId);
+        }
+
+        /// <summary>
+        /// Creates a complete project hierarchy in one transaction. OrganizationId is null for a
+        /// private personal project and set for an organization project.
+        /// </summary>
+        [HttpPost("plan-import")]
+        public async Task<IActionResult> ImportProjectPlan(
+            ImportProjectPlanCommand command,
+            CancellationToken cancellationToken)
+        {
+            var result = await _mediator.Send(command, cancellationToken);
+            return Ok(result);
         }
 
         [HttpPut]
