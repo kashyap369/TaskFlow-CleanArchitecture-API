@@ -1,5 +1,21 @@
 # TaskFlow — Session Log
 
+## 2026-09-04 (Meetings: production media works; auto-end and recording infrastructure)
+
+- `room_finished` no longer ends a meeting unconditionally. The room empties whenever the last
+  participant leaves — including when a client fault ejected everyone seconds in — so it now
+  requires one attendance interval of at least `Meetings:AutoEndMinimumSessionSeconds` (default 30).
+  `Meeting.HasSubstantiveAttendance` owns the rule; attendance is still always closed.
+- `IMeetingPolicy` carries the threshold across the layer boundary, since `MeetingSettings` lives in
+  Infra and the webhook handler is in Application — same shape as `IMeetingReadinessProbe`.
+- Added the Egress worker to `infra/meetings/dokploy.compose.yml`. Production had **no** Egress
+  service, so recording could never have worked regardless of the feature flag. `shm_size: 1gb` is
+  deliberate: Chromium crashes silently mid-recording on Docker's 64MB default.
+- Gotcha for the next session: Dokploy `v0.29.14` does not inject service environment variables into
+  the running container. Verify with `env | grep -i livekit` inside the container, not by reading the
+  Dokploy UI, and re-apply with `docker service update --env-add` after any redeploy.
+- Backend `73/73` including two new `room_finished` regressions; build and EF drift clean.
+
 ## 2026-09-04 (Organization Meetings Phase 7 — P7.1 readiness and ready-anytime creation)
 
 - **Deferral lifted.** Inspected the Dokploy production environment for the `api` service: all eleven

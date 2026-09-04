@@ -171,7 +171,8 @@ public sealed class MuteGuestMeetingRoomParticipantCommandHandler(IMeetingReposi
 }
 
 public sealed class ProcessMeetingProviderWebhookCommandHandler(IMeetingRepository meetings,
-    IMeetingRecordingRepository recordings, IUnitOfWork unitOfWork) : IRequestHandler<ProcessMeetingProviderWebhookCommand>
+    IMeetingRecordingRepository recordings, IUnitOfWork unitOfWork, IMeetingPolicy policy)
+    : IRequestHandler<ProcessMeetingProviderWebhookCommand>
 {
     public async Task Handle(ProcessMeetingProviderWebhookCommand request, CancellationToken ct)
     {
@@ -198,7 +199,14 @@ public sealed class ProcessMeetingProviderWebhookCommandHandler(IMeetingReposito
         }
 
         if (string.Equals(webhook.EventType, "room_finished", StringComparison.Ordinal))
-            meeting.EndFromProvider(occurred);
+        {
+            // The room empties whenever the last participant leaves, including after a client fault
+            // that ejected everyone seconds in. Ending on that would archive a meeting nobody
+            // attended, so require one genuine session before treating this as the meeting's end.
+            var attended = meeting.HasSubstantiveAttendance(occurred,
+                policy.AutoEndMinimumSessionSeconds);
+            meeting.EndFromProvider(occurred, attended);
+        }
         else if (!string.IsNullOrWhiteSpace(webhook.ParticipantIdentity) &&
                  TryParticipantId(meeting.Id, webhook.ParticipantIdentity, out var participantId))
         {

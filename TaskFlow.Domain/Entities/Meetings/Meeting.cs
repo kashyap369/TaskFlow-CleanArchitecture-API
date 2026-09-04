@@ -86,15 +86,32 @@ public sealed class Meeting : AuditableEntity, IAggregateRoot
         MarkAsUpdated();
     }
 
-    public void EndFromProvider(DateTime utcNow)
+    /// <summary>
+    /// The media provider reported that the room closed. The room empties whenever the last
+    /// participant leaves — including when everyone was dropped by a client fault — so ending the
+    /// meeting here is only correct when the call actually happened. Otherwise a failed join would
+    /// permanently archive a meeting nobody attended, which is what it did in production on
+    /// 2026-09-04. Attendance is always closed; <paramref name="endMeeting"/> decides the rest.
+    /// </summary>
+    public void EndFromProvider(DateTime utcNow, bool endMeeting = true)
     {
-        if (Status == MeetingStatus.Live)
+        if (endMeeting && Status == MeetingStatus.Live)
         {
             Status = MeetingStatus.Ended;
             ActualEndUtc = AsUtc(utcNow);
             MarkAsUpdated();
         }
         CloseOpenAttendance(utcNow);
+    }
+
+    /// <summary>
+    /// Whether the room ever carried a real session: at least one attendance interval lasting
+    /// <paramref name="minimumSeconds"/> or more. A three-second connect-and-drop is not a meeting.
+    /// </summary>
+    public bool HasSubstantiveAttendance(DateTime utcNow, int minimumSeconds)
+    {
+        return _attendance.Any(interval =>
+            ((interval.LeftAtUtc ?? AsUtc(utcNow)) - interval.JoinedAtUtc).TotalSeconds >= minimumSeconds);
     }
 
     public void RegisterParticipantJoined(int participantId, string connectionId,

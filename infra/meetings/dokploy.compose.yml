@@ -65,6 +65,43 @@ services:
           cpus: "2.00"
           memory: 2g
 
+  # Room-composite recording. LiveKit itself cannot record: Egress is a separate worker that joins
+  # the room headlessly, encodes it and uploads the MP4. Without this service a Record button exists
+  # but every request fails, which is why Meetings__RecordingEnabled stays false until this is up.
+  egress:
+    image: livekit/egress:v1.12.0
+    restart: unless-stopped
+    depends_on:
+      - meeting-redis
+      - livekit
+    environment:
+      EGRESS_CONFIG_BODY: |
+        redis:
+          address: meeting-redis:6379
+        api_key: ${LIVEKIT_API_KEY}
+        api_secret: ${LIVEKIT_API_SECRET}
+        ws_url: ws://livekit:7880
+        insecure: false
+        s3:
+          access_key: ${OBJECT_STORAGE_ACCESS_KEY}
+          secret: ${OBJECT_STORAGE_SECRET_KEY}
+          region: ${OBJECT_STORAGE_REGION}
+          endpoint: ${OBJECT_STORAGE_ENDPOINT}
+          bucket: ${OBJECT_STORAGE_BUCKET}
+          force_path_style: true
+    # Chromium needs shared memory; the default 64MB causes silent renderer crashes mid-recording.
+    shm_size: 1gb
+    networks:
+      - meeting-media
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          # One 720p room-composite job per ~4 vCPU / 4 GB. Raise deliberately, and only with
+          # capacity evidence — Phase 6 requires a declared ceiling, not an assumed one.
+          cpus: "2.00"
+          memory: 2g
+
 volumes:
   meeting_redis_data:
 

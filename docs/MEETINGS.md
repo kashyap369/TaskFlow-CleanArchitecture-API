@@ -866,6 +866,23 @@ guest/recording behavior disabled in production.
 
 ## 13. Evidence and decision log
 
+- **2026-09-04 — first working production call, and the faults behind it:** production media now
+  works end to end. Two devices held a real call over `wss://livekit.inksphere.space` with audio,
+  video and screen share. Three defects were fixed to get there. (1) Dokploy `v0.29.14` never
+  injected the `api` service environment into its container — `env | grep -i livekit` inside the
+  running container returned nothing despite all eleven variables being saved, and a manual deploy
+  did not fix it; `docker service update --env-add` did. Dokploy remains the durable fix, and any
+  redeploy can wipe the manual values. (2) The Angular room called
+  `switchActiveDevice('audiooutput', …)` inside `connect()`'s try block; Android Chrome has no
+  `setSinkId`, so a speaker preference threw and tore down calls whose audio and video had already
+  published — every mobile session died at ~3s with `CLIENT_REQUEST_LEAVE` while desktop was fine.
+  Join preferences are now non-fatal. (3) `room_finished` ended meetings unconditionally, so those
+  failed calls archived meetings nobody attended; it now requires one attendance interval of at
+  least `Meetings:AutoEndMinimumSessionSeconds` (default 30s). Recording stays disabled: production
+  had no Egress worker at all, which `infra/meetings/dokploy.compose.yml` now defines, with
+  `infra/meetings/RECORDING.md` covering storage, capacity and the still-open legal/consent gate.
+  Backend `73/73`, frontend `286/286`, builds, lint, design lint and EF drift pass.
+
 - **2026-09-04 — Phase 7 / P7.1 completed (readiness and ready-anytime creation):** fixed the
   ready-anytime creation bug at its root — a template `required` attribute left Angular's
   `RequiredValidator` attached to the destroyed start/end controls — and locked it with a

@@ -173,6 +173,7 @@ namespace TaskFlow.Infra.DependencyInjection
                 .ValidateOnStart();
             services.AddSingleton<IMeetingMediaProvider, LiveKitMeetingMediaProvider>();
             services.AddSingleton<IMeetingReadinessProbe, MeetingReadinessProbe>();
+            services.AddSingleton<IMeetingPolicy, MeetingPolicy>();
             services
                 .AddOptions<MeetingSettings>()
                 .Bind(configuration.GetSection(MeetingSettings.SectionName))
@@ -188,6 +189,8 @@ namespace TaskFlow.Infra.DependencyInjection
                     "Meetings:RecordingEnabled requires Meetings:Enabled.")
                 .Validate(settings => settings.RecordingConsentTimeoutSeconds is >= 15 and <= 300,
                     "Meetings:RecordingConsentTimeoutSeconds must be between 15 and 300.")
+                .Validate(settings => settings.AutoEndMinimumSessionSeconds is >= 0 and <= 3600,
+                    "Meetings:AutoEndMinimumSessionSeconds must be between 0 and 3600.")
                 .ValidateOnStart();
             // Register the organization repositories
             services.AddScoped<

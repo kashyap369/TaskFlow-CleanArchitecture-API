@@ -105,7 +105,8 @@ public sealed class MeetingCommandHandlerTests
         var meetings = Substitute.For<IMeetingRepository>(); meetings.GetByRoomNameAsync("meeting-room", Arg.Any<CancellationToken>()).Returns(meeting);
         meetings.HasWebhookReceiptAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(false);
         var unitOfWork = Substitute.For<IUnitOfWork>(); var recordings = Substitute.For<IMeetingRecordingRepository>();
-        var handler = new ProcessMeetingProviderWebhookCommandHandler(meetings, recordings, unitOfWork);
+        var policy = Substitute.For<IMeetingPolicy>(); policy.AutoEndMinimumSessionSeconds.Returns(30);
+        var handler = new ProcessMeetingProviderWebhookCommandHandler(meetings, recordings, unitOfWork, policy);
         var identity = $"m5-p1-{new string('a', 32)}"; var joined = DateTimeOffset.UtcNow.AddMinutes(-2); var left = DateTimeOffset.UtcNow;
 
         await handler.Handle(new ProcessMeetingProviderWebhookCommand(new MeetingProviderWebhook("e2", "participant_left", "meeting-room", identity, "sid-1", left)), CancellationToken.None);
@@ -114,6 +115,52 @@ public sealed class MeetingCommandHandlerTests
 
         var interval = Assert.Single(meeting.Attendance); Assert.Equal(joined.UtcDateTime, interval.JoinedAtUtc); Assert.Equal(left.UtcDateTime, interval.LeftAtUtc);
         await meetings.Received(3).AddWebhookReceiptAsync(Arg.Any<MeetingWebhookReceipt>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProviderWebhook_RoomFinished_KeepsMeetingLive_WhenNobodyHadARealSession()
+    {
+        // Production 2026-09-04: a client fault ejected everyone after ~3s, the room emptied, and
+        // room_finished archived a meeting nobody attended.
+        var (meeting, handler) = ArrangeRoomFinished(sessionSeconds: 3);
+
+        await handler.Handle(new ProcessMeetingProviderWebhookCommand(
+            new MeetingProviderWebhook("rf1", "room_finished", "meeting-room", null, null, DateTimeOffset.UtcNow)),
+            CancellationToken.None);
+
+        Assert.Equal(MeetingStatus.Live, meeting.Status);
+        Assert.Null(meeting.ActualEndUtc);
+        Assert.All(meeting.Attendance, interval => Assert.NotNull(interval.LeftAtUtc));
+    }
+
+    [Fact]
+    public async Task ProviderWebhook_RoomFinished_EndsMeeting_AfterAGenuineSession()
+    {
+        var (meeting, handler) = ArrangeRoomFinished(sessionSeconds: 600);
+
+        await handler.Handle(new ProcessMeetingProviderWebhookCommand(
+            new MeetingProviderWebhook("rf2", "room_finished", "meeting-room", null, null, DateTimeOffset.UtcNow)),
+            CancellationToken.None);
+
+        Assert.Equal(MeetingStatus.Ended, meeting.Status);
+        Assert.NotNull(meeting.ActualEndUtc);
+    }
+
+    private static (Meeting Meeting, ProcessMeetingProviderWebhookCommandHandler Handler) ArrangeRoomFinished(int sessionSeconds)
+    {
+        var meeting = new Meeting(7, 11, "Review", null, null, null, "UTC", "meeting-room",
+            true, false, true, true, true, false, 90);
+        SetId(meeting, 5); var host = meeting.Participants.Single(); SetId(host, 1); meeting.Start(DateTime.UtcNow);
+        var identity = $"m5-p1-{new string('a', 32)}";
+        meeting.RegisterParticipantJoined(1, identity, "sid-1", DateTime.UtcNow.AddSeconds(-sessionSeconds));
+
+        var meetings = Substitute.For<IMeetingRepository>();
+        meetings.GetByRoomNameAsync("meeting-room", Arg.Any<CancellationToken>()).Returns(meeting);
+        meetings.HasWebhookReceiptAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(false);
+        var policy = Substitute.For<IMeetingPolicy>(); policy.AutoEndMinimumSessionSeconds.Returns(30);
+        var handler = new ProcessMeetingProviderWebhookCommandHandler(meetings,
+            Substitute.For<IMeetingRecordingRepository>(), Substitute.For<IUnitOfWork>(), policy);
+        return (meeting, handler);
     }
 
     private static void SetId(object entity, int id) => entity.GetType().GetProperty("Id")!.SetValue(entity, id);
