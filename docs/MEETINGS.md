@@ -410,6 +410,10 @@ Room/device state is local realtime state and must not be added to the broad org
 
 ### Production
 
+> **Operations:** [`infra/meetings/RUNBOOK.md`](../infra/meetings/RUNBOOK.md) is the production
+> triage guide — read it before diagnosing any meeting failure. Recording enablement is
+> [`infra/meetings/RECORDING.md`](../infra/meetings/RECORDING.md).
+
 - Dedicated `wss://` LiveKit domain with trusted TLS, public IP awareness, required UDP/TCP ports and
   TURN/TLS fallback. Do not assume an ordinary HTTP reverse proxy is sufficient for WebRTC.
 - Redis for production LiveKit coordination; persistence/backup remains TaskFlow's responsibility.
@@ -865,6 +869,16 @@ Until approved, phases use the conservative defaults stated in this document and
 guest/recording behavior disabled in production.
 
 ## 13. Evidence and decision log
+
+- **2026-09-05 — Dokploy upgraded to `v0.30.5`; production runbook written:** the platform that
+  failed to inject the API service environment on `v0.29.14` is upgraded, and the LiveKit
+  configuration survived it — a join token still issues `200`. Whether the injection bug itself is
+  fixed remains **unproven**: the manual `docker service update --env-add` values are still in the
+  service spec, so the next API deploy is the real test. Verify with `/admin/settings` → Meetings
+  readiness immediately after that deploy, and adopt the Dokploy File Mount in
+  `infra/meetings/RUNBOOK.md` §2 if it drops again. The runbook records all four faults behind the
+  2026-09-04 call, the LiveKit log fields that diagnose them, and the three red herrings
+  (TURN, ufw, IPv6) so they are not re-investigated.
 
 - **2026-09-04 — first working production call, and the faults behind it:** production media now
   works end to end. Two devices held a real call over `wss://livekit.inksphere.space` with audio,

@@ -68,6 +68,10 @@ DB: PostgreSQL, connection string `DefaultConnection`. Seeds on startup: system 
   handoff contract. Read it completely for any meeting, LiveKit, guest-link, badge, collaboration or
   recording task; Phase 0 is complete and Phase 1 is READY.
 - [docs/SESSIONS.md](docs/SESSIONS.md) — session log: gotchas, dead ends, decisions
+- [infra/meetings/RUNBOOK.md](infra/meetings/RUNBOOK.md) — **production meetings triage.** What broke
+  on 2026-09-04, how each fault was proved, how to read LiveKit logs, and how configuration survives
+  a redeploy. Read this before diagnosing a meeting failure — three of the four faults looked like
+  networking and none were.
 
 ## Session Habit
 At the end of each working session: update PHASES.md status, append a short entry to SESSIONS.md, **and
