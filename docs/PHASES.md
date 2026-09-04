@@ -13,6 +13,31 @@ frontend `284/284`, builds, lint, design lint, 42 contrast checks and EF drift a
 Six Phase 7 packages remain (threat model, capacity, telemetry, E2E, infrastructure, policy docs), and
 Meetings stays owner-deferred with its sidebar entry hidden.
 
+## ⏭️ NEXT SESSION — make the production LiveKit config survive a redeploy
+
+**Do this before any other meetings work.** Production media works, but its configuration is held by
+a manual `docker service update --env-add` on the Swarm service, which lives outside Dokploy. A
+Dokploy deploy rewrites that spec and can silently drop it — meetings then fail at join with
+`LiveKit media is not enabled` and nobody finds out until someone tries to call.
+
+**The task:** add a Dokploy **File Mount** on the `api` service —
+api → Advanced → Volumes → Add Volume → File Mount, path `/app/appsettings.Production.json`, content
+from [`infra/meetings/RUNBOOK.md`](../infra/meetings/RUNBOOK.md) §2 with the real
+`LiveKit__ApiKey`/`ApiSecret` pasted in (they are in Dokploy → api → Environment, behind the eye
+icon; they have deliberately never been committed or pasted into a transcript).
+
+Then redeploy and confirm `/admin/settings` → Meetings readiness reads **Ready**.
+
+Two things to settle in the same session:
+1. **Verify `/app` is really the app's `WORKDIR`** (`pwd` in the container terminal) before trusting
+   that mount path.
+2. **Optional refinement:** the mount shadows the repo's `appsettings.Production.json`. A one-line
+   `Program.cs` change to also read an optional `/config/overrides.json`, mounted there instead,
+   removes the shadowing. Decide whether it is worth it.
+
+Also still unproven: whether Dokploy `v0.30.5` fixed the environment-injection bug at all. The first
+API deploy on it answers that — watch readiness immediately after.
+
 ## ▶️ Organization Meetings resumed (2026-09-04)
 
 The owner lifted the 2026-09-02 deferral and the organization sidebar entry is restored. The

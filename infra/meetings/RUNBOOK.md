@@ -97,6 +97,10 @@ Anything applied with `docker service update --env-add` lives **outside** Dokplo
 rewrites the service spec from its own configuration and can drop those values, and the failure is
 silent until someone cannot join.
 
+> **STATUS (2026-09-05): NOT YET CONFIGURED — planned for the next session.** Production currently
+> relies on the manual `docker service update` values, so a redeploy can still drop them. Until the
+> File Mount exists, the post-deploy checklist below is mandatory, not a formality.
+
 **Preferred: a Dokploy File Mount** (api -> **Advanced -> Volumes -> Add Volume -> File Mount**). It
 is stored in Dokploy, applied on every deploy, and keeps secrets out of git:
 

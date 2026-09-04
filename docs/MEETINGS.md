@@ -878,7 +878,9 @@ guest/recording behavior disabled in production.
   readiness immediately after that deploy, and adopt the Dokploy File Mount in
   `infra/meetings/RUNBOOK.md` §2 if it drops again. The runbook records all four faults behind the
   2026-09-04 call, the LiveKit log fields that diagnose them, and the three red herrings
-  (TURN, ufw, IPv6) so they are not re-investigated.
+  (TURN, ufw, IPv6) so they are not re-investigated. **Agreed next session:** configure the Dokploy
+  File Mount so the configuration stops depending on a manual `docker service update` — see
+  `docs/PHASES.md` for the task and the two open questions it should settle.
 
 - **2026-09-04 — first working production call, and the faults behind it:** production media now
   works end to end. Two devices held a real call over `wss://livekit.inksphere.space` with audio,
