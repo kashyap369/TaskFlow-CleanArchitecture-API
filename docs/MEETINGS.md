@@ -461,7 +461,13 @@ Official references to re-verify during implementation:
 | 4 | Custom LiveKit room for registered users and guests | Phase 3 | DONE |
 | 5 | Durable chat, notes, files and complete meeting archive | Phase 4 | DONE |
 | 6 | Consent-aware recording, Egress and playback | Phase 5 | IN PROGRESS |
-| 7 | Security, scale, observability and production rollout | Phase 6 | NOT STARTED |
+| 7 | Security, scale, observability and production rollout | Phase 6 | IN PROGRESS |
+
+**Approved exception (2026-09-04, owner request):** Phases 6 and 7 are concurrently `IN PROGRESS`.
+Phase 6's only unmet exit criteria are external — a Docker-capable staging Egress run and a
+jurisdiction-specific legal/product decision — and neither is code work, so blocking Phase 7's
+code-shaped packages behind them would stall the roadmap indefinitely. Phase 7 packages must not
+claim any Phase 6 evidence.
 
 Only one phase may be `IN PROGRESS`. A phase becomes `DONE` only when all exit criteria and evidence are
 recorded; compiling alone is not completion.
@@ -796,6 +802,30 @@ review of disclosure and retention is recorded before production enablement.
 - Update privacy policy, retention/deletion documentation, support troubleshooting, backup/restore and
   incident/secret-rotation procedures.
 
+**Work-package checkpoint (2026-09-04) — P7.1 readiness and ready-anytime creation, DONE:**
+the ready-anytime creation bug is fixed and regression-tested, and the deployment blindness that
+caused the 2026-09-02 deferral now has an operator-facing answer.
+
+- *Ready-anytime creation:* the meeting form drawer's start/end inputs carried the template
+  `required` attribute, so Angular's `RequiredValidator` attached to the controls. Removing the
+  schedule destroys those inputs but leaves the validator on the control, so the form stayed
+  invalid with no visible message. The attribute is now `aria-required`, which keeps the semantics
+  without attaching a validator; schedule completeness is still enforced in `submit()`, where the
+  specific messages already live. The regression spec renders the template, so a re-added
+  `required` fails the suite.
+- *Readiness:* `GET /admin/meetings/readiness` (AdminOnly) reports what the running process
+  actually loaded — feature flags, media URL scheme/host, whether key/secret are present, recording
+  storage, and a live local join-token signing proof — plus plain-language blockers. It never
+  returns a secret: the API key appears only as an eight-character SHA-256 fingerprint and the
+  secret only as a length. The admin Platform settings page renders it with a re-check action.
+  This satisfies Phase 7's "prove join-token issuance before attempting the two-device media test"
+  and makes a save-without-propagation deployment visible before a member is refused at join.
+
+Remaining Phase 7 packages, in priority order: P7.2 threat model and abuse review; P7.3 declared
+capacity and concurrency tests; P7.4 structured metrics/traces/logs with alerts and runbooks;
+P7.5 critical E2E coverage; P7.6 production LiveKit/Redis/TURN provisioning and staged flag rollout
+(infrastructure, owner-gated); P7.7 privacy/retention/support documentation.
+
 **Exit criteria:** security review has no unresolved high-risk item; performance/capacity evidence meets
 declared limits; monitoring/runbooks and rollback are tested; migrations and object storage are backed
 up; staged feature flags are verified; production health and one synthetic meeting are recorded in the
@@ -835,6 +865,22 @@ Until approved, phases use the conservative defaults stated in this document and
 guest/recording behavior disabled in production.
 
 ## 13. Evidence and decision log
+
+- **2026-09-04 — Phase 7 / P7.1 completed (readiness and ready-anytime creation):** fixed the
+  ready-anytime creation bug at its root — a template `required` attribute left Angular's
+  `RequiredValidator` attached to the destroyed start/end controls — and locked it with a
+  template-rendering regression spec, since the previous spec never rendered and therefore could not
+  see it. Added `GET /admin/meetings/readiness` (AdminOnly) plus an admin Platform-settings panel so
+  an operator can see whether the running process received its `LiveKit__*` configuration, which is
+  the failure that deferred the rollout on 2026-09-02; the report proves local join-token signing and
+  never discloses a credential (API key as an 8-char fingerprint, secret as a length only). API routes
+  are `180/177` exposed/consumed (re-derived, not incremented; the +2 over the last ledger entry
+  are this readiness route and the previously undocumented project-plan import). Backend tests pass `71/71` and frontend specs `284/284`, with
+  builds, lint, design lint, all 42 contrast checks and zero EF drift. No migration was needed. Two
+  pre-existing quality-gate breaks from the undocumented project-plan-import commits were repaired in
+  passing: a `shared → feature` boundary violation (the plan contracts moved to
+  `shared/models/project-plan.model.ts`) and a non-token `border-radius`. Media reachability is
+  deliberately still unproven — that needs P7.6 infrastructure. Next package: P7.2 threat model.
 
 - **2026-09-01 — Phase 6 implementation complete; external certification pending:** added immutable
   participant consent, host-only start/stop, late-join blocking, LiveKit room-composite MP4 Egress,

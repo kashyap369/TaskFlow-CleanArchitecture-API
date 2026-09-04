@@ -172,6 +172,7 @@ namespace TaskFlow.Infra.DependencyInjection
                     "LiveKit:WebhookToleranceSeconds must be between 30 and 900 seconds.")
                 .ValidateOnStart();
             services.AddSingleton<IMeetingMediaProvider, LiveKitMeetingMediaProvider>();
+            services.AddSingleton<IMeetingReadinessProbe, MeetingReadinessProbe>();
             services
                 .AddOptions<MeetingSettings>()
                 .Bind(configuration.GetSection(MeetingSettings.SectionName))

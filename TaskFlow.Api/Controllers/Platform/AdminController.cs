@@ -7,6 +7,7 @@ using TaskFlow.Api.Filters;
 using TaskFlow.Application.Features.Organizations.Organization.Queries.GetAllOrganizations;
 using TaskFlow.Application.Features.Platform.Commands.UpdatePlatformSettings;
 using TaskFlow.Application.Features.Platform.Queries.GetPlatformSettings;
+using TaskFlow.Application.Features.Meetings;
 using TaskFlow.Application.Features.Planner.Commands.ManagePlannerTemplate;
 using TaskFlow.Application.Features.Planner.Queries.GetPlannerTemplates;
 
@@ -48,6 +49,26 @@ namespace TaskFlow.Api.Controllers.Platform
                     cancellationToken);
 
             return Ok(organizations);
+        }
+
+        /// <summary>
+        /// Whether this process can actually run meetings. A deployment
+        /// platform can save LiveKit settings without propagating them into
+        /// the container; that failure is otherwise invisible until a member
+        /// is refused at join time. Reports configuration shape and proves
+        /// local join-token signing — never a secret, and not media
+        /// reachability, which the staging two-client call proves.
+        /// </summary>
+        [HttpGet("meetings/readiness")]
+        public async Task<IActionResult> GetMeetingReadiness(
+            CancellationToken cancellationToken)
+        {
+            var readiness =
+                await _mediator.Send(
+                    new GetMeetingReadinessQuery(),
+                    cancellationToken);
+
+            return Ok(readiness);
         }
 
         [HttpGet("settings")]

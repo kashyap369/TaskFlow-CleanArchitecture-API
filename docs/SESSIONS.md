@@ -1,5 +1,31 @@
 # TaskFlow — Session Log
 
+## 2026-09-04 (Organization Meetings Phase 7 — P7.1 readiness and ready-anytime creation)
+
+- **Deferral lifted.** Inspected the Dokploy production environment for the `api` service: all eleven
+  `LiveKit__*` / `Meetings__*` keys are present, `LiveKit__Enabled=true`, the URL is
+  `wss://livekit.inksphere.space`, and that host returns `200 OK` over TLS. So the configuration that
+  was missing on 2026-09-02 is now correct — whether the *running* container has it is exactly what
+  the new readiness route answers, and it deploys with this push.
+- `Meetings__RecordingEnabled=false`, which is the right posture: Phase 6's legal/retention decision
+  is still open, and the server refuses recording regardless of what any client asks for.
+
+- Added `GET /admin/meetings/readiness` (AdminOnly): an `IMeetingReadinessProbe` contract in
+  Application, implemented in Infra where both `LiveKitSettings` and `MeetingSettings` live, behind a
+  MediatR query so the controller stays thin. It reads configuration rather than the database, so it
+  uses no Dapper connection — the Dapper rule is about database reads.
+- The probe signs a throwaway one-minute join token to prove the process can actually issue
+  credentials. Token signing is local, so it needs no LiveKit server and cannot hang; media
+  reachability is deliberately left to the staging two-client call.
+- **Secrets never leave**: the API key is reported as an 8-char SHA-256 fingerprint (enough to compare
+  against what was set, not enough to reverse) and the API secret only as "configured" plus its length.
+  A test serializes the whole report and asserts neither raw value appears.
+- Gotcha worth keeping: `LiveKit:Enabled=false` passes every existing options validator, because being
+  switched off is legitimate. That is exactly why the Dokploy failure was invisible — validation
+  fails fast only when the flag is *on* and the rest is wrong. The probe covers the other case.
+- Backend `71/71` (5 new), build and EF drift clean; no migration.
+- Next package: P7.2 threat model and abuse review.
+
 ## 2026-09-01 (Organization Meetings Phase 6 — implementation complete, certification pending)
 
 - Added immutable per-participant consent, host-only recording lifecycle, late-join consent gates,

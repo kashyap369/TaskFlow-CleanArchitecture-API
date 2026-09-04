@@ -2,12 +2,35 @@
 
 > Keep the Current Status section up to date at the end of every session.
 
-## ⏸️ Organization Meetings deferred (2026-09-02)
+## 🟡 Organization Meetings Phase 7 — P7.1 done: readiness and ready-anytime creation (2026-09-04)
 
-The owner deferred the Meetings feature and the frontend sidebar entry is hidden. Existing meeting
-code and data are retained for a later restart. Do not resume rollout until Dokploy reliably injects
+The ready-anytime creation bug is fixed and the deployment blindness behind the 2026-09-02 deferral is
+now observable. `GET /admin/meetings/readiness` (AdminOnly) reports what the running process actually
+loaded — feature flags, media URL scheme/host, whether the key/secret arrived, recording storage — and
+proves local join-token signing, with plain-language blockers. It never returns a credential: the API
+key appears as an eight-character fingerprint and the secret only as a length. Backend `71/71`,
+frontend `284/284`, builds, lint, design lint, 42 contrast checks and EF drift all pass; no migration.
+Six Phase 7 packages remain (threat model, capacity, telemetry, E2E, infrastructure, policy docs), and
+Meetings stays owner-deferred with its sidebar entry hidden.
+
+## ▶️ Organization Meetings resumed (2026-09-04)
+
+The owner lifted the 2026-09-02 deferral and the organization sidebar entry is restored. The
+production configuration that caused the deferral is now correct and complete: the API service
+carries all eleven `LiveKit__*` / `Meetings__*` variables, `LiveKit__Enabled=true`, the URL is a
+trusted `wss://` endpoint, and that endpoint answers a healthy `200 OK` over TLS. Recording stays
+off (`Meetings__RecordingEnabled=false`) pending the legal/retention decision.
+
+**Still unproven:** no production multi-client audio/video call has succeeded yet. Confirm
+`/admin/settings` → Meetings readiness reads **Ready** on the deployed API, then run a real
+two-device call before treating the feature as verified in production.
+
+### Superseded — Organization Meetings deferred (2026-09-02)
+
+The owner deferred the Meetings feature and the frontend sidebar entry was hidden. Existing meeting
+code and data were retained for a later restart. Rollout was blocked until Dokploy reliably injected
 the saved `LiveKit__*` runtime variables into the API Swarm service and a production multi-client
-audio/video call is verified. All unrelated TaskFlow features remain in scope and available.
+audio/video call was verified. All unrelated TaskFlow features remained in scope and available.
 
 ## 🟡 Organization Meetings Phase 6 — implementation complete, certification pending (2026-09-01)
 

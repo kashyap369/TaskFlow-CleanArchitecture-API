@@ -1,5 +1,31 @@
 # TaskFlow — Claude Code Guide
 
+## Repository map (BOTH sides of this product)
+
+TaskFlow is **two repositories on one machine**. Most tasks touch one; many need to be checked against
+the other. Always confirm which side owns the work before writing code.
+
+| | Backend (this repo) | Frontend |
+|---|---|---|
+| **Path** | `D:\Projects\TMS\TaskFlow` | `D:\Projects\TMS\TaskFlowUI\TaskFlowApp` |
+| **Stack** | ASP.NET Core 8 + PostgreSQL, Clean Architecture / DDD / CQRS | Angular 20, standalone + signals, Atomic Design, multi-portal |
+| **Git remote** | `https://github.com/kashyap369/TaskFlow-CleanArchitecture-API.git` | `https://github.com/kashyap369/taskflow-ui.git` |
+| **Dev URL** | `https://localhost:7086/api` (also `http://localhost:5138`) | `http://localhost:4200` (the only origin CORS allows) |
+| **Guide** | `D:\Projects\TMS\TaskFlow\CLAUDE.md` | `D:\Projects\TMS\TaskFlowUI\TaskFlowApp\CLAUDE.md` |
+| **Docs** | `D:\Projects\TMS\TaskFlow\docs\` | `D:\Projects\TMS\TaskFlowUI\TaskFlowApp\docs\` |
+
+Each repository has its own remote and its own commit history — **commit them separately**; there is no
+monorepo and no shared branch.
+
+**Cross-repo rules**
+- [docs/ProjectCompletion.md](docs/ProjectCompletion.md) (backend) is the **single parity ledger for both
+  repositories**. Read it first to decide which side a task belongs to; update it in the same session as
+  any work that changes the API surface or what the UI consumes.
+- [docs/MEETINGS.md](docs/MEETINGS.md) (backend) is the **canonical cross-repository Meetings roadmap**.
+  The frontend's `docs/MEETINGS.md` is only a pointer — never duplicate the roadmap there.
+- Everything else is per-repo: read the local `docs/` set for the side you are editing.
+- When a change spans both sides, update **both** doc sets (PHASES + SESSIONS on each) plus the ledger.
+
 ## Summary
 TaskFlow is a Task Management System REST API (ASP.NET Core, PostgreSQL) with two account types: **Individual** users (personal tasks/subtasks + tracking reports) and **Organizations** (owner, custom roles with permissions, email invitations, teams, task assignment, projects, and a reporting dashboard — team/member/project reports, time tracking). Architecture: Clean Architecture, DDD, CQRS (MediatR), Domain Events, Repository Pattern (write side), Dapper (read side — implemented via `ISqlConnectionFactory`), FluentValidation, JWT auth with refresh-token rotation. An Angular frontend (localhost:4200) is the intended client. Product vision: docs/OVERVIEW.md; roadmap: docs/PHASES.md.
 
