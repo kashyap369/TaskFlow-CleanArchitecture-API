@@ -128,9 +128,33 @@ is stored in Dokploy, applied on every deploy, and keeps secrets out of git:
 Environment variables still take precedence over this file where both are present, so a working
 Dokploy env simply overrides it. The mount is a floor, not a conflict.
 
-**After every API deploy**, whichever mechanism is in use: open `/admin/settings` and confirm
-Meetings readiness reads **Ready**. That check takes five seconds and is the whole point of the
-endpoint. If it reports **Disabled** with a "not propagated" blocker, the deploy dropped the config.
+### After every API deploy — the whole checklist
+
+**1. Check readiness.** Sign in as platform admin, open `/admin/settings`, read the **Meetings
+readiness** panel.
+
+- **Ready** -> done, nothing else to do.
+- **Disabled** with a "not propagated" blocker -> the deploy dropped the config. Go to step 2.
+
+No admin login to hand? Open any live meeting and press Join. `LiveKit media is not enabled` is the
+same failure.
+
+**2. Only if it says Disabled** — re-apply on the host. The leading space keeps the secret out of
+shell history (with the default `HISTCONTROL=ignorespace`):
+
+```bash
+ docker service update --env-add LiveKit__Enabled=true    --env-add "LiveKit__Url=wss://livekit.inksphere.space"    --env-add "LiveKit__ApiKey=YOUR_KEY"    --env-add "LiveKit__ApiSecret=YOUR_SECRET" taskflow-api-kf0oee
+```
+
+Success is `verify: Service ... converged` **without** a `rollback:` line. Then re-check readiness.
+
+A `rollback:` line means the API refused to start — almost always a wrong or too-short secret (it
+must be at least 32 characters). Swarm keeps the previous spec serving, so a failed attempt is safe;
+just re-run with the right values. Copy them from Dokploy: api -> Environment -> the eye icon.
+
+**3. Stop needing step 2.** Configure the File Mount above, or confirm Dokploy `v0.30.5` injects the
+environment correctly — after the first deploy on it, if readiness stays **Ready**, the original bug
+is fixed and this checklist becomes a formality.
 
 ---
 
