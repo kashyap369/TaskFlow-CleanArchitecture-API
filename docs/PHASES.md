@@ -2,7 +2,29 @@
 
 > Keep the Current Status section up to date at the end of every session.
 
-## 🟡 Organization Meetings Phase 7 — P7.2 done: threat model and abuse review (2026-09-05)
+## 🟡 Organization Meetings Phase 7 — P7.3 done: declared capacity and concurrency (2026-09-05)
+
+Meetings now declare capacity they can defend rather than implying unlimited scale, and every
+ceiling is refused server-side with a code that names the number: 50 participants per meeting,
+10 live meetings per organization, 1 simultaneous recording per **deployment**, 5 000 messages and
+100 files (25 MB each, 250 MB total) per meeting. All are `Meetings:Max*` configuration, validated at
+startup, and visible to an operator at `/admin/settings` → Meetings readiness → **Declared capacity**.
+Full write-up in [docs/MEETINGS-CAPACITY.md](MEETINGS-CAPACITY.md).
+
+The package found one real concurrency defect: **chat duplicate-suppression only worked when the
+retry arrived after the first send committed**. A client retrying on a slow connection has both in
+flight, both read nothing, both write, and the unique index refuses one — telling that caller their
+message failed while it was sitting in the room. The refused send now re-reads and reports the
+message that landed; six simultaneous retries against a real PostgreSQL database prove it. Threat
+model A-07 (guest sessions and OTP challenges never purged) and A-08 (one shared 12/minute guest
+budget, now three budgets keyed by session) are closed.
+
+Backend `98/98`, frontend `287/287`, builds, lint, design lint, 42 contrast checks and EF drift all
+pass. **No migration** — capacity is configuration. Nothing here is a load test: no run has held 50
+participants or measured Egress throughput. Four packages remain: P7.4 telemetry, P7.5 E2E,
+P7.6 infrastructure, P7.7 policy docs.
+
+## ✅ Organization Meetings Phase 7 — P7.2 done: threat model and abuse review (2026-09-05)
 
 The meeting attack surface is reviewed end to end and written up in
 [docs/MEETINGS-THREAT-MODEL.md](MEETINGS-THREAT-MODEL.md): assets, trust boundaries, actors,
@@ -56,10 +78,12 @@ API deploy on it answers that — watch readiness immediately after.
 owner's direction. It is still the first thing to do before the next production deploy — P7.2 shipped
 an additive migration, so the next deploy is not far off.
 
-After it, the next code-shaped package is **P7.3 — declared capacity and concurrency tests**:
-participants per meeting, simultaneous meetings, message/file/recording ceilings, plus the two
-capacity items the threat model parked there (expired guest sessions and challenges are never purged;
-the whole guest controller shares one 12/minute per-IP budget).
+**Note (2026-09-05, later the same day):** P7.3 was completed instead, since the File Mount needs
+Dokploy access this session did not have. P7.3 shipped **no migration**, so it does not itself force
+a deploy — but P7.2's migration still does, and this task is still the thing to do before it.
+
+After it, the next code-shaped package is **P7.4 — structured metrics, traces and logs** with
+actionable alerts and runbook entries, and no sensitive content in any field.
 
 ## ▶️ Organization Meetings resumed (2026-09-04)
 

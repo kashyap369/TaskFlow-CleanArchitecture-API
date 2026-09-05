@@ -848,10 +848,45 @@ Nine residual risks are recorded as accepted with reasons, five of which are the
 §12 rather than engineering choices. Backend `82/82`; build, EF drift clean. No frontend change was
 needed — the Angular client renders server messages and branches on no meeting error code.
 
-Remaining Phase 7 packages, in priority order: P7.3 declared capacity and concurrency tests;
-P7.4 structured metrics/traces/logs with alerts and runbooks; P7.5 critical E2E coverage;
-P7.6 production LiveKit/Redis/TURN provisioning and staged flag rollout (infrastructure,
-owner-gated); P7.7 privacy/retention/support documentation.
+**Work-package checkpoint (2026-09-05) — P7.3 declared capacity and concurrency, DONE:**
+Meetings now state capacity they can defend instead of implying unlimited scale, and every declared
+ceiling is refused server-side. The numbers, where each one is enforced and what "enforced" means
+under concurrency are in [MEETINGS-CAPACITY.md](MEETINGS-CAPACITY.md). They are the conservative
+defaults §12 prescribes, not owner-approved numbers.
+
+- *The ceilings:* 50 participants per meeting, 10 live meetings per organization, 1 simultaneous
+  recording per **deployment**, 5 000 messages and 100 files (25 MB each, 250 MB total) per meeting.
+  All are `Meetings:Max*` configuration, validated at startup, read through `IMeetingPolicy`, and
+  visible to an operator at `/admin/settings` → Meetings readiness → Declared capacity. The file
+  quota replaces an implicit `MaxFileBytes * 10` that lived inside the upload handler — same 250 MB,
+  now a stated number.
+- *Honest about concurrency:* a ceiling that compares against a count is checked before the write,
+  not under a lock, so simultaneous requests can leave a meeting one over. That bounded overshoot is
+  accepted and written down. Where an invariant must be exact, the database enforces it — the
+  partial unique index for one active recording per meeting, and the unique index on
+  `(MeetingId, AuthorParticipantId, ClientMessageId)` for chat.
+- *One real concurrency defect, found and fixed:* chat duplicate-suppression reads before it writes,
+  so it only caught a retry that arrived **after** the first send committed. A client retrying on a
+  slow connection has both in flight: both read nothing, both write, the unique index refuses one —
+  and that caller was told their message failed while it was sitting in the room. The refused send
+  now re-reads and reports the message that landed. Six simultaneous retries against a real
+  PostgreSQL database prove it, and the test fails if the fix is reverted.
+- *Threat model A-07 and A-08 are closed.* Spent guest sessions and OTP challenges are purged after
+  `GuestAccessRecordRetentionDays` (30) — they are access records, so meeting retention never reached
+  them and the tables grew for the life of the deployment; guest *decisions* are still kept as the
+  moderation audit trail. The single 12/minute per-IP guest budget is split into
+  `meeting-guest-verify` (12/min per address, pre-session only), `meeting-guest` (180/min, keyed by a
+  hash of the guest session token, so one NAT is no longer one bucket) and `meeting-guest-upload`.
+- *Verification:* backend `98/98` (16 new — 13 capacity/concurrency unit tests plus three that drive
+  the real HTTP + PostgreSQL path: the message and file ceilings, the simultaneous-retry race, and
+  the guest-record purge), build and EF drift clean, **no migration** — every ceiling is
+  configuration. Frontend `287/287`, production build, lint, design lint and all 42 contrast checks
+  pass; the admin readiness panel gained the Declared capacity block. No route was added or changed,
+  so the ledger stays at `180/177`; the readiness response gained a `capacity` object.
+
+Remaining Phase 7 packages, in priority order: P7.4 structured metrics/traces/logs with alerts and
+runbooks; P7.5 critical E2E coverage; P7.6 production LiveKit/Redis/TURN provisioning and staged flag
+rollout (infrastructure, owner-gated); P7.7 privacy/retention/support documentation.
 
 **Exit criteria:** security review has no unresolved high-risk item; performance/capacity evidence meets
 declared limits; monitoring/runbooks and rollback are tested; migrations and object storage are backed
@@ -892,6 +927,24 @@ Until approved, phases use the conservative defaults stated in this document and
 guest/recording behavior disabled in production.
 
 ## 13. Evidence and decision log
+
+- **2026-09-05 — Phase 7 / P7.3 completed (declared capacity and concurrency):** wrote
+  [MEETINGS-CAPACITY.md](MEETINGS-CAPACITY.md) and made every ceiling in it a server-side refusal —
+  participants per meeting, live meetings per organization, simultaneous recordings across the
+  deployment, and message/file/storage limits per meeting — each with its own error code that names
+  the number, because "you have reached the limit" without the limit is not actionable. The running
+  values are visible to an operator in the admin readiness panel. The package also found and fixed a
+  real concurrency defect: chat duplicate-suppression reads before it writes, so two retries in
+  flight at once both wrote and the unique index refused one, reporting failure for a message that
+  had actually landed; it now re-reads and reports the winner, proved by six simultaneous retries
+  against a real database. Threat-model residual risks A-07 (guest access records never purged) and
+  A-08 (one shared 12/minute guest budget) are closed. Capacity ceilings are checked before the write
+  rather than under a lock, so a bounded overshoot under simultaneous requests is accepted and
+  documented; exactness is left to the database indexes that already provide it. Backend `98/98`
+  (16 new, three of them over real HTTP + PostgreSQL), frontend `287/287`, builds, lint, design lint,
+  42 contrast checks and zero EF drift; no migration, because capacity is configuration. Nothing here
+  is a load test: no run has held 50 participants or measured Egress throughput — that is P7.6 and
+  the Phase 6 staging certification. Next package: P7.4 structured metrics, traces and logs.
 
 - **2026-09-05 — Phase 7 / P7.2 completed (threat model and abuse review):** wrote
   [MEETINGS-THREAT-MODEL.md](MEETINGS-THREAT-MODEL.md) — assets, trust boundaries, actors, per-surface

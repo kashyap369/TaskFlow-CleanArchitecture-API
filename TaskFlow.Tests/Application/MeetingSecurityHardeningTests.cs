@@ -126,7 +126,8 @@ public sealed class MeetingSecurityHardeningTests
         collaboration.GetMessageAsync(5, 4242, Arg.Any<CancellationToken>()).Returns((MeetingMessage?)null);
         var user = Substitute.For<ICurrentUserService>(); user.UserId.Returns(11);
         var handler = new SendMeetingMessageCommandHandler(MeetingsReturning(meeting),
-            Substitute.For<IMeetingGuestAccessRepository>(), collaboration, user, Substitute.For<IUnitOfWork>());
+            Substitute.For<IMeetingGuestAccessRepository>(), collaboration, user, new MeetingTestPolicy(),
+            Substitute.For<IUnitOfWork>());
 
         var error = await Assert.ThrowsAsync<NotFoundException>(() => handler.Handle(
             new SendMeetingMessageCommand(5, Guid.NewGuid(), "Hello", 4242), CancellationToken.None));
@@ -173,7 +174,7 @@ public sealed class MeetingSecurityHardeningTests
         var user = Substitute.For<ICurrentUserService>(); user.UserId.Returns(11);
         return new RequestMeetingRecordingCommandHandler(MeetingsReturning(meeting),
             Substitute.For<IMeetingGuestAccessRepository>(), Substitute.For<IMeetingRecordingRepository>(),
-            user, media, Substitute.For<IUnitOfWork>(),
+            user, media, new MeetingTestPolicy(), Substitute.For<IUnitOfWork>(),
             Substitute.For<ILogger<RequestMeetingRecordingCommandHandler>>());
     }
 

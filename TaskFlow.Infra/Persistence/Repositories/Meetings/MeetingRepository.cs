@@ -15,6 +15,9 @@ public sealed class MeetingRepository(TaskFlowDbContext context) : IMeetingRepos
         context.Meetings.Include(x => x.Badges).Include(x => x.Participants)
             .Include(x => x.Attendance)
             .FirstOrDefaultAsync(x => x.RoomName == roomName, cancellationToken);
+    public Task<int> CountLiveAsync(int organizationId, CancellationToken cancellationToken = default) =>
+        context.Meetings.CountAsync(x => x.OrganizationId == organizationId &&
+            x.Status == Domain.Enums.Meetings.MeetingStatus.Live, cancellationToken);
     public Task<bool> HasWebhookReceiptAsync(string providerEventId, CancellationToken cancellationToken = default) =>
         context.MeetingWebhookReceipts.AnyAsync(x => x.ProviderEventId == providerEventId, cancellationToken);
     public Task AddWebhookReceiptAsync(MeetingWebhookReceipt receipt, CancellationToken cancellationToken = default) =>
@@ -60,6 +63,10 @@ public sealed class MeetingCollaborationRepository(TaskFlowDbContext context) : 
     public async Task<long> GetAssetBytesAsync(int meetingId, CancellationToken cancellationToken = default) =>
         await context.MeetingAssets.Where(x => x.MeetingId == meetingId)
             .SumAsync(x => (long?)x.SizeBytes, cancellationToken) ?? 0;
+    public Task<int> CountMessagesAsync(int meetingId, CancellationToken cancellationToken = default) =>
+        context.MeetingMessages.CountAsync(x => x.MeetingId == meetingId, cancellationToken);
+    public Task<int> CountAssetsAsync(int meetingId, CancellationToken cancellationToken = default) =>
+        context.MeetingAssets.CountAsync(x => x.MeetingId == meetingId, cancellationToken);
     public Task AddMessageAsync(MeetingMessage message, CancellationToken cancellationToken = default) => context.MeetingMessages.AddAsync(message, cancellationToken).AsTask();
     public Task AddNoteAsync(MeetingNote note, CancellationToken cancellationToken = default) => context.MeetingNotes.AddAsync(note, cancellationToken).AsTask();
     public Task AddNoteRevisionAsync(MeetingNoteRevision revision, CancellationToken cancellationToken = default) => context.MeetingNoteRevisions.AddAsync(revision, cancellationToken).AsTask();
@@ -86,6 +93,12 @@ public sealed class MeetingRecordingRepository(TaskFlowDbContext context) : IMee
     public async Task<IReadOnlyList<MeetingRecording>> GetForMeetingAsync(int meetingId, CancellationToken cancellationToken = default) =>
         await context.MeetingRecordings.Include(x => x.Consents).Where(x => x.MeetingId == meetingId)
             .OrderByDescending(x => x.CreatedAt).ToListAsync(cancellationToken);
+    public Task<int> CountActiveAsync(CancellationToken cancellationToken = default) =>
+        context.MeetingRecordings.CountAsync(x =>
+            x.Status == Domain.Enums.Meetings.MeetingRecordingStatus.PendingConsent ||
+            x.Status == Domain.Enums.Meetings.MeetingRecordingStatus.Starting ||
+            x.Status == Domain.Enums.Meetings.MeetingRecordingStatus.Recording ||
+            x.Status == Domain.Enums.Meetings.MeetingRecordingStatus.Processing, cancellationToken);
     public Task AddAsync(MeetingRecording recording, CancellationToken cancellationToken = default) =>
         context.MeetingRecordings.AddAsync(recording, cancellationToken).AsTask();
     public void Update(MeetingRecording recording) => context.MeetingRecordings.Update(recording);

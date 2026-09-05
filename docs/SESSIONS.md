@@ -1,5 +1,37 @@
 # TaskFlow — Session Log
 
+## 2026-09-05 (Meetings Phase 7 / P7.3 — declared capacity and concurrency)
+
+- Every meeting ceiling is now configuration read through `IMeetingPolicy` and refused server-side,
+  with the numbers and their enforcement points in [docs/MEETINGS-CAPACITY.md](MEETINGS-CAPACITY.md).
+  Each refusal names its limit, because the Angular client shows the server's message and nothing
+  else — "you have reached the limit" without the limit is not actionable.
+- **The finding worth remembering: read-then-write duplicate suppression is not idempotency.** Chat
+  had suppressed duplicate sends by looking for the client message id first, which only ever caught
+  a retry that arrived *after* the first send committed. A client retrying on a slow connection has
+  both in flight: both read nothing, both write, and the unique index refuses one — and that caller
+  was told their message failed while it was sitting in the room. The write path now treats a failed
+  save as "did the winner land?" and reports it. The general rule: when a unique index is the real
+  guarantee, the code must handle *losing* to it, not merely try to avoid the race.
+- Deliberate non-goal, written into the docs rather than left implied: count-based ceilings are
+  checked before the write and not under a lock, so simultaneous requests can leave a meeting one
+  over. Locking every chat message to protect the last seat costs more than the seat. Exactness is
+  left where it already exists — the partial unique index for one active recording per meeting.
+- The participant ceiling counts only *active* seats. Removed, revoked and denied participants
+  release theirs; holding them would slowly shrink every long-running meeting until nobody could be
+  added. A guest whose email already holds a seat is re-admitted rather than counted twice.
+- Threat-model A-07 and A-08 closed. Guest sessions and OTP challenges are access records, so meeting
+  retention never touched them and the tables grew forever; they are now purged (hard-deleted — a
+  soft delete would leave the growth it fixes) after `Meetings:GuestAccessRecordRetentionDays`. Guest
+  *decisions* are kept: they are the moderation audit trail. The guest rate limit is three budgets,
+  the session-scoped ones keyed by a **hash** of the session token, never the token itself.
+- Gotcha for future tests: an in-memory `MeetingAccessLink` built through `meeting.AddAccessLink`
+  has `MeetingId` 0 until EF fills the back-reference, so a handler that looks the meeting up by
+  `link.MeetingId` finds nothing and reports an invalid code. Set it by reflection in the arrangement.
+- Backend `98/98` (16 new; three drive real HTTP + PostgreSQL), frontend `287/287`. No migration —
+  capacity is configuration. The concurrency test was checked by inverting the fix and confirming it
+  fails, so it is not passing vacuously.
+
 ## 2026-09-05 (Meetings Phase 7 / P7.2 — threat model and abuse review)
 
 - Wrote [docs/MEETINGS-THREAT-MODEL.md](MEETINGS-THREAT-MODEL.md) by reading the feature end to end

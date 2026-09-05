@@ -112,8 +112,8 @@ Regression coverage: `TaskFlow.Tests/Application/MeetingSecurityHardeningTests.c
 | A-04 | A guest keeps archive access — messages, note, files, and recordings if enabled — for the full `RetentionDays` after the meeting ends. | Open decision 7 in [MEETINGS.md](MEETINGS.md#12-decisions-that-require-explicit-approval-before-implementation). Conservative default until the owner decides. | Owner decision. |
 | A-05 | A `Viewer` can download a ready recording. | Same open decision; the alternative (host-only playback) is a product call, not a security default. | Owner decision. |
 | A-06 | Guest display names accept any printable text up to 120 characters, unlike badge labels which reject `< > &`. | Angular escapes interpolated text, the name reaches LiveKit only as a JWT claim, and it never enters an email template. | If a display name is ever rendered as HTML or embedded in an email. |
-| A-07 | Expired `MeetingGuestSessions` and `MeetingGuestChallenges` rows are never purged; retention cleanup covers content, not access records. | Growth is bounded by guest volume and the rows are small; the decision records are deliberately kept as an audit trail. | Track under P7.3 capacity. |
-| A-08 | The whole guest controller shares one 12/minute per-IP budget, so guests behind one NAT compete, and a chat poll competes with a file upload. | Availability, not security, and no production guest traffic exists yet to size it against. | P7.3, with real numbers. |
+| ~~A-07~~ | ~~Expired `MeetingGuestSessions` and `MeetingGuestChallenges` rows are never purged.~~ | **Closed 2026-09-05 (P7.3).** `MeetingRetentionCleanupService` purges spent sessions and challenges older than `Meetings:GuestAccessRecordRetentionDays` (30 days). Guest *decisions* are still kept: they are the moderation audit trail. | — |
+| ~~A-08~~ | ~~The whole guest controller shares one 12/minute per-IP budget.~~ | **Closed 2026-09-05 (P7.3).** Split into `meeting-guest-verify` (12/min per address, pre-session only), `meeting-guest` (180/min per guest session) and `meeting-guest-upload` (10/min). See [MEETINGS-CAPACITY.md](MEETINGS-CAPACITY.md) §4. | — |
 | A-09 | A revoked guest's *current* media connection survives until the eject call lands, and if that call fails it survives until the room ends. | Their TaskFlow session is dead immediately, so they cannot rejoin or reach any stored meeting data; the failure is logged. | If LiveKit gains a synchronous revocation. |
 
 ## 5. Attacker walkthroughs
@@ -143,7 +143,9 @@ event is a no-op after the first delivery.
 
 These are the remaining Phase 7 packages, not gaps in this one:
 
-- Capacity and concurrency limits under declared ceilings — **P7.3**.
+- ~~Capacity and concurrency limits under declared ceilings~~ — **P7.3, done 2026-09-05**; the
+  declared ceilings and what they do and do not guarantee under concurrency are in
+  [MEETINGS-CAPACITY.md](MEETINGS-CAPACITY.md).
 - Structured metrics, traces and alerting on the abuse paths named here — **P7.4**.
 - End-to-end coverage of the full create → invite → OTP → join → collaborate → record → archive
   journey and its denial paths — **P7.5**.

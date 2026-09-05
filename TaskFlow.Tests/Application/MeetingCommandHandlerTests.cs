@@ -22,7 +22,7 @@ public sealed class MeetingCommandHandlerTests
         var permissions = Substitute.For<IOrganizationPermissionChecker>();
         var user = Substitute.For<ICurrentUserService>(); user.UserId.Returns(11);
         var unitOfWork = Substitute.For<IUnitOfWork>();
-        var handler = new CreateMeetingCommandHandler(meetings, members, permissions, user, unitOfWork);
+        var handler = new CreateMeetingCommandHandler(meetings, members, permissions, user, new MeetingTestPolicy(), unitOfWork);
 
         await handler.Handle(new CreateMeetingCommand(7, "Planning review", null, null, null), CancellationToken.None);
 

@@ -29,7 +29,12 @@ public sealed record MeetingReadinessReport(
     bool RecordingStorageConfigured,
     bool JoinTokenIssued,
     string? JoinTokenFailure,
-    IReadOnlyList<string> Blockers);
+    IReadOnlyList<string> Blockers,
+    /// <summary>
+    /// The ceilings this process enforces. An operator sizing a deployment, or explaining to a host
+    /// why a start was refused, should not have to read the configuration file to find them.
+    /// </summary>
+    MeetingCapacity Capacity);
 
 public static class MeetingReadinessStatus
 {

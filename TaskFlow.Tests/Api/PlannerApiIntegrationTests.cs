@@ -15,6 +15,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Npgsql;
@@ -22,6 +23,7 @@ using TaskFlow.Domain.Constants;
 using TaskFlow.Domain.Entities.Planner;
 using TaskFlow.Domain.Entities.WorkManagement.Projects;
 using TaskFlow.Domain.Entities.Identity;
+using TaskFlow.Domain.Entities.Meetings;
 using TaskFlow.Domain.Entities.Organization;
 using TaskFlow.Domain.Enums.Identity;
 using TaskFlow.Domain.Enums.WorkManagement;
@@ -333,6 +335,148 @@ public sealed class PlannerApiIntegrationTests : IClassFixture<PlannerApiFixture
         Assert.Equal(HttpStatusCode.BadRequest, (await member.PostAsJsonAsync($"api/meeting/{meetingId}/messages",
             new { clientMessageId = Guid.NewGuid(), body = "too late" })).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await member.GetAsync($"api/meeting/{meetingId}/assets/{assetId}")).StatusCode);
+    }
+
+    /// <summary>
+    /// Phase 7 / P7.3. The declared ceilings have to hold over the real HTTP and database path, not
+    /// only in a handler test: the count that a ceiling compares against is a query, and a query is
+    /// exactly what a unit test replaces with a stub.
+    /// </summary>
+    [Fact]
+    public async Task Meetings_EnforceDeclaredMessageAndFileCeilings_OverTheRealPath()
+    {
+        using var owner = _fixture.CreateClient(_fixture.CapacityOwnerUserId);
+        var created = await owner.PostAsJsonAsync("api/meeting", new
+        {
+            organizationId = _fixture.CapacityOrganizationId, title = "Declared capacity",
+            timeZone = "UTC", retentionDays = 90
+        });
+        var meetingId = await created.Content.ReadFromJsonAsync<int>();
+        Assert.Equal(HttpStatusCode.NoContent, (await owner.PostAsync($"api/meeting/{meetingId}/start", null)).StatusCode);
+
+        for (var index = 0; index < 10; index++)
+        {
+            var accepted = await owner.PostAsJsonAsync($"api/meeting/{meetingId}/messages",
+                new { clientMessageId = Guid.NewGuid(), body = $"Message {index}" });
+            Assert.Equal(HttpStatusCode.OK, accepted.StatusCode);
+        }
+        var refused = await owner.PostAsJsonAsync($"api/meeting/{meetingId}/messages",
+            new { clientMessageId = Guid.NewGuid(), body = "One past the ceiling" });
+        Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+        var refusedBody = await refused.Content.ReadAsStringAsync();
+        Assert.Contains("MEETING_MESSAGE_LIMIT_REACHED", refusedBody);
+        // The person who hit it needs the number, not just a refusal.
+        Assert.Contains("10", refusedBody);
+
+        for (var index = 0; index < 2; index++)
+            Assert.Equal(HttpStatusCode.OK, (await UploadAsync(owner, meetingId, $"notes-{index}.txt")).StatusCode);
+        var refusedUpload = await UploadAsync(owner, meetingId, "one-too-many.txt");
+        Assert.Equal(HttpStatusCode.BadRequest, refusedUpload.StatusCode);
+        Assert.Contains("MEETING_FILE_COUNT_LIMIT_REACHED", await refusedUpload.Content.ReadAsStringAsync());
+    }
+
+    /// <summary>
+    /// Phase 7 / P7.3 concurrency. Duplicate suppression on chat reads before it writes, so it only
+    /// catches a retry that arrives after the first send committed. A client retrying on a slow
+    /// connection has both in flight at once: both read nothing, both write, and the unique index
+    /// refuses one. The refused one must still report the message that landed — a 500 there tells a
+    /// user their message was lost while it is sitting in the room.
+    /// </summary>
+    [Fact]
+    public async Task MeetingChat_UnderSimultaneousRetriesOfOneMessage_StoresItOnceAndReportsItToEveryCaller()
+    {
+        using var owner = _fixture.CreateClient(_fixture.CapacityOwnerUserId);
+        var created = await owner.PostAsJsonAsync("api/meeting", new
+        {
+            organizationId = _fixture.CapacityOrganizationId, title = "Concurrent retries",
+            timeZone = "UTC", retentionDays = 90
+        });
+        var meetingId = await created.Content.ReadFromJsonAsync<int>();
+        Assert.Equal(HttpStatusCode.NoContent, (await owner.PostAsync($"api/meeting/{meetingId}/start", null)).StatusCode);
+
+        var clientMessageId = Guid.NewGuid();
+        var payload = new { clientMessageId, body = "Sent once, retried six times" };
+        var responses = await Task.WhenAll(Enumerable.Range(0, 6).Select(_ =>
+            owner.PostAsJsonAsync($"api/meeting/{meetingId}/messages", payload)));
+
+        var ids = new List<int>();
+        foreach (var response in responses)
+        {
+            Assert.True(response.StatusCode == HttpStatusCode.OK,
+                $"Concurrent retry failed: {response.StatusCode} {await response.Content.ReadAsStringAsync()}");
+            using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            ids.Add(json.RootElement.GetProperty("id").GetInt32());
+            response.Dispose();
+        }
+        // Every caller was told about the same message, and only one exists.
+        Assert.Single(ids.Distinct());
+        var stored = await _fixture.WithDbContextAsync(context =>
+            context.MeetingMessages.CountAsync(x => x.MeetingId == meetingId && x.ClientMessageId == clientMessageId));
+        Assert.Equal(1, stored);
+    }
+
+    /// <summary>
+    /// Phase 7 / P7.3, threat model A-07. Guest sessions and OTP challenges are access records, so
+    /// meeting retention never reached them and the tables grew for the life of the deployment.
+    /// </summary>
+    [Fact]
+    public async Task MeetingRetention_PurgesSpentGuestAccessRecords_AndKeepsLiveOnes()
+    {
+        using var owner = _fixture.CreateClient(_fixture.CapacityOwnerUserId);
+        var created = await owner.PostAsJsonAsync("api/meeting", new
+        {
+            organizationId = _fixture.CapacityOrganizationId, title = "Guest record retention",
+            timeZone = "UTC", guestsAllowed = true, retentionDays = 90
+        });
+        var meetingId = await created.Content.ReadFromJsonAsync<int>();
+        var linkResponse = await owner.PostAsJsonAsync($"api/meeting/{meetingId}/access-links", new
+        {
+            meetingId, mode = 2, lockedEmail = (string?)null, defaultAccessLevel = 3,
+            badgeDefinitionId = (int?)null, expiresAtUtc = DateTimeOffset.UtcNow.AddHours(1), maximumUses = (int?)null
+        });
+        using var linkJson = JsonDocument.Parse(await linkResponse.Content.ReadAsStringAsync());
+        var linkId = linkJson.RootElement.GetProperty("id").GetInt32();
+
+        var participantId = await _fixture.WithDbContextAsync(async context =>
+        {
+            var meeting = await context.Meetings.Include(x => x.Participants).SingleAsync(x => x.Id == meetingId);
+            var guest = meeting.AddGuestParticipant("stale@example.test", "Stale Guest",
+                TaskFlow.Domain.Enums.Meetings.MeetingAccessLevel.Participant, null);
+            await context.SaveChangesAsync();
+            var old = DateTime.UtcNow.AddDays(-30);
+            context.MeetingGuestSessions.Add(new MeetingGuestSession(meetingId, guest.Id, new string('1', 64), old, linkId));
+            context.MeetingGuestSessions.Add(new MeetingGuestSession(meetingId, guest.Id, new string('2', 64), DateTime.UtcNow.AddHours(1), linkId));
+            context.MeetingGuestChallenges.Add(new MeetingGuestChallenge(meetingId, linkId, "stale@example.test",
+                new string('3', 64), old, old, 5));
+            context.MeetingGuestChallenges.Add(new MeetingGuestChallenge(meetingId, linkId, "fresh@example.test",
+                new string('4', 64), DateTime.UtcNow.AddMinutes(10), DateTime.UtcNow, 5));
+            context.MeetingGuestDecisions.Add(new MeetingGuestDecision(meetingId, guest.Id,
+                _fixture.CapacityOwnerUserId, TaskFlow.Domain.Enums.Meetings.MeetingGuestDecisionKind.Admitted));
+            await context.SaveChangesAsync();
+            return guest.Id;
+        });
+
+        await _fixture.RunRetentionCleanupAsync();
+
+        var remaining = await _fixture.WithDbContextAsync(async context => new
+        {
+            Sessions = await context.MeetingGuestSessions.CountAsync(x => x.MeetingId == meetingId),
+            Challenges = await context.MeetingGuestChallenges.CountAsync(x => x.MeetingId == meetingId),
+            Decisions = await context.MeetingGuestDecisions.CountAsync(x => x.ParticipantId == participantId)
+        });
+        Assert.Equal(1, remaining.Sessions);
+        Assert.Equal(1, remaining.Challenges);
+        // The moderation audit trail is deliberately never purged with the access records.
+        Assert.Equal(1, remaining.Decisions);
+    }
+
+    private static Task<HttpResponseMessage> UploadAsync(HttpClient client, int meetingId, string fileName)
+    {
+        var content = new MultipartFormDataContent();
+        var file = new ByteArrayContent("safe meeting attachment"u8.ToArray());
+        file.Headers.ContentType = new MediaTypeHeaderValue("text/plain");
+        content.Add(file, "file", fileName);
+        return client.PostAsync($"api/meeting/{meetingId}/assets", content);
     }
 
     [Fact]
@@ -864,6 +1008,11 @@ public sealed class PlannerApiFixture : IAsyncLifetime
                         ["ObjectStorage:LocalPath"] = "App_Data/integration-test-objects",
                         ["Meetings:Enabled"] = "true",
                         ["Meetings:GuestsEnabled"] = "true",
+                        // Small on purpose: a ceiling nobody can reach in a test proves nothing.
+                        // These are per meeting, and every test uses its own meeting.
+                        ["Meetings:MaxMessagesPerMeeting"] = "10",
+                        ["Meetings:MaxAssetsPerMeeting"] = "2",
+                        ["Meetings:GuestAccessRecordRetentionDays"] = "1",
                         ["LiveKit:Enabled"] = "true",
                         ["LiveKit:Url"] = "ws://livekit.integration.test",
                         ["LiveKit:ApiKey"] = "integration-key",
@@ -1023,6 +1172,23 @@ public sealed class PlannerApiFixture : IAsyncLifetime
         var attendanceCount = await context.MeetingAttendance.CountAsync(x => x.MeetingId == meetingId);
         var receiptCount = await context.MeetingWebhookReceipts.CountAsync(x => x.MeetingId == meetingId);
         return new(roomName, attendanceCount, receiptCount);
+    }
+
+    /// <summary>Runs one real retention pass, the way the hosted service would on its timer.</summary>
+    public async Task RunRetentionCleanupAsync()
+    {
+        await using var scope = (_factory ?? throw new InvalidOperationException("Fixture is not ready."))
+            .Services.CreateAsyncScope();
+        var service = scope.ServiceProvider.GetServices<IHostedService>()
+            .OfType<TaskFlow.Infra.Meetings.MeetingRetentionCleanupService>().Single();
+        await service.PurgeExpiredAsync(CancellationToken.None);
+    }
+
+    public async Task<T> WithDbContextAsync<T>(Func<TaskFlowDbContext, Task<T>> work)
+    {
+        await using var scope = (_factory ?? throw new InvalidOperationException("Fixture is not ready."))
+            .Services.CreateAsyncScope();
+        return await work(scope.ServiceProvider.GetRequiredService<TaskFlowDbContext>());
     }
 
     public HttpClient CreateClient(int ownerUserId, string role = SystemRoleNames.User)

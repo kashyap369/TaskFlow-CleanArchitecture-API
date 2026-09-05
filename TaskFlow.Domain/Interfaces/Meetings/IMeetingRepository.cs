@@ -6,6 +6,8 @@ public interface IMeetingRepository
 {
     Task<Meeting?> GetByIdAsync(int id, CancellationToken cancellationToken = default);
     Task<Meeting?> GetByRoomNameAsync(string roomName, CancellationToken cancellationToken = default);
+    /// <summary>How many of an organization's meetings are Live right now, for the concurrency ceiling.</summary>
+    Task<int> CountLiveAsync(int organizationId, CancellationToken cancellationToken = default);
     Task<bool> HasWebhookReceiptAsync(string providerEventId, CancellationToken cancellationToken = default);
     Task AddWebhookReceiptAsync(MeetingWebhookReceipt receipt, CancellationToken cancellationToken = default);
     Task AddAsync(Meeting meeting, CancellationToken cancellationToken = default);
@@ -33,6 +35,8 @@ public interface IMeetingCollaborationRepository
     Task<MeetingNote?> GetNoteAsync(int meetingId, CancellationToken cancellationToken = default);
     Task<MeetingAsset?> GetAssetAsync(int meetingId, int assetId, CancellationToken cancellationToken = default);
     Task<long> GetAssetBytesAsync(int meetingId, CancellationToken cancellationToken = default);
+    Task<int> CountMessagesAsync(int meetingId, CancellationToken cancellationToken = default);
+    Task<int> CountAssetsAsync(int meetingId, CancellationToken cancellationToken = default);
     Task AddMessageAsync(MeetingMessage message, CancellationToken cancellationToken = default);
     Task AddNoteAsync(MeetingNote note, CancellationToken cancellationToken = default);
     Task AddNoteRevisionAsync(MeetingNoteRevision revision, CancellationToken cancellationToken = default);
@@ -47,6 +51,8 @@ public interface IMeetingRecordingRepository
     Task<MeetingRecording?> GetActiveAsync(int meetingId, CancellationToken cancellationToken = default);
     Task<MeetingRecording?> GetByProviderEgressIdAsync(string providerEgressId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<MeetingRecording>> GetForMeetingAsync(int meetingId, CancellationToken cancellationToken = default);
+    /// <summary>Recordings occupying Egress capacity across the whole deployment, not one meeting.</summary>
+    Task<int> CountActiveAsync(CancellationToken cancellationToken = default);
     Task AddAsync(MeetingRecording recording, CancellationToken cancellationToken = default);
     void Update(MeetingRecording recording);
 }

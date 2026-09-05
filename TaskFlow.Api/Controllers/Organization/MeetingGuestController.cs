@@ -18,13 +18,16 @@ namespace TaskFlow.Api.Controllers.Organization;
 public sealed class MeetingGuestController(IMediator mediator, IOptions<MeetingSettings> settings) : ControllerBase
 {
     [HttpPost("access/inspect")]
+    [EnableRateLimiting("meeting-guest-verify")]
     public async Task<IActionResult> Inspect(InspectMeetingGuestAccessCommand command, CancellationToken ct) => Ok(await mediator.Send(command, ct));
 
     [HttpPost("access/request-code")]
+    [EnableRateLimiting("meeting-guest-verify")]
     public async Task<IActionResult> RequestCode(RequestMeetingGuestCodeCommand command, CancellationToken ct)
     { await mediator.Send(command, ct); return NoContent(); }
 
     [HttpPost("access/verify-code")]
+    [EnableRateLimiting("meeting-guest-verify")]
     public async Task<IActionResult> VerifyCode(VerifyMeetingGuestCodeRequest request, CancellationToken ct)
     {
         int? userId = int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var value) ? value : null;
@@ -75,6 +78,7 @@ public sealed class MeetingGuestController(IMediator mediator, IOptions<MeetingS
     public async Task<IActionResult> Assets(CancellationToken ct) => Ok(await mediator.Send(new GetGuestMeetingAssetsQuery(GuestSessionToken()), ct));
 
     [HttpPost("assets")]
+    [EnableRateLimiting("meeting-guest-upload")]
     public async Task<IActionResult> UploadAsset(IFormFile file, CancellationToken ct)
     {
         await using var stream = file.OpenReadStream();

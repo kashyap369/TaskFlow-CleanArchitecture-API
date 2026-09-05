@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using Dapper;
 using FluentValidation;
 using MediatR;
+using TaskFlow.Application.Contracts.Meetings;
 using TaskFlow.Application.Contracts.Persistence;
 using TaskFlow.Application.Contracts.Security;
 using TaskFlow.Application.Contracts.Storage;
@@ -148,26 +149,45 @@ public sealed class GetGuestMeetingMessagesQueryHandler(IMeetingRepository meeti
 internal static class MeetingMessageWrite
 {
     public static async Task<MeetingMessageDto> SendAsync(MeetingCollaborationActor actor, Guid clientId, string body, int? reply,
-        IMeetingCollaborationRepository collaboration, IUnitOfWork uow, CancellationToken ct)
+        IMeetingCollaborationRepository collaboration, IMeetingPolicy policy, IUnitOfWork uow, CancellationToken ct)
     {
         MeetingCollaborationAccess.EnsureWritable(actor);
         if (!actor.CanChat) throw new ForbiddenException("MEETING_CHAT_DENIED", "Your meeting access does not allow chat.");
         var existing = await collaboration.GetMessageByClientIdAsync(actor.Meeting.Id, actor.Participant.Id, clientId, ct);
+        // A retry of a message that already landed stays idempotent even at the ceiling, so the
+        // limit is checked only once the send is known to be new.
         if (existing is not null) return ToDto(existing, actor.Participant);
+        await MeetingCapacityRules.EnsureMessageRoomAsync(actor.Meeting.Id, collaboration, policy, ct);
         // A reply id arrives from the client and was never checked against this meeting, so a
         // participant could anchor a message to a thread in a meeting they cannot see.
         if (reply.HasValue && await collaboration.GetMessageAsync(actor.Meeting.Id, reply.Value, ct) is null)
             throw new NotFoundException("MEETING_MESSAGE_NOT_FOUND", "The message being replied to is not part of this meeting.");
         var message = new MeetingMessage(actor.Meeting.Id, actor.Participant.Id, clientId, body, reply);
-        await collaboration.AddMessageAsync(message, ct); await uow.SaveChangesAsync(ct); return ToDto(message, actor.Participant);
+        try
+        {
+            await collaboration.AddMessageAsync(message, ct); await uow.SaveChangesAsync(ct);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            // The read above only suppresses a retry that arrives after the first send committed. A
+            // client retrying on a slow connection has both in flight at once, they both find no
+            // message, and the second one hits the unique index on
+            // (MeetingId, AuthorParticipantId, ClientMessageId). That is the duplicate being
+            // correctly refused, not a failure to report: if the winner is now there, this send did
+            // what the caller asked. Anything else is a real fault and still propagates.
+            var raced = await collaboration.GetMessageByClientIdAsync(actor.Meeting.Id, actor.Participant.Id, clientId, ct);
+            if (raced is null) throw;
+            return ToDto(raced, actor.Participant);
+        }
+        return ToDto(message, actor.Participant);
     }
     private static MeetingMessageDto ToDto(MeetingMessage m, MeetingParticipant p) => new(m.Id, m.ClientMessageId,
         m.AuthorParticipantId, p.DisplayName ?? p.NormalizedEmail?.Split('@')[0] ?? "Participant", m.Body, m.ReplyToMessageId, m.CreatedAt);
 }
-public sealed class SendMeetingMessageCommandHandler(IMeetingRepository meetings, IMeetingGuestAccessRepository guests, IMeetingCollaborationRepository collaboration, ICurrentUserService user, IUnitOfWork uow) : IRequestHandler<SendMeetingMessageCommand, MeetingMessageDto>
-{ public async Task<MeetingMessageDto> Handle(SendMeetingMessageCommand r, CancellationToken ct) => await MeetingMessageWrite.SendAsync(await new MeetingCollaborationAccess(meetings, guests).ForUserAsync(r.MeetingId, user.UserId, ct), r.ClientMessageId, r.Body, r.ReplyToMessageId, collaboration, uow, ct); }
-public sealed class SendGuestMeetingMessageCommandHandler(IMeetingRepository meetings, IMeetingGuestAccessRepository guests, IMeetingCollaborationRepository collaboration, IUnitOfWork uow) : IRequestHandler<SendGuestMeetingMessageCommand, MeetingMessageDto>
-{ public async Task<MeetingMessageDto> Handle(SendGuestMeetingMessageCommand r, CancellationToken ct) => await MeetingMessageWrite.SendAsync(await new MeetingCollaborationAccess(meetings, guests).ForGuestAsync(r.SessionToken, ct), r.ClientMessageId, r.Body, r.ReplyToMessageId, collaboration, uow, ct); }
+public sealed class SendMeetingMessageCommandHandler(IMeetingRepository meetings, IMeetingGuestAccessRepository guests, IMeetingCollaborationRepository collaboration, ICurrentUserService user, IMeetingPolicy policy, IUnitOfWork uow) : IRequestHandler<SendMeetingMessageCommand, MeetingMessageDto>
+{ public async Task<MeetingMessageDto> Handle(SendMeetingMessageCommand r, CancellationToken ct) => await MeetingMessageWrite.SendAsync(await new MeetingCollaborationAccess(meetings, guests).ForUserAsync(r.MeetingId, user.UserId, ct), r.ClientMessageId, r.Body, r.ReplyToMessageId, collaboration, policy, uow, ct); }
+public sealed class SendGuestMeetingMessageCommandHandler(IMeetingRepository meetings, IMeetingGuestAccessRepository guests, IMeetingCollaborationRepository collaboration, IMeetingPolicy policy, IUnitOfWork uow) : IRequestHandler<SendGuestMeetingMessageCommand, MeetingMessageDto>
+{ public async Task<MeetingMessageDto> Handle(SendGuestMeetingMessageCommand r, CancellationToken ct) => await MeetingMessageWrite.SendAsync(await new MeetingCollaborationAccess(meetings, guests).ForGuestAsync(r.SessionToken, ct), r.ClientMessageId, r.Body, r.ReplyToMessageId, collaboration, policy, uow, ct); }
 
 public sealed class GetMeetingNoteQueryHandler(IMeetingRepository meetings, IMeetingGuestAccessRepository guests, ICurrentUserService user, ISqlConnectionFactory sql) : IRequestHandler<GetMeetingNoteQuery, MeetingNoteDto>
 { public async Task<MeetingNoteDto> Handle(GetMeetingNoteQuery r, CancellationToken ct) => await MeetingCollaborationRead.NoteAsync(sql, await new MeetingCollaborationAccess(meetings, guests).ForUserAsync(r.MeetingId, user.UserId, ct), ct); }
@@ -205,8 +225,8 @@ internal static class MeetingAssetWrite
     private static readonly Dictionary<string, string[]> Allowed = new(StringComparer.OrdinalIgnoreCase)
     { ["application/pdf"] = [".pdf"], ["image/png"] = [".png"], ["image/jpeg"] = [".jpg", ".jpeg"], ["text/plain"] = [".txt"], ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"] = [".docx"] };
     public static async Task<MeetingAssetDto> UploadAsync(MeetingCollaborationActor actor, string fileName, string contentType,
-        long length, Stream input, long maxBytes, IMeetingCollaborationRepository collaboration, IObjectStorage storage,
-        IPlannerAssetScanner scanner, IUnitOfWork uow, CancellationToken ct)
+        long length, Stream input, long maxBytes, IMeetingCollaborationRepository collaboration, IMeetingPolicy policy,
+        IObjectStorage storage, IPlannerAssetScanner scanner, IUnitOfWork uow, CancellationToken ct)
     {
         MeetingCollaborationAccess.EnsureWritable(actor);
         if (!actor.CanChat) throw new ForbiddenException("MEETING_FILE_UPLOAD_DENIED", "Your meeting access does not allow file sharing.");
@@ -214,8 +234,7 @@ internal static class MeetingAssetWrite
         if (safeName.Length is < 1 or > 255 || !Allowed.TryGetValue(contentType, out var extensions) || !extensions.Contains(extension, StringComparer.OrdinalIgnoreCase))
             throw new BusinessException("MEETING_FILE_TYPE_DENIED", "This file type is not allowed.");
         if (length <= 0 || length > maxBytes) throw new BusinessException("MEETING_FILE_TOO_LARGE", $"Files must be smaller than {maxBytes / 1048576} MB.");
-        if (await collaboration.GetAssetBytesAsync(actor.Meeting.Id, ct) + length > maxBytes * 10)
-            throw new BusinessException("MEETING_FILE_QUOTA_EXCEEDED", "This meeting has reached its file storage quota.");
+        await MeetingCapacityRules.EnsureAssetRoomAsync(actor.Meeting.Id, length, collaboration, policy, ct);
         await using var buffer = new MemoryStream((int)Math.Min(length, maxBytes));
         var limited = new byte[81920]; long total = 0; int read;
         while ((read = await input.ReadAsync(limited, ct)) > 0) { total += read; if (total > maxBytes) throw new BusinessException("MEETING_FILE_TOO_LARGE", "The uploaded file exceeds the size limit."); await buffer.WriteAsync(limited.AsMemory(0, read), ct); }
@@ -244,10 +263,10 @@ internal static class MeetingAssetWrite
     }
 }
 
-public sealed class UploadMeetingAssetCommandHandler(IMeetingRepository meetings, IMeetingGuestAccessRepository guests, IMeetingCollaborationRepository collaboration, ICurrentUserService user, IObjectStorage storage, IPlannerAssetScanner scanner, IUnitOfWork uow) : IRequestHandler<UploadMeetingAssetCommand, MeetingAssetDto>
-{ public async Task<MeetingAssetDto> Handle(UploadMeetingAssetCommand r, CancellationToken ct) => await MeetingAssetWrite.UploadAsync(await new MeetingCollaborationAccess(meetings, guests).ForUserAsync(r.MeetingId, user.UserId, ct), r.FileName, r.ContentType, r.Length, r.Content, r.MaxFileBytes, collaboration, storage, scanner, uow, ct); }
-public sealed class UploadGuestMeetingAssetCommandHandler(IMeetingRepository meetings, IMeetingGuestAccessRepository guests, IMeetingCollaborationRepository collaboration, IObjectStorage storage, IPlannerAssetScanner scanner, IUnitOfWork uow) : IRequestHandler<UploadGuestMeetingAssetCommand, MeetingAssetDto>
-{ public async Task<MeetingAssetDto> Handle(UploadGuestMeetingAssetCommand r, CancellationToken ct) => await MeetingAssetWrite.UploadAsync(await new MeetingCollaborationAccess(meetings, guests).ForGuestAsync(r.SessionToken, ct), r.FileName, r.ContentType, r.Length, r.Content, r.MaxFileBytes, collaboration, storage, scanner, uow, ct); }
+public sealed class UploadMeetingAssetCommandHandler(IMeetingRepository meetings, IMeetingGuestAccessRepository guests, IMeetingCollaborationRepository collaboration, ICurrentUserService user, IMeetingPolicy policy, IObjectStorage storage, IPlannerAssetScanner scanner, IUnitOfWork uow) : IRequestHandler<UploadMeetingAssetCommand, MeetingAssetDto>
+{ public async Task<MeetingAssetDto> Handle(UploadMeetingAssetCommand r, CancellationToken ct) => await MeetingAssetWrite.UploadAsync(await new MeetingCollaborationAccess(meetings, guests).ForUserAsync(r.MeetingId, user.UserId, ct), r.FileName, r.ContentType, r.Length, r.Content, r.MaxFileBytes, collaboration, policy, storage, scanner, uow, ct); }
+public sealed class UploadGuestMeetingAssetCommandHandler(IMeetingRepository meetings, IMeetingGuestAccessRepository guests, IMeetingCollaborationRepository collaboration, IMeetingPolicy policy, IObjectStorage storage, IPlannerAssetScanner scanner, IUnitOfWork uow) : IRequestHandler<UploadGuestMeetingAssetCommand, MeetingAssetDto>
+{ public async Task<MeetingAssetDto> Handle(UploadGuestMeetingAssetCommand r, CancellationToken ct) => await MeetingAssetWrite.UploadAsync(await new MeetingCollaborationAccess(meetings, guests).ForGuestAsync(r.SessionToken, ct), r.FileName, r.ContentType, r.Length, r.Content, r.MaxFileBytes, collaboration, policy, storage, scanner, uow, ct); }
 
 internal static class MeetingAssetRead
 {

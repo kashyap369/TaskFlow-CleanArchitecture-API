@@ -130,7 +130,7 @@ internal sealed class MeetingCommandAccess(IMeetingRepository meetings, ICurrent
 
 public sealed class CreateMeetingCommandHandler(IMeetingRepository meetings,
     IOrganizationMemberRepository members, IOrganizationPermissionChecker permissions,
-    ICurrentUserService user, IUnitOfWork unitOfWork) : IRequestHandler<CreateMeetingCommand, int>
+    ICurrentUserService user, IMeetingPolicy policy, IUnitOfWork unitOfWork) : IRequestHandler<CreateMeetingCommand, int>
 {
     public async Task<int> Handle(CreateMeetingCommand request, CancellationToken cancellationToken)
     {
@@ -147,6 +147,7 @@ public sealed class CreateMeetingCommandHandler(IMeetingRepository meetings,
         {
             if (!await members.IsActiveMemberAsync(request.OrganizationId, participantUserId, cancellationToken))
                 throw new NotFoundException("MEETING_PARTICIPANT_NOT_FOUND", "An active participant was not found in this organization.");
+            MeetingCapacityRules.EnsureParticipantSeat(meeting, policy);
             Execute(() => meeting.AddRegisteredParticipant(participantUserId, MeetingAccessLevel.Participant));
         }
         await meetings.AddAsync(meeting, cancellationToken); await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -177,17 +178,28 @@ public sealed class UpdateMeetingCommandHandler(IMeetingRepository meetings, ICu
 public abstract class MeetingLifecycleHandler(IMeetingRepository meetings, ICurrentUserService user,
     IOrganizationPermissionChecker permissions, IUnitOfWork unitOfWork)
 {
-    protected async Task Mutate(int id, Action<Meeting> mutation, CancellationToken cancellationToken)
+    protected IMeetingRepository Meetings { get; } = meetings;
+
+    protected async Task Mutate(int id, Action<Meeting> mutation, CancellationToken cancellationToken,
+        Func<Meeting, CancellationToken, Task>? beforeMutation = null)
     {
         var meeting = await new MeetingCommandAccess(meetings, user, permissions).LoadManageableAsync(id, cancellationToken);
+        if (beforeMutation is not null) await beforeMutation(meeting, cancellationToken);
         UpdateMeetingCommandHandler.Execute(() => mutation(meeting)); meetings.Update(meeting);
         await unitOfWork.SaveChangesAsync(cancellationToken);
     }
 }
 public sealed class StartMeetingCommandHandler(IMeetingRepository meetings, ICurrentUserService user,
-    IOrganizationPermissionChecker permissions, IUnitOfWork unitOfWork)
+    IOrganizationPermissionChecker permissions, IMeetingPolicy policy, IUnitOfWork unitOfWork)
     : MeetingLifecycleHandler(meetings, user, permissions, unitOfWork), IRequestHandler<StartMeetingCommand>
-{ public Task Handle(StartMeetingCommand request, CancellationToken ct) => Mutate(request.Id, x => x.Start(DateTime.UtcNow), ct); }
+{
+    // Starting is where a meeting begins consuming media capacity, so the organization's
+    // simultaneous-meeting ceiling is checked here rather than at creation: scheduling ten meetings
+    // for the same hour is fine, holding more than the declared number of live rooms is not.
+    public Task Handle(StartMeetingCommand request, CancellationToken ct) =>
+        Mutate(request.Id, x => x.Start(DateTime.UtcNow), ct,
+            (meeting, token) => MeetingCapacityRules.EnsureLiveMeetingSlotAsync(meeting, Meetings, policy, token));
+}
 public sealed class EndMeetingCommandHandler(IMeetingRepository meetings, ICurrentUserService user,
     IOrganizationPermissionChecker permissions, IUnitOfWork unitOfWork, IMeetingMediaProvider mediaProvider,
     IMeetingRecordingRepository recordings, ILogger<EndMeetingCommandHandler> logger)
@@ -239,12 +251,13 @@ public sealed class AddMeetingBadgeCommandHandler(IMeetingRepository meetings, I
 
 public sealed class AddMeetingParticipantCommandHandler(IMeetingRepository meetings,
     IOrganizationMemberRepository members, ICurrentUserService user, IOrganizationPermissionChecker permissions,
-    IUnitOfWork unitOfWork) : IRequestHandler<AddMeetingParticipantCommand, int>
+    IMeetingPolicy policy, IUnitOfWork unitOfWork) : IRequestHandler<AddMeetingParticipantCommand, int>
 {
     public async Task<int> Handle(AddMeetingParticipantCommand request, CancellationToken ct)
     { var meeting = await new MeetingCommandAccess(meetings, user, permissions).LoadManageableAsync(request.MeetingId, ct);
       if (!await members.IsActiveMemberAsync(meeting.OrganizationId, request.UserId, ct))
           throw new NotFoundException("MEETING_PARTICIPANT_NOT_FOUND", "The selected active organization member was not found.");
+      MeetingCapacityRules.EnsureParticipantSeat(meeting, policy);
       MeetingParticipant? participant = null; UpdateMeetingCommandHandler.Execute(() => participant = meeting.AddRegisteredParticipant(request.UserId, request.AccessLevel, request.BadgeDefinitionId));
       meetings.Update(meeting); await unitOfWork.SaveChangesAsync(ct); return participant!.Id; }
 }

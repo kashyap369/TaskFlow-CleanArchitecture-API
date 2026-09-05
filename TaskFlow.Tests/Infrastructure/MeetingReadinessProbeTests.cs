@@ -105,6 +105,7 @@ public sealed class MeetingReadinessProbeTests
             Options.Create(liveKit),
             Options.Create(meetings),
             Options.Create(storage),
-            provider);
+            provider,
+            new MeetingPolicy(Options.Create(meetings)));
     }
 }

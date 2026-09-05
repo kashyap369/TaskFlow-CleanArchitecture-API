@@ -47,12 +47,41 @@ builder.Services.AddRateLimiter(options =>
                 QueueLimit = 0,
                 AutoReplenishment = true
             }));
-    options.AddPolicy("meeting-guest", httpContext =>
+    // The guest surface used to share one 12/minute per-IP budget across everything a guest does,
+    // so a whole office behind one NAT competed for it and a chat poll spent the same allowance as
+    // an OTP request (threat model A-08). It is three budgets now, keyed by what actually needs
+    // protecting. Only the pre-session endpoints can be called without proving anything, so they
+    // keep the tight per-address limit; once a guest holds a session, their own token is the
+    // partition key, which is what stops one NAT from being a single bucket.
+    options.AddPolicy("meeting-guest-verify", httpContext =>
         RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
             factory: _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = 12,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+    // Session-scoped traffic: reading a session, polling chat and notes, join tokens, moderation.
+    // A guest client polls chat and notes on a timer, so this ceiling is sized for a room being
+    // used rather than for an attacker being patient — the session must already be valid to spend it.
+    options.AddPolicy("meeting-guest", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: MeetingGuestRateLimitPartition(httpContext),
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 180,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+    options.AddPolicy("meeting-guest-upload", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: MeetingGuestRateLimitPartition(httpContext),
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0,
                 AutoReplenishment = true
@@ -116,6 +145,21 @@ builder.Services.AddRateLimiter(options =>
             }));
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 });
+
+// A guest has no user id, so their session token is the closest thing to an identity. It is hashed
+// before it becomes a partition key: partition keys are held in memory and can reach a log or a
+// dump, and the raw token is a bearer credential for the meeting.
+static string MeetingGuestRateLimitPartition(HttpContext httpContext)
+{
+    var token = httpContext.Request.Headers["X-Meeting-Guest-Session"].FirstOrDefault();
+    if (string.IsNullOrWhiteSpace(token))
+    {
+        return $"ip:{httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown"}";
+    }
+
+    var hash = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(token));
+    return $"session:{Convert.ToHexString(hash)[..16]}";
+}
 
 builder.Services.AddEndpointsApiExplorer();
 

@@ -191,6 +191,22 @@ namespace TaskFlow.Infra.DependencyInjection
                     "Meetings:RecordingConsentTimeoutSeconds must be between 15 and 300.")
                 .Validate(settings => settings.AutoEndMinimumSessionSeconds is >= 0 and <= 3600,
                     "Meetings:AutoEndMinimumSessionSeconds must be between 0 and 3600.")
+                // Declared capacity is refused server-side, so a nonsensical ceiling would either
+                // lock the feature out or promise scale nothing can serve. Fail at startup instead.
+                .Validate(settings => settings.MaxParticipantsPerMeeting is >= 2 and <= 500,
+                    "Meetings:MaxParticipantsPerMeeting must be between 2 and 500.")
+                .Validate(settings => settings.MaxConcurrentLiveMeetingsPerOrganization is >= 1 and <= 200,
+                    "Meetings:MaxConcurrentLiveMeetingsPerOrganization must be between 1 and 200.")
+                .Validate(settings => settings.MaxConcurrentRecordings is >= 1 and <= 50,
+                    "Meetings:MaxConcurrentRecordings must be between 1 and 50.")
+                .Validate(settings => settings.MaxMessagesPerMeeting is >= 10 and <= 1_000_000,
+                    "Meetings:MaxMessagesPerMeeting must be between 10 and 1000000.")
+                .Validate(settings => settings.MaxAssetsPerMeeting is >= 1 and <= 10_000,
+                    "Meetings:MaxAssetsPerMeeting must be between 1 and 10000.")
+                .Validate(settings => settings.MaxStorageBytesPerMeeting >= settings.MaxFileBytes,
+                    "Meetings:MaxStorageBytesPerMeeting must be at least Meetings:MaxFileBytes, or no file could ever be uploaded.")
+                .Validate(settings => settings.GuestAccessRecordRetentionDays is >= 1 and <= 3650,
+                    "Meetings:GuestAccessRecordRetentionDays must be between 1 and 3650.")
                 .ValidateOnStart();
             // Register the organization repositories
             services.AddScoped<

@@ -20,17 +20,20 @@ public sealed class MeetingReadinessProbe : IMeetingReadinessProbe
     private readonly MeetingSettings _meetings;
     private readonly ObjectStorageSettings _storage;
     private readonly IMeetingMediaProvider _provider;
+    private readonly IMeetingPolicy _policy;
 
     public MeetingReadinessProbe(
         IOptions<LiveKitSettings> liveKit,
         IOptions<MeetingSettings> meetings,
         IOptions<ObjectStorageSettings> storage,
-        IMeetingMediaProvider provider)
+        IMeetingMediaProvider provider,
+        IMeetingPolicy policy)
     {
         _liveKit = liveKit.Value;
         _meetings = meetings.Value;
         _storage = storage.Value;
         _provider = provider;
+        _policy = policy;
     }
 
     public MeetingReadinessReport Describe()
@@ -119,7 +122,8 @@ public sealed class MeetingReadinessProbe : IMeetingReadinessProbe
             recordingStorageConfigured,
             joinTokenIssued,
             joinTokenFailure,
-            blockers);
+            blockers,
+            _policy.Capacity);
     }
 
     private (bool Issued, string? Failure) TryIssueJoinToken()

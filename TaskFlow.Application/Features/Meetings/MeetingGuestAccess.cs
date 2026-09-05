@@ -4,6 +4,7 @@ using System.Text;
 using FluentValidation;
 using MediatR;
 using TaskFlow.Application.Contracts.Email;
+using TaskFlow.Application.Contracts.Meetings;
 using TaskFlow.Application.Contracts.Security;
 using TaskFlow.Application.Exceptions;
 using TaskFlow.Domain.Entities.Meetings;
@@ -119,7 +120,7 @@ public sealed class RequestMeetingGuestCodeCommandHandler(IMeetingGuestAccessRep
 
 public sealed class VerifyMeetingGuestCodeCommandHandler(IMeetingGuestAccessRepository guestAccess,
     IMeetingRepository meetings, IMeetingGuestCodeProtector protector, IUserRepository users,
-    IUnitOfWork unitOfWork) : IRequestHandler<VerifyMeetingGuestCodeCommand, VerifiedMeetingGuestDto>
+    IMeetingPolicy policy, IUnitOfWork unitOfWork) : IRequestHandler<VerifyMeetingGuestCodeCommand, VerifiedMeetingGuestDto>
 {
     public async Task<VerifiedMeetingGuestDto> Handle(VerifyMeetingGuestCodeCommand request, CancellationToken ct)
     {
@@ -139,6 +140,11 @@ public sealed class VerifyMeetingGuestCodeCommandHandler(IMeetingGuestAccessRepo
         var existingParticipant = meeting.Participants.FirstOrDefault(x => x.NormalizedEmail == normalized && !x.IsDeleted);
         if (existingParticipant?.State is MeetingParticipantState.Revoked or MeetingParticipantState.Denied or MeetingParticipantState.Removed)
             throw new UnauthorizedException("MEETING_GUEST_ACCESS_REVOKED", "The host has ended this guest's access.");
+        // A reusable link is the one path that can add participants without an organizer acting, so
+        // the seat ceiling has to hold here too — otherwise a shared link fills a room past the
+        // capacity TaskFlow declares. An email that already holds a seat is re-admitted, not counted
+        // twice, so a guest reconnecting from a new browser is never refused for capacity.
+        if (existingParticipant is null) MeetingCapacityRules.EnsureParticipantSeat(meeting, policy);
         var participant = meeting.AddGuestParticipant(normalized, request.DisplayName, link.DefaultAccessLevel, link.BadgeDefinitionId);
         if (request.BindRegisteredAccount)
         {

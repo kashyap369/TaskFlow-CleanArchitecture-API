@@ -166,6 +166,26 @@ public sealed class Meeting : AuditableEntity, IAggregateRoot
         return badge;
     }
 
+    /// <summary>
+    /// Everyone still holding a place on this meeting: the people who can be issued a join token.
+    /// Removed, revoked and denied rows are excluded — they cannot come back without a new decision,
+    /// so they must not consume a seat forever.
+    /// </summary>
+    public int ActiveParticipantCount => _participants.Count(x => !x.IsDeleted &&
+        x.State is not (MeetingParticipantState.Removed or MeetingParticipantState.Revoked or MeetingParticipantState.Denied));
+
+    /// <summary>
+    /// The roster is the only gate on room size: a join token is issued to assigned participants
+    /// only, so the seat ceiling is what keeps a meeting inside the capacity TaskFlow declares.
+    /// The limit is configuration, so it is supplied rather than known here.
+    /// </summary>
+    public void EnsureParticipantCapacity(int maxParticipants)
+    {
+        if (ActiveParticipantCount >= maxParticipants)
+            throw new InvalidOperationException(
+                $"This meeting has reached its limit of {maxParticipants} participants.");
+    }
+
     public MeetingParticipant AddRegisteredParticipant(int userId, MeetingAccessLevel accessLevel,
         int? badgeDefinitionId = null)
     {

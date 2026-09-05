@@ -78,7 +78,8 @@ internal static class MeetingRecordingRules
 
 public sealed class RequestMeetingRecordingCommandHandler(IMeetingRepository meetings,
     IMeetingGuestAccessRepository guests, IMeetingRecordingRepository recordings, ICurrentUserService user,
-    IMeetingMediaProvider media, IUnitOfWork uow, ILogger<RequestMeetingRecordingCommandHandler> logger)
+    IMeetingMediaProvider media, IMeetingPolicy policy, IUnitOfWork uow,
+    ILogger<RequestMeetingRecordingCommandHandler> logger)
     : IRequestHandler<RequestMeetingRecordingCommand, MeetingRecordingDto>
 {
     public async Task<MeetingRecordingDto> Handle(RequestMeetingRecordingCommand request, CancellationToken ct)
@@ -88,6 +89,7 @@ public sealed class RequestMeetingRecordingCommandHandler(IMeetingRepository mee
         MeetingCollaborationAccess.EnsureWritable(actor); MeetingRecordingRules.EnsureHost(actor);
         if (await recordings.GetActiveAsync(request.MeetingId, ct) is not null)
             throw new ConflictException("MEETING_RECORDING_ACTIVE", "A recording request or recording is already active.");
+        await MeetingCapacityRules.EnsureRecordingSlotAsync(recordings, policy, ct);
         // Attendance is written by provider webhooks. If one is delayed or lost, the open-attendance
         // list is short, every listed participant is the host alone, consent completes instantly and
         // people who are in the room right now get recorded without ever seeing a prompt. The live
