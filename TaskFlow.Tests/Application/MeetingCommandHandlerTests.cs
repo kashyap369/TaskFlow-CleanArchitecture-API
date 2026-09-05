@@ -1,4 +1,4 @@
-using NSubstitute;
+﻿using NSubstitute;
 using TaskFlow.Application.Contracts.Security;
 using TaskFlow.Application.Contracts.Meetings;
 using TaskFlow.Application.Exceptions;
@@ -12,6 +12,7 @@ using TaskFlow.Domain.Interfaces.Persistence;
 
 namespace TaskFlow.Tests.Application;
 
+[Collection(TaskFlow.Tests.Application.MeetingTelemetryCollection.Name)]
 public sealed class MeetingCommandHandlerTests
 {
     [Fact]

@@ -1,4 +1,4 @@
-namespace TaskFlow.Infra.Meetings;
+﻿namespace TaskFlow.Infra.Meetings;
 
 public sealed class MeetingSettings
 {
@@ -17,6 +17,13 @@ public sealed class MeetingSettings
     /// meeting stays open so the host can retry rather than finding it archived.
     /// </summary>
     public int AutoEndMinimumSessionSeconds { get; set; } = 30;
+
+    /// <summary>
+    /// Phase 7 / P7.4. A meeting request at or above this many milliseconds is logged as slow even
+    /// when it succeeded. Joining and sending chat are interactive: a request that takes two seconds
+    /// has already failed the person waiting, and nothing else in the pipeline would say so.
+    /// </summary>
+    public int SlowRequestMilliseconds { get; set; } = 1500;
 
     // ---- Declared capacity (Phase 7 / P7.3) ---------------------------------------------------
     // TaskFlow states limits it can defend rather than implying unlimited scale. Every value below

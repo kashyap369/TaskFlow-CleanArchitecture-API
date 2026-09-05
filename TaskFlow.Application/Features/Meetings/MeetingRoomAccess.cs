@@ -1,5 +1,7 @@
-using MediatR;
+﻿using MediatR;
+using System.Diagnostics;
 using System.Text.Json;
+using TaskFlow.Application.Common.Observability;
 using TaskFlow.Application.Contracts.Meetings;
 using TaskFlow.Application.Contracts.Security;
 using TaskFlow.Application.Exceptions;
@@ -21,6 +23,39 @@ public sealed record MeetingRoomTokenDto(string WebSocketUrl, string Token, Date
 
 internal static class MeetingRoomAccessRules
 {
+    /// <summary>
+    /// Phase 7 / P7.4. Counts every join attempt and its outcome around the whole issuing path, not
+    /// just the token call, because a join fails far more often before the provider is reached —
+    /// meeting not live, access revoked, guest not admitted, consent outstanding. The refusal
+    /// <i>code</i> is the tag; it is a fixed vocabulary, so it cannot inflate cardinality, and it is
+    /// the one thing an operator needs to tell "the media stack is broken" apart from "the host
+    /// revoked someone". No identity, room name or token is recorded.
+    /// </summary>
+    public static async Task<MeetingRoomTokenDto> ObserveAsync(string actor,
+        Func<Task<MeetingRoomTokenDto>> issue)
+    {
+        try
+        {
+            var token = await issue();
+            MeetingTelemetry.JoinTokens.Add(1, new TagList
+            {
+                { MeetingTelemetry.Tags.Actor, actor },
+                { MeetingTelemetry.Tags.Outcome, MeetingTelemetry.Outcomes.Issued }
+            });
+            return token;
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            MeetingTelemetry.JoinTokens.Add(1, new TagList
+            {
+                { MeetingTelemetry.Tags.Actor, actor },
+                { MeetingTelemetry.Tags.Outcome, MeetingTelemetry.Outcomes.Refused },
+                { MeetingTelemetry.Tags.Reason, (exception as BusinessException)?.Code ?? "unhandled" }
+            });
+            throw;
+        }
+    }
+
     public static void EnsureMeetingLive(Meeting meeting)
     {
         if (meeting.Status != MeetingStatus.Live)
@@ -61,7 +96,10 @@ public sealed class GetMeetingJoinTokenCommandHandler(IMeetingRepository meeting
     ICurrentUserService user, IMeetingMediaProvider provider, IMeetingRecordingRepository recordings)
     : IRequestHandler<GetMeetingJoinTokenCommand, MeetingRoomTokenDto>
 {
-    public async Task<MeetingRoomTokenDto> Handle(GetMeetingJoinTokenCommand request, CancellationToken ct)
+    public Task<MeetingRoomTokenDto> Handle(GetMeetingJoinTokenCommand request, CancellationToken ct) =>
+        MeetingRoomAccessRules.ObserveAsync(MeetingTelemetry.Actors.Member, () => IssueAsync(request, ct));
+
+    private async Task<MeetingRoomTokenDto> IssueAsync(GetMeetingJoinTokenCommand request, CancellationToken ct)
     {
         var meeting = await meetings.GetByIdAsync(request.MeetingId, ct)
             ?? throw new NotFoundException("MEETING_NOT_FOUND", "Meeting not found.");
@@ -89,7 +127,10 @@ public sealed class GetGuestMeetingJoinTokenCommandHandler(IMeetingGuestAccessRe
     IMeetingRepository meetings, IMeetingMediaProvider provider, IMeetingRecordingRepository recordings)
     : IRequestHandler<GetGuestMeetingJoinTokenCommand, MeetingRoomTokenDto>
 {
-    public async Task<MeetingRoomTokenDto> Handle(GetGuestMeetingJoinTokenCommand request, CancellationToken ct)
+    public Task<MeetingRoomTokenDto> Handle(GetGuestMeetingJoinTokenCommand request, CancellationToken ct) =>
+        MeetingRoomAccessRules.ObserveAsync(MeetingTelemetry.Actors.Guest, () => IssueAsync(request, ct));
+
+    private async Task<MeetingRoomTokenDto> IssueAsync(GetGuestMeetingJoinTokenCommand request, CancellationToken ct)
     {
         var session = await guestAccess.GetSessionByHashAsync(MeetingGuestAccessRules.Hash(request.SessionToken), ct);
         if (session is null || !session.IsActive(DateTime.UtcNow))

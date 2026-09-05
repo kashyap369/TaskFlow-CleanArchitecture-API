@@ -2,7 +2,35 @@
 
 > Keep the Current Status section up to date at the end of every session.
 
-## 🟡 Organization Meetings Phase 7 — P7.3 done: declared capacity and concurrency (2026-09-05)
+## 🟡 Organization Meetings Phase 7 — P7.4 done: metrics, traces, logs and alerts (2026-09-05)
+
+Meetings now emit signals, and the failures nobody can see from a screen have rules watching them.
+One meter, `TaskFlow.Meetings`, carries edge requests and latency, join-token issuance and refusal,
+the guest verification funnel, webhook outcomes, the recording lifecycle, capacity refusals and every
+outbound LiveKit call. Eight alert rules with thresholds, windows and a runbook each are in
+[docs/MEETINGS-OBSERVABILITY.md](MEETINGS-OBSERVABILITY.md); the production deployment has no metrics
+collector, so `GET /admin/meetings/health` (AdminOnly) evaluates them in-process over a bounded
+one-hour ring and the admin page renders them at `/admin/settings` → **Meetings health**.
+
+The rule that shapes everything else: **no meeting content and no identifier may become a metric
+tag** — no email, token, room name, display name, title or IP anywhere, and no meeting/participant/
+organization id or concrete path in a metric, for cardinality. Identifiers live on the span instead,
+so metrics say *that* meetings are failing and the trace says *which*. A test drives real handlers
+with a distinctive email, room name, title and link token and fails if any reaches a tag.
+
+The package found two defects in its own wiring, both invisible to unit tests: the snapshot was
+built lazily on the first read, so it reported an empty window over a system that had been running
+for hours; and refusals thrown as exceptions passed the middleware with the status still at 200,
+counting every refused meeting request as a healthy one. Both are fixed, and an HTTP test now drives
+a real success and a real refusal before reading the report.
+
+Backend `113/113`, frontend `291/291`, builds, lint, design lint, 42 contrast checks and EF drift all
+pass. **No migration.** One route added (`GET /admin/meetings/health`), so the ledger moves to
+`181/178`. Deliberately not covered: client-side media quality (packet loss, jitter, ICE, TURN) lives
+in the browser and LiveKit, and the in-process window is per container and lost on restart. Three
+packages remain: P7.5 E2E, P7.6 infrastructure, P7.7 policy docs.
+
+## ✅ Organization Meetings Phase 7 — P7.3 done: declared capacity and concurrency (2026-09-05)
 
 Meetings now declare capacity they can defend rather than implying unlimited scale, and every
 ceiling is refused server-side with a code that names the number: 50 participants per meeting,
@@ -21,7 +49,7 @@ budget, now three budgets keyed by session) are closed.
 
 Backend `98/98`, frontend `287/287`, builds, lint, design lint, 42 contrast checks and EF drift all
 pass. **No migration** — capacity is configuration. Nothing here is a load test: no run has held 50
-participants or measured Egress throughput. Four packages remain: P7.4 telemetry, P7.5 E2E,
+participants or measured Egress throughput. Three packages remain after P7.4: P7.5 E2E,
 P7.6 infrastructure, P7.7 policy docs.
 
 ## ✅ Organization Meetings Phase 7 — P7.2 done: threat model and abuse review (2026-09-05)

@@ -17,6 +17,30 @@ namespace TaskFlow.Api.Middlewares
             _logger = logger;
         }
 
+        /// <summary>
+        /// The single mapping from a thrown exception to the status this middleware will write.
+        ///
+        /// It is public because this middleware is the outermost one, so anything inside it — the
+        /// meeting observability middleware, for instance — sees an exception propagating past with
+        /// the response status still untouched. Classifying that as a success would report every
+        /// refused meeting request as a healthy one, which is the opposite of what the P7.4 alert
+        /// rules need. Both callers reading one method is what keeps them from drifting apart.
+        ///
+        /// Order matters: Conflict/NotFound/Unauthorized/Forbidden all derive from
+        /// <see cref="BusinessException"/>, so the derived types are matched first.
+        /// </summary>
+        public static HttpStatusCode StatusCodeFor(Exception exception) => exception switch
+        {
+            ValidationException => HttpStatusCode.BadRequest,
+            ConflictException => HttpStatusCode.Conflict,
+            NotFoundException => HttpStatusCode.NotFound,
+            UnauthorizedException => HttpStatusCode.Unauthorized,
+            ForbiddenException => HttpStatusCode.Forbidden,
+            BusinessException => HttpStatusCode.BadRequest,
+            ArgumentException or InvalidOperationException => HttpStatusCode.BadRequest,
+            _ => HttpStatusCode.InternalServerError
+        };
+
         public async Task InvokeAsync(HttpContext context)
         {
             try
@@ -27,7 +51,7 @@ namespace TaskFlow.Api.Middlewares
             {
                 await WriteErrorResponseAsync(
                     context,
-                    HttpStatusCode.BadRequest,
+                    StatusCodeFor(ex),
                     "VALIDATION_ERROR",
                     "Validation failed.",
                     FailureReason.ValidationFailure,
@@ -41,7 +65,7 @@ namespace TaskFlow.Api.Middlewares
             {
                 await WriteErrorResponseAsync(
                     context,
-                    HttpStatusCode.Conflict,
+                    StatusCodeFor(ex),
                     ex.Code,
                     ex.Message,
                     FailureReason.Conflict);
@@ -50,7 +74,7 @@ namespace TaskFlow.Api.Middlewares
             {
                 await WriteErrorResponseAsync(
                     context,
-                    HttpStatusCode.NotFound,
+                    StatusCodeFor(ex),
                     ex.Code,
                     ex.Message,
                     FailureReason.NotFound);
@@ -59,7 +83,7 @@ namespace TaskFlow.Api.Middlewares
             {
                 await WriteErrorResponseAsync(
                     context,
-                    HttpStatusCode.Unauthorized,
+                    StatusCodeFor(ex),
                     ex.Code,
                     ex.Message,
                     FailureReason.Unauthorized);
@@ -68,7 +92,7 @@ namespace TaskFlow.Api.Middlewares
             {
                 await WriteErrorResponseAsync(
                     context,
-                    HttpStatusCode.Forbidden,
+                    StatusCodeFor(ex),
                     ex.Code,
                     ex.Message,
                     FailureReason.Forbidden);
@@ -77,7 +101,7 @@ namespace TaskFlow.Api.Middlewares
             {
                 await WriteErrorResponseAsync(
                     context,
-                    HttpStatusCode.BadRequest,
+                    StatusCodeFor(ex),
                     ex.Code,
                     ex.Message,
                     FailureReason.BusinessRuleViolation);
@@ -96,7 +120,7 @@ namespace TaskFlow.Api.Middlewares
 
                 await WriteErrorResponseAsync(
                     context,
-                    HttpStatusCode.BadRequest,
+                    StatusCodeFor(ex),
                     "DOMAIN_RULE_VIOLATION",
                     ex.Message,
                     FailureReason.BusinessRuleViolation);
@@ -109,7 +133,7 @@ namespace TaskFlow.Api.Middlewares
 
                 await WriteErrorResponseAsync(
                     context,
-                    HttpStatusCode.InternalServerError,
+                    StatusCodeFor(ex),
                     "INTERNAL_SERVER_ERROR",
                     "An unexpected error occurred.",
                     FailureReason.InternalServerError);

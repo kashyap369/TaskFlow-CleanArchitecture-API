@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using NSubstitute;
 using TaskFlow.Application.Contracts.Meetings;
 using TaskFlow.Application.Contracts.Security;
@@ -19,6 +19,7 @@ namespace TaskFlow.Tests.Application;
 /// declared ceiling has to be refused by the server. Each test here pins one ceiling and the code
 /// the person who hit it receives, because the UI shows the server's message and nothing else.
 /// </summary>
+[Collection(TaskFlow.Tests.Application.MeetingTelemetryCollection.Name)]
 public sealed class MeetingCapacityTests
 {
     // ---- Participants ---------------------------------------------------------------------------

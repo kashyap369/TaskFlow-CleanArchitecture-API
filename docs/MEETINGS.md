@@ -884,9 +884,51 @@ defaults §12 prescribes, not owner-approved numbers.
   pass; the admin readiness panel gained the Declared capacity block. No route was added or changed,
   so the ledger stays at `180/177`; the readiness response gained a `capacity` object.
 
-Remaining Phase 7 packages, in priority order: P7.4 structured metrics/traces/logs with alerts and
-runbooks; P7.5 critical E2E coverage; P7.6 production LiveKit/Redis/TURN provisioning and staged flag
-rollout (infrastructure, owner-gated); P7.7 privacy/retention/support documentation.
+**Work-package checkpoint (2026-09-05) — P7.4 structured metrics, traces and logs, DONE:**
+Meetings now emit signals, and the failures that are invisible from every screen have rules watching
+them. The signal catalogue, the privacy contract and a runbook per rule are in
+[MEETINGS-OBSERVABILITY.md](MEETINGS-OBSERVABILITY.md).
+
+- *What is instrumented, and why those things:* one meter (`TaskFlow.Meetings`) carries requests and
+  latency at the edge, join-token issuance and refusal, the guest verification funnel, webhook
+  outcomes, the recording lifecycle, capacity refusals, and every outbound LiveKit call with its
+  duration. The selection is not "what was easy to count": each one is a failure the UI keeps
+  looking healthy through — a rejected webhook stops attendance being written while the archive
+  still renders, a recording that never started leaves the host believing it did, and a media stack
+  that cannot be reached still hands out join tokens because those are signed locally.
+- *The privacy contract is enforced, not documented.* No email, access-link or session token, join
+  token, room name, participant identity, display name, title, chat text, file name or IP may become
+  a tag or log field; and no identifier may become a **metric** tag, for cardinality — the edge
+  middleware tags the route template and buckets unmatched paths, so a caller cannot mint series by
+  inventing URLs. `MeetingObservabilityTests.NoMeetingSignalCarriesMeetingContent` drives real
+  handlers with distinctive values and fails if any of them reaches a tag. The cost is stated in the
+  doc rather than discovered: metrics say *that* something is failing, the trace or log line says
+  *which meeting*.
+- *Alerts an operator can act on.* Eight rules with thresholds, windows and severities, each with a
+  runbook section the API names in its response. Where they cannot be evaluated — the production
+  deployment has no metrics collector — `GET /admin/meetings/health` (AdminOnly) evaluates them
+  in-process over a bounded one-minute-bucket ring and the admin Platform settings page renders them
+  beside readiness. It reports its own two limits rather than hiding them: the window is per
+  instance, and `fullyObserved` is false until the process has been collecting for a full hour, so
+  "no failures in the last hour" is never claimed by a process that started ten minutes ago.
+- *Two defects the instrumentation itself found, both only visible over real HTTP:* the snapshot
+  was a plain singleton, so it was constructed on the **first read of the health endpoint** and
+  reported an empty window over a system that had been serving meetings for hours — it is a hosted
+  service now, built at startup. And because the global exception handler sits outside the meeting
+  middleware, a refusal thrown as a `ForbiddenException` passed through with the response still at
+  its default 200, so every refused meeting request was counted as a healthy one — precisely
+  backwards for rules that alert on refusals. The status mapping is now one public method on
+  `ExceptionHandlingMiddleware` that both middlewares read.
+- *Verification:* backend `113/113` (15 new, including the redaction test, the route-template test
+  and one that drives real HTTP: it makes a successful and a refused meeting request, then reads
+  `/api/admin/meetings/health` as an admin and asserts both status classes appear and that neither
+  the meeting's title nor its id does), build and EF drift clean, **no migration**. Frontend `291/291` (4 new), production build,
+  lint, design lint and all 42 contrast checks pass. One route added — `GET /admin/meetings/health`
+  — so the ledger moves to `181/178`.
+
+Remaining Phase 7 packages, in priority order: P7.5 critical E2E coverage; P7.6 production
+LiveKit/Redis/TURN provisioning and staged flag rollout (infrastructure, owner-gated); P7.7
+privacy/retention/support documentation.
 
 **Exit criteria:** security review has no unresolved high-risk item; performance/capacity evidence meets
 declared limits; monitoring/runbooks and rollback are tested; migrations and object storage are backed
@@ -927,6 +969,24 @@ Until approved, phases use the conservative defaults stated in this document and
 guest/recording behavior disabled in production.
 
 ## 13. Evidence and decision log
+
+- **2026-09-05 — Phase 7 / P7.4 completed (structured metrics, traces and logs):** wrote
+  [MEETINGS-OBSERVABILITY.md](MEETINGS-OBSERVABILITY.md) and instrumented the meeting stack against
+  it. One meter, `TaskFlow.Meetings`, defined in `TaskFlow.Application/Common/Observability/`
+  because meeting signals originate in handlers and the media provider, not only at the HTTP edge.
+  Eight alert rules with runbooks; `GET /admin/meetings/health` evaluates them in-process for a
+  deployment with no collector, and the admin page renders them next to readiness.
+  **The decision worth keeping:** identifiers are barred from metric tags but allowed on spans, so
+  an operator finds *that* meetings are failing from metrics and *which* meeting from the trace. A
+  test drives real handlers with a distinctive email, room name, title and link token and fails if
+  any reaches a tag, so the contract cannot rot into a comment.
+  Still unproven and deliberately so: nothing here observes client-side media quality — packet loss,
+  jitter, ICE and TURN live in the browser and in LiveKit — and the in-process window is per
+  container and lost on restart. The package also found two wiring defects that only real HTTP
+  exposes — a snapshot built lazily on first read, and refusals counted as successes because the
+  exception handler is outside the middleware — which is the argument for the integration test
+  rather than more unit tests. Backend `113/113`, frontend `291/291`, no migration.
+  Next package: P7.5 critical E2E coverage.
 
 - **2026-09-05 — Phase 7 / P7.3 completed (declared capacity and concurrency):** wrote
   [MEETINGS-CAPACITY.md](MEETINGS-CAPACITY.md) and made every ceiling in it a server-side refusal —

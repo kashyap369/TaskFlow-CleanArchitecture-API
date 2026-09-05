@@ -1,4 +1,4 @@
-using MediatR;
+﻿using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -69,6 +69,24 @@ namespace TaskFlow.Api.Controllers.Platform
                     cancellationToken);
 
             return Ok(readiness);
+        }
+
+        /// <summary>
+        /// Phase 7 / P7.4. What the meeting stack has actually been doing, and which alert rules are
+        /// firing right now. Readiness answers "is it configured"; this answers "is it working".
+        /// The report carries counts and rule outcomes only — no meeting, participant, room or
+        /// address ever reaches it, so it is safe to read, screenshot and paste into a ticket.
+        /// </summary>
+        [HttpGet("meetings/health")]
+        public async Task<IActionResult> GetMeetingHealth(
+            CancellationToken cancellationToken)
+        {
+            var health =
+                await _mediator.Send(
+                    new GetMeetingHealthQuery(),
+                    cancellationToken);
+
+            return Ok(health);
         }
 
         [HttpGet("settings")]

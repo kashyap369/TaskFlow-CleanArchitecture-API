@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using TaskFlow.Application.Contracts.Meetings;
@@ -18,6 +18,7 @@ namespace TaskFlow.Tests.Application;
 /// Phase 7 / P7.2. Each test pins one abuse case the threat model found open, so a later refactor
 /// that quietly restores the old behaviour fails here rather than in production.
 /// </summary>
+[Collection(TaskFlow.Tests.Application.MeetingTelemetryCollection.Name)]
 public sealed class MeetingSecurityHardeningTests
 {
     // ---- Access links ------------------------------------------------------------------------

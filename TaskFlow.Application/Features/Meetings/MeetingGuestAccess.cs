@@ -1,8 +1,10 @@
+﻿using System.Diagnostics;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using FluentValidation;
 using MediatR;
+using TaskFlow.Application.Common.Observability;
 using TaskFlow.Application.Contracts.Email;
 using TaskFlow.Application.Contracts.Meetings;
 using TaskFlow.Application.Contracts.Security;
@@ -42,6 +44,42 @@ public sealed class ConfirmMeetingGuestDisplayNameValidator : AbstractValidator<
 
 internal static class MeetingGuestAccessRules
 {
+    /// <summary>
+    /// Phase 7 / P7.4. Counts each stage of the guest funnel with its outcome. The guest path is
+    /// the only unauthenticated way into a meeting, so its failure rate is the abuse signal that
+    /// matters most — a run of failed <c>verify</c> attempts is what guessing six-digit codes
+    /// against a leaked link looks like from the outside.
+    ///
+    /// The email address, the link token and the code are never tagged or logged. Only the stage,
+    /// the outcome and the refusal code are, and all three come from a fixed vocabulary.
+    /// </summary>
+    public static async Task<T> ObserveAsync<T>(string stage, Func<Task<T>> action)
+    {
+        try
+        {
+            var result = await action();
+            MeetingTelemetry.GuestVerifications.Add(1, new TagList
+            {
+                { MeetingTelemetry.Tags.Stage, stage },
+                { MeetingTelemetry.Tags.Outcome, MeetingTelemetry.Outcomes.Succeeded }
+            });
+            return result;
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            MeetingTelemetry.GuestVerifications.Add(1, new TagList
+            {
+                { MeetingTelemetry.Tags.Stage, stage },
+                { MeetingTelemetry.Tags.Outcome, MeetingTelemetry.Outcomes.Failed },
+                { MeetingTelemetry.Tags.Reason, (exception as BusinessException)?.Code ?? "unhandled" }
+            });
+            throw;
+        }
+    }
+
+    public static Task ObserveAsync(string stage, Func<Task> action) =>
+        ObserveAsync(stage, async () => { await action(); return true; });
+
     public static string Hash(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
     public static string Normalize(string email) => new Email(email).Value.ToUpperInvariant();
     public static void EnsureAvailable(Meeting meeting, MeetingAccessLink link, string? normalizedEmail = null)
@@ -78,7 +116,10 @@ internal static class MeetingGuestAccessRules
 public sealed class InspectMeetingGuestAccessCommandHandler(IMeetingGuestAccessRepository guestAccess,
     IMeetingRepository meetings, IUserRepository users) : IRequestHandler<InspectMeetingGuestAccessCommand, MeetingGuestAccessDto>
 {
-    public async Task<MeetingGuestAccessDto> Handle(InspectMeetingGuestAccessCommand request, CancellationToken ct)
+    public Task<MeetingGuestAccessDto> Handle(InspectMeetingGuestAccessCommand request, CancellationToken ct) =>
+        MeetingGuestAccessRules.ObserveAsync(MeetingGuestStages.Inspect, () => InspectAsync(request, ct));
+
+    private async Task<MeetingGuestAccessDto> InspectAsync(InspectMeetingGuestAccessCommand request, CancellationToken ct)
     {
         var link = await guestAccess.GetLinkByHashAsync(MeetingGuestAccessRules.Hash(request.Token), ct)
             ?? throw new BusinessException("MEETING_ACCESS_INVALID", "This meeting invitation is invalid or no longer available.");
@@ -96,7 +137,10 @@ public sealed class RequestMeetingGuestCodeCommandHandler(IMeetingGuestAccessRep
     IMeetingRepository meetings, IMeetingGuestCodeProtector protector, IEmailService emailService,
     IUnitOfWork unitOfWork) : IRequestHandler<RequestMeetingGuestCodeCommand>
 {
-    public async Task Handle(RequestMeetingGuestCodeCommand request, CancellationToken ct)
+    public Task Handle(RequestMeetingGuestCodeCommand request, CancellationToken ct) =>
+        MeetingGuestAccessRules.ObserveAsync(MeetingGuestStages.RequestCode, () => SendAsync(request, ct));
+
+    private async Task SendAsync(RequestMeetingGuestCodeCommand request, CancellationToken ct)
     {
         var link = await guestAccess.GetLinkByHashAsync(MeetingGuestAccessRules.Hash(request.Token), ct)
             ?? throw new BusinessException("MEETING_ACCESS_INVALID", "If the invitation and email are valid, a code can be requested.");
@@ -122,7 +166,10 @@ public sealed class VerifyMeetingGuestCodeCommandHandler(IMeetingGuestAccessRepo
     IMeetingRepository meetings, IMeetingGuestCodeProtector protector, IUserRepository users,
     IMeetingPolicy policy, IUnitOfWork unitOfWork) : IRequestHandler<VerifyMeetingGuestCodeCommand, VerifiedMeetingGuestDto>
 {
-    public async Task<VerifiedMeetingGuestDto> Handle(VerifyMeetingGuestCodeCommand request, CancellationToken ct)
+    public Task<VerifiedMeetingGuestDto> Handle(VerifyMeetingGuestCodeCommand request, CancellationToken ct) =>
+        MeetingGuestAccessRules.ObserveAsync(MeetingGuestStages.Verify, () => VerifyAsync(request, ct));
+
+    private async Task<VerifiedMeetingGuestDto> VerifyAsync(VerifyMeetingGuestCodeCommand request, CancellationToken ct)
     {
         var link = await guestAccess.GetLinkByHashAsync(MeetingGuestAccessRules.Hash(request.Token), ct)
             ?? throw InvalidCode();

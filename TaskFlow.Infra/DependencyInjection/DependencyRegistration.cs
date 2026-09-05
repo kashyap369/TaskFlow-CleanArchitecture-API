@@ -174,6 +174,11 @@ namespace TaskFlow.Infra.DependencyInjection
             services.AddSingleton<IMeetingMediaProvider, LiveKitMeetingMediaProvider>();
             services.AddSingleton<IMeetingReadinessProbe, MeetingReadinessProbe>();
             services.AddSingleton<IMeetingPolicy, MeetingPolicy>();
+            // Singleton and started at registration: it must be listening before the first meeting
+            // request, and a per-request lifetime would throw away the window it exists to keep.
+            services.AddSingleton<MeetingHealthSnapshot>();
+            services.AddSingleton<IMeetingHealthSnapshot>(sp => sp.GetRequiredService<MeetingHealthSnapshot>());
+            services.AddHostedService(sp => sp.GetRequiredService<MeetingHealthSnapshot>());
             services
                 .AddOptions<MeetingSettings>()
                 .Bind(configuration.GetSection(MeetingSettings.SectionName))
@@ -207,6 +212,8 @@ namespace TaskFlow.Infra.DependencyInjection
                     "Meetings:MaxStorageBytesPerMeeting must be at least Meetings:MaxFileBytes, or no file could ever be uploaded.")
                 .Validate(settings => settings.GuestAccessRecordRetentionDays is >= 1 and <= 3650,
                     "Meetings:GuestAccessRecordRetentionDays must be between 1 and 3650.")
+                .Validate(settings => settings.SlowRequestMilliseconds is >= 50 and <= 60_000,
+                    "Meetings:SlowRequestMilliseconds must be between 50 and 60000.")
                 .ValidateOnStart();
             // Register the organization repositories
             services.AddScoped<

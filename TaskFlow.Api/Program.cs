@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.HttpOverrides;
+﻿using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Connections;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -282,6 +282,7 @@ app.UseMaintenanceMode();
 
 app.UseAuthorization();
 app.UsePlannerObservability();
+app.UseMeetingObservability();
 
 app.MapControllers();
 app.MapHealthChecks("/health");

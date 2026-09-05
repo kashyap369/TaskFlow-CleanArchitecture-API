@@ -1,5 +1,7 @@
+﻿using System.Diagnostics;
 using Livekit.Server.Sdk.Dotnet;
 using Microsoft.Extensions.Options;
+using TaskFlow.Application.Common.Observability;
 using TaskFlow.Application.Contracts.Meetings;
 using TaskFlow.Infra.Storage;
 
@@ -68,22 +70,60 @@ public sealed class LiveKitMeetingMediaProvider : IMeetingMediaProvider
         return new MeetingJoinToken(token.ToJwt(), expiresAtUtc);
     }
 
+    /// <summary>
+    /// Phase 7 / P7.4. Times every outbound LiveKit call and records whether it worked. This is the
+    /// signal that would have named the 2026-09-02 failure directly: the API was healthy, the
+    /// LiveKit server was healthy, and only the calls between them failed. Measurement starts after
+    /// the enablement guard, so a deployment with media switched off reads as "no calls" rather
+    /// than "every call failing" — that state is readiness's answer, not this counter's.
+    ///
+    /// The room name, participant identity and egress id are arguments here and none of them
+    /// becomes a tag: only the operation name and the outcome do.
+    /// </summary>
+    private static async Task<T> MeasureAsync<T>(string operation, Func<Task<T>> call)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        var outcome = MeetingTelemetry.Outcomes.Failed;
+        try
+        {
+            var result = await call();
+            outcome = MeetingTelemetry.Outcomes.Succeeded;
+            return result;
+        }
+        finally
+        {
+            stopwatch.Stop();
+            var tags = new TagList
+            {
+                { MeetingTelemetry.Tags.Operation, operation },
+                { MeetingTelemetry.Tags.Outcome, outcome }
+            };
+            MeetingTelemetry.MediaCalls.Add(1, tags);
+            MeetingTelemetry.MediaCallDuration.Record(stopwatch.Elapsed.TotalMilliseconds, tags);
+        }
+    }
+
+    private static Task MeasureAsync(string operation, Func<Task> call) =>
+        MeasureAsync(operation, async () => { await call(); return true; });
+
     public async Task RemoveParticipantsAsync(string roomName, string participantIdentityPrefix,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(roomName);
         ArgumentException.ThrowIfNullOrWhiteSpace(participantIdentityPrefix);
         if (_roomService is null) throw new InvalidOperationException("LiveKit media is not enabled.");
-        var response = await _roomService.ListParticipants(new ListParticipantsRequest { Room = roomName });
+        var response = await MeasureAsync(MeetingMediaOperations.ListParticipants,
+            () => _roomService.ListParticipants(new ListParticipantsRequest { Room = roomName }));
         foreach (var participant in response.Participants.Where(x =>
                      x.Identity.StartsWith(participantIdentityPrefix, StringComparison.Ordinal)))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await _roomService.RemoveParticipant(new RoomParticipantIdentity
-            {
-                Room = roomName,
-                Identity = participant.Identity
-            });
+            await MeasureAsync(MeetingMediaOperations.RemoveParticipants,
+                () => _roomService.RemoveParticipant(new RoomParticipantIdentity
+                {
+                    Room = roomName,
+                    Identity = participant.Identity
+                }));
         }
     }
 
@@ -95,13 +135,14 @@ public sealed class LiveKitMeetingMediaProvider : IMeetingMediaProvider
         ArgumentException.ThrowIfNullOrWhiteSpace(participantIdentity);
         ArgumentException.ThrowIfNullOrWhiteSpace(trackSid);
         if (_roomService is null) throw new InvalidOperationException("LiveKit media is not enabled.");
-        return _roomService.MutePublishedTrack(new MuteRoomTrackRequest
-        {
-            Room = roomName,
-            Identity = participantIdentity,
-            TrackSid = trackSid,
-            Muted = muted
-        });
+        return MeasureAsync(MeetingMediaOperations.MuteParticipant,
+            () => _roomService.MutePublishedTrack(new MuteRoomTrackRequest
+            {
+                Room = roomName,
+                Identity = participantIdentity,
+                TrackSid = trackSid,
+                Muted = muted
+            }));
     }
 
     public async Task CloseRoomAsync(string roomName, CancellationToken cancellationToken = default)
@@ -109,9 +150,12 @@ public sealed class LiveKitMeetingMediaProvider : IMeetingMediaProvider
         cancellationToken.ThrowIfCancellationRequested();
         ArgumentException.ThrowIfNullOrWhiteSpace(roomName);
         if (_roomService is null) return;
-        var rooms = await _roomService.ListRooms(new ListRoomsRequest());
-        if (rooms.Rooms.Any(x => string.Equals(x.Name, roomName, StringComparison.Ordinal)))
-            await _roomService.DeleteRoom(new DeleteRoomRequest { Room = roomName });
+        await MeasureAsync(MeetingMediaOperations.CloseRoom, async () =>
+        {
+            var rooms = await _roomService.ListRooms(new ListRoomsRequest());
+            if (rooms.Rooms.Any(x => string.Equals(x.Name, roomName, StringComparison.Ordinal)))
+                await _roomService.DeleteRoom(new DeleteRoomRequest { Room = roomName });
+        });
     }
 
     public async Task<IReadOnlyList<string>> ListRoomParticipantIdentitiesAsync(string roomName,
@@ -120,7 +164,8 @@ public sealed class LiveKitMeetingMediaProvider : IMeetingMediaProvider
         cancellationToken.ThrowIfCancellationRequested();
         ArgumentException.ThrowIfNullOrWhiteSpace(roomName);
         if (_roomService is null) throw new InvalidOperationException("LiveKit media is not enabled.");
-        var response = await _roomService.ListParticipants(new ListParticipantsRequest { Room = roomName });
+        var response = await MeasureAsync(MeetingMediaOperations.ListParticipants,
+            () => _roomService.ListParticipants(new ListParticipantsRequest { Room = roomName }));
         return response.Participants.Select(x => x.Identity).ToList();
     }
 
@@ -148,7 +193,8 @@ public sealed class LiveKitMeetingMediaProvider : IMeetingMediaProvider
         }
         var request = new RoomCompositeEgressRequest { RoomName = roomName, Layout = "grid" };
         request.FileOutputs.Add(output);
-        var result = await _egressService.StartRoomCompositeEgress(request);
+        var result = await MeasureAsync(MeetingMediaOperations.StartRecording,
+            () => _egressService.StartRoomCompositeEgress(request));
         return new MeetingEgressStartResult(result.EgressId);
     }
 
@@ -158,7 +204,8 @@ public sealed class LiveKitMeetingMediaProvider : IMeetingMediaProvider
         cancellationToken.ThrowIfCancellationRequested();
         ArgumentException.ThrowIfNullOrWhiteSpace(providerEgressId);
         if (_egressService is null) throw new InvalidOperationException("LiveKit media is not enabled.");
-        await _egressService.StopEgress(new StopEgressRequest { EgressId = providerEgressId });
+        await MeasureAsync(MeetingMediaOperations.StopRecording,
+            () => _egressService.StopEgress(new StopEgressRequest { EgressId = providerEgressId }));
     }
 
     public async Task<MeetingEgressStatusResult?> GetRoomRecordingStatusAsync(string providerEgressId,
@@ -166,7 +213,8 @@ public sealed class LiveKitMeetingMediaProvider : IMeetingMediaProvider
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (_egressService is null) return null;
-        var response = await _egressService.ListEgress(new ListEgressRequest { EgressId = providerEgressId });
+        var response = await MeasureAsync(MeetingMediaOperations.RecordingStatus,
+            () => _egressService.ListEgress(new ListEgressRequest { EgressId = providerEgressId }));
         var info = response.Items.FirstOrDefault(); if (info is null) return null;
         var value = info.Status.ToString();
         var state = value.Contains("Complete", StringComparison.OrdinalIgnoreCase) ? MeetingEgressState.Ready

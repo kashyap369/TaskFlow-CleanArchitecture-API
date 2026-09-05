@@ -1,3 +1,5 @@
+﻿using System.Diagnostics;
+using TaskFlow.Application.Common.Observability;
 using TaskFlow.Application.Contracts.Meetings;
 using TaskFlow.Application.Exceptions;
 using TaskFlow.Domain.Entities.Meetings;
@@ -20,11 +22,23 @@ namespace TaskFlow.Application.Features.Meetings;
 /// </summary>
 internal static class MeetingCapacityRules
 {
+    /// <summary>
+    /// Every refusal goes through here so the counter cannot drift from the rule: a ceiling added
+    /// later that throws directly would be enforced but invisible, and the P7.4 alert reads the
+    /// counter, not the code. The refusal code is the metric tag — it is a fixed vocabulary, unlike
+    /// the message, which names the configured number.
+    /// </summary>
+    private static BusinessException Refuse(string code, string message)
+    {
+        MeetingTelemetry.CapacityRefusals.Add(1, new TagList { { MeetingTelemetry.Tags.Limit, code } });
+        return new BusinessException(code, message);
+    }
+
     public static void EnsureParticipantSeat(Meeting meeting, IMeetingPolicy policy)
     {
         try { meeting.EnsureParticipantCapacity(policy.Capacity.MaxParticipantsPerMeeting); }
         catch (InvalidOperationException exception)
-        { throw new BusinessException("MEETING_PARTICIPANT_LIMIT_REACHED", exception.Message); }
+        { throw Refuse("MEETING_PARTICIPANT_LIMIT_REACHED", exception.Message); }
     }
 
     public static async Task EnsureLiveMeetingSlotAsync(Meeting meeting, IMeetingRepository meetings,
@@ -32,7 +46,7 @@ internal static class MeetingCapacityRules
     {
         var limit = policy.Capacity.MaxConcurrentLiveMeetingsPerOrganization;
         if (await meetings.CountLiveAsync(meeting.OrganizationId, ct) < limit) return;
-        throw new BusinessException("MEETING_CONCURRENT_LIMIT_REACHED",
+        throw Refuse("MEETING_CONCURRENT_LIMIT_REACHED",
             $"This organization already has {limit} meetings live. End one before starting another.");
     }
 
@@ -41,7 +55,7 @@ internal static class MeetingCapacityRules
     {
         var limit = policy.Capacity.MaxMessagesPerMeeting;
         if (await collaboration.CountMessagesAsync(meetingId, ct) < limit) return;
-        throw new BusinessException("MEETING_MESSAGE_LIMIT_REACHED",
+        throw Refuse("MEETING_MESSAGE_LIMIT_REACHED",
             $"This meeting has reached its limit of {limit} chat messages.");
     }
 
@@ -50,10 +64,10 @@ internal static class MeetingCapacityRules
     {
         var capacity = policy.Capacity;
         if (await collaboration.CountAssetsAsync(meetingId, ct) >= capacity.MaxAssetsPerMeeting)
-            throw new BusinessException("MEETING_FILE_COUNT_LIMIT_REACHED",
+            throw Refuse("MEETING_FILE_COUNT_LIMIT_REACHED",
                 $"This meeting has reached its limit of {capacity.MaxAssetsPerMeeting} shared files.");
         if (await collaboration.GetAssetBytesAsync(meetingId, ct) + incomingBytes > capacity.MaxStorageBytesPerMeeting)
-            throw new BusinessException("MEETING_FILE_QUOTA_EXCEEDED",
+            throw Refuse("MEETING_FILE_QUOTA_EXCEEDED",
                 $"This meeting has reached its file storage quota of {capacity.MaxStorageBytesPerMeeting / 1048576} MB.");
     }
 
@@ -67,7 +81,7 @@ internal static class MeetingCapacityRules
     {
         var limit = policy.Capacity.MaxConcurrentRecordings;
         if (await recordings.CountActiveAsync(ct) < limit) return;
-        throw new BusinessException("MEETING_RECORDING_CAPACITY_REACHED",
+        throw Refuse("MEETING_RECORDING_CAPACITY_REACHED",
             limit == 1
                 ? "Another meeting is being recorded right now. Recording capacity is one meeting at a time; try again when it finishes."
                 : $"Recording capacity is {limit} meetings at a time and all of it is in use. Try again shortly.");

@@ -1,4 +1,4 @@
-using System.IdentityModel.Tokens.Jwt;
+﻿using System.IdentityModel.Tokens.Jwt;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -11,6 +11,7 @@ using TaskFlow.Infra.Storage;
 
 namespace TaskFlow.Tests.Infrastructure;
 
+[Collection(TaskFlow.Tests.Application.MeetingTelemetryCollection.Name)]
 public sealed class LiveKitMeetingMediaProviderTests
 {
     private const string ApiKey = "devkey";

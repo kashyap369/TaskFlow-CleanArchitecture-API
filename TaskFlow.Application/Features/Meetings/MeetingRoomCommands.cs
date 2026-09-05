@@ -1,6 +1,8 @@
+﻿using System.Diagnostics;
 using System.Text.RegularExpressions;
 using FluentValidation;
 using MediatR;
+using TaskFlow.Application.Common.Observability;
 using TaskFlow.Application.Contracts.Meetings;
 using TaskFlow.Application.Contracts.Security;
 using TaskFlow.Application.Exceptions;
@@ -190,28 +192,39 @@ public sealed class ProcessMeetingProviderWebhookCommandHandler(IMeetingReposito
     IMeetingRecordingRepository recordings, IUnitOfWork unitOfWork, IMeetingPolicy policy)
     : IRequestHandler<ProcessMeetingProviderWebhookCommand>
 {
+    /// <summary>
+    /// Phase 7 / P7.4. Counts what actually became of a delivery. Every early return below is a
+    /// legitimate no-op, but they are not the same no-op: a duplicate is the provider retrying, an
+    /// ignored event names a room this deployment does not own, and a flood of either is worth
+    /// seeing. Only the outcome is recorded — never the room name, the participant identity or the
+    /// body.
+    /// </summary>
+    private static void Count(string outcome) =>
+        MeetingTelemetry.Webhooks.Add(1, new TagList { { MeetingTelemetry.Tags.Outcome, outcome } });
+
     public async Task Handle(ProcessMeetingProviderWebhookCommand request, CancellationToken ct)
     {
         var webhook = request.Webhook;
         if (string.IsNullOrWhiteSpace(webhook.EventId) || webhook.EventId.Length > 120 ||
-            string.IsNullOrWhiteSpace(webhook.RoomName)) return;
-        if (await meetings.HasWebhookReceiptAsync(webhook.EventId, ct)) return;
+            string.IsNullOrWhiteSpace(webhook.RoomName)) { Count(MeetingWebhookOutcomes.Ignored); return; }
+        if (await meetings.HasWebhookReceiptAsync(webhook.EventId, ct)) { Count(MeetingWebhookOutcomes.Duplicate); return; }
         var meeting = await meetings.GetByRoomNameAsync(webhook.RoomName, ct);
-        if (meeting is null) return;
+        if (meeting is null) { Count(MeetingWebhookOutcomes.Ignored); return; }
         var occurred = webhook.OccurredAtUtc?.UtcDateTime ?? DateTime.UtcNow;
 
         if (!string.IsNullOrWhiteSpace(webhook.EgressId))
         {
             var recording = await recordings.GetByProviderEgressIdAsync(webhook.EgressId, ct);
-            if (recording is null) return;
+            if (recording is null) { Count(MeetingWebhookOutcomes.Ignored); return; }
             var status = webhook.EgressStatus ?? string.Empty;
             if (status.Contains("Active", StringComparison.OrdinalIgnoreCase)) recording.MarkRecording(occurred);
             else if (status.Contains("Complete", StringComparison.OrdinalIgnoreCase)) recording.MarkReady(occurred, webhook.EgressFileSize, webhook.EgressDurationMilliseconds);
             else if (status.Contains("Ending", StringComparison.OrdinalIgnoreCase)) recording.MarkProcessing(occurred);
             else if (status.Contains("Failed", StringComparison.OrdinalIgnoreCase) || status.Contains("Aborted", StringComparison.OrdinalIgnoreCase) || status.Contains("Limit", StringComparison.OrdinalIgnoreCase)) recording.Fail(webhook.EgressError ?? "The recording provider reported a failure.");
-            else return;
+            else { Count(MeetingWebhookOutcomes.Ignored); return; }
             await meetings.AddWebhookReceiptAsync(new MeetingWebhookReceipt(meeting.Id, webhook.EventId, webhook.EventType, occurred), ct);
-            recordings.Update(recording); await unitOfWork.SaveChangesAsync(ct); return;
+            recordings.Update(recording); await unitOfWork.SaveChangesAsync(ct);
+            Count(MeetingWebhookOutcomes.Accepted); return;
         }
 
         if (string.Equals(webhook.EventType, "room_finished", StringComparison.Ordinal))
@@ -232,13 +245,14 @@ public sealed class ProcessMeetingProviderWebhookCommandHandler(IMeetingReposito
             else if (string.Equals(webhook.EventType, "participant_left", StringComparison.Ordinal))
                 meeting.RegisterParticipantLeft(participantId, webhook.ParticipantIdentity,
                     webhook.ParticipantSid, occurred);
-            else return;
+            else { Count(MeetingWebhookOutcomes.Ignored); return; }
         }
-        else return;
+        else { Count(MeetingWebhookOutcomes.Ignored); return; }
 
         await meetings.AddWebhookReceiptAsync(new MeetingWebhookReceipt(meeting.Id, webhook.EventId,
             webhook.EventType, occurred), ct);
         meetings.Update(meeting);
         await unitOfWork.SaveChangesAsync(ct);
+        Count(MeetingWebhookOutcomes.Accepted);
     }
 }

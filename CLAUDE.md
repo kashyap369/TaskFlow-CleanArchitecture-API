@@ -76,6 +76,10 @@ DB: PostgreSQL, connection string `DefaultConnection`. Seeds on startup: system 
   budgets. Read it before changing a `Meetings:Max*` value or telling anyone what a meeting can
   hold; it is also explicit about which ceilings are exact and which admit a bounded overshoot
   under concurrency.
+- [docs/MEETINGS-OBSERVABILITY.md](docs/MEETINGS-OBSERVABILITY.md) — every meeting signal, the
+  alert rule that watches it, and the runbook for each rule. Read it before adding a metric, tag or
+  log field to anything meeting-related: it carries the privacy contract (no email, token, room
+  name, title or identifier in a tag) that a test enforces. Also read §5 when an alert fires.
 - [docs/SESSIONS.md](docs/SESSIONS.md) — session log: gotchas, dead ends, decisions
 - [infra/meetings/RUNBOOK.md](infra/meetings/RUNBOOK.md) — **production meetings triage.** What broke
   on 2026-09-04, how each fault was proved, how to read LiveKit logs, and how configuration survives

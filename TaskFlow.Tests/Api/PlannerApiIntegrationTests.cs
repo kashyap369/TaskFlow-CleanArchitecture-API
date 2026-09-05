@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Claims;
@@ -43,6 +43,77 @@ public sealed class PlannerApiIntegrationTests : IClassFixture<PlannerApiFixture
     public PlannerApiIntegrationTests(PlannerApiFixture fixture)
     {
         _fixture = fixture;
+    }
+
+    /// <summary>
+    /// Phase 7 / P7.4. Drives real meeting traffic over HTTP and then reads the operator's health
+    /// report, which is the only thing that proves the whole chain rather than its parts: the
+    /// middleware is registered in the pipeline, the snapshot is a live singleton listening before
+    /// the first request, the query is wired, and the route is AdminOnly.
+    ///
+    /// It also asserts the privacy contract where it actually matters — on the response an operator
+    /// will screenshot into a ticket. A unit test can prove a handler tags nothing sensitive; only
+    /// this can prove the assembled report does not.
+    /// </summary>
+    [Fact]
+    public async Task MeetingHealth_IsAdminOnly_ReportsEveryRule_AndNamesNoMeeting()
+    {
+        using var admin = _fixture.CreateClient(1, SystemRoleNames.Admin);
+        using var owner = _fixture.CreateClient(_fixture.CapacityOwnerUserId);
+        using var otherOwner = _fixture.CreateClient(_fixture.OtherOrganizationOwnerUserId);
+
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await owner.GetAsync("api/admin/meetings/health")).StatusCode);
+
+        const string title = "Telemetry probe do-not-log";
+        var created = await owner.PostAsJsonAsync("api/meeting", new
+        {
+            organizationId = _fixture.CapacityOrganizationId,
+            title,
+            description = (string?)null,
+            timeZone = "UTC",
+            guestsAllowed = false,
+            retentionDays = 90,
+            participantUserIds = Array.Empty<int>()
+        });
+        Assert.True(created.IsSuccessStatusCode,
+            $"Meeting create failed: {created.StatusCode} {await created.Content.ReadAsStringAsync()}");
+        var meetingId = await created.Content.ReadFromJsonAsync<int>();
+
+        // One success and one refusal, so both status classes have to appear in the window.
+        Assert.Equal(HttpStatusCode.OK, (await owner.GetAsync($"api/meeting/{meetingId}")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await otherOwner.GetAsync($"api/meeting/{meetingId}")).StatusCode);
+
+        var body = await admin.GetStringAsync("api/admin/meetings/health");
+        using var report = JsonDocument.Parse(body);
+        var root = report.RootElement;
+
+        // Every rule is reported whether or not it is firing: a quiet system and a broken endpoint
+        // must not produce the same empty panel.
+        var alerts = root.GetProperty("alerts").EnumerateArray().ToList();
+        Assert.Equal(8, alerts.Count);
+        Assert.All(alerts, alert =>
+        {
+            Assert.True(alert.GetProperty("threshold").GetInt64() > 0);
+            Assert.False(string.IsNullOrWhiteSpace(alert.GetProperty("runbook").GetString()));
+        });
+
+        var series = root.GetProperty("series").EnumerateArray()
+            .Select(row => (Signal: row.GetProperty("signal").GetString(), Key: row.GetProperty("key").GetString()))
+            .ToList();
+        Assert.Contains(series, row => row.Signal == "taskflow.meetings.requests" && row.Key == "ok");
+        Assert.Contains(series, row => row.Signal == "taskflow.meetings.requests" && row.Key == "denied");
+
+        // The report is counts and rule outcomes. Nothing that identifies the meeting whose traffic
+        // produced them may reach it — not the title, and not the id that would give this meeting
+        // its own metric series.
+        Assert.DoesNotContain(title, body, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("do-not-log", body, StringComparison.OrdinalIgnoreCase);
+        Assert.All(series, row => Assert.DoesNotContain(meetingId.ToString(), row.Key!));
+
+        // Latency is reported for the whole window rather than per route, for the same reason.
+        Assert.True(root.GetProperty("latency").GetProperty("requests").GetInt64() > 0);
     }
 
     [Fact]

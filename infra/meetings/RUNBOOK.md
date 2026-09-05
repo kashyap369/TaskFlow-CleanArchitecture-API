@@ -8,6 +8,11 @@ was proved, and how to check the same things quickly next time.
 Read this **before** theorising about firewalls, TURN or NAT. Three of the four faults looked like
 networking and none of them were.
 
+**If an alert sent you here**, go to [docs/MEETINGS-OBSERVABILITY.md §5](../../docs/MEETINGS-OBSERVABILITY.md)
+first — it has a section per alert rule, and each says which of the checks below actually applies.
+That document also explains what the signals cannot tell you: client-side media quality lives in the
+browser and in LiveKit, so a call that connected and sounded terrible looks healthy from the API.
+
 ---
 
 ## 0. Sixty-second triage

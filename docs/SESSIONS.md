@@ -1,5 +1,56 @@
 # TaskFlow — Session Log
 
+## 2026-09-05 (Meetings Phase 7 / P7.4 — metrics, traces, logs and alerts)
+
+- Instrumented the meeting stack against a new [docs/MEETINGS-OBSERVABILITY.md](MEETINGS-OBSERVABILITY.md):
+  one meter, `TaskFlow.Meetings`, plus eight alert rules with a runbook section each. The selection
+  of what to count is the substance — every signal is a failure that **the screens keep looking
+  healthy through**. A rejected webhook stops attendance being written while the archive still
+  renders; a recording that never started leaves the host believing it did; a media stack that
+  cannot be reached still hands out join tokens, because those are signed locally and never touch
+  LiveKit.
+- **The design decision worth remembering: identifiers are barred from metric tags but allowed on
+  spans.** A meeting id as a tag gives every meeting its own time series and eventually takes the
+  metrics backend down; the same id on a span belongs to one trace an engineer already has open. So
+  metrics answer *that* meetings are failing and the trace answers *which one*. The same rule made
+  the edge middleware tag the ASP.NET **route template** rather than the path — which also closes
+  the hole where a caller mints unlimited series by inventing URLs, so unmatched paths are bucketed
+  as `unmatched`.
+- The privacy contract is a test, not a comment. `NoMeetingSignalCarriesMeetingContent` drives real
+  handlers with a distinctive email, room name, meeting title and link token and fails if any of
+  them reaches a tag. A documented rule about telemetry rots the first time someone adds a
+  "temporary" tag; a failing test does not.
+- Telemetry is emitted from Application and Infra, not only the API, so `MeetingTelemetry` lives in
+  `TaskFlow.Application/Common/Observability/` rather than beside `PlannerTelemetry` in the API.
+  Capacity refusals, join issuance, the guest funnel and the recording lifecycle are all decided in
+  handlers; the LiveKit call outcomes in Infra.
+- Alerts nothing evaluates are not alerts, and this deployment has no metrics collector — hence
+  `GET /admin/meetings/health`, which keeps a bounded ring of one-minute buckets over the last hour
+  and evaluates the same thresholds in-process. It reports its own two limits rather than letting an
+  operator assume otherwise: the window is per instance, and `fullyObserved` stays false until the
+  process has been collecting for a full hour, so a ten-minute-old process never claims a quiet one.
+- **Test gotcha for anyone adding meeting tests:** the meter is process-wide, so any test that drives
+  a meeting handler emits into every listening snapshot, including another test's. The classes that
+  emit now share the `meeting-telemetry` xUnit collection (`MeetingTelemetryCollection`) so they run
+  sequentially. Add a new telemetry-emitting meeting test class to that collection, or its
+  neighbours' counts will be flaky in a way that looks like a real bug.
+- Two C# details that cost time: `ReadOnlySpan` parameters cannot be captured by a lambda **or a
+  local function**, so the tag lookup in the `MeterListener` callback has to take the span as an
+  explicit argument; and the ring buckets have to store the minute they hold, or a bucket written an
+  hour ago is counted again when the index comes back around (there is a test for exactly that).
+- **Both defects this package found were in its own wiring, and only real HTTP showed them.** The
+  snapshot was a plain singleton, so DI built it when the health endpoint was first *read* — it
+  reported an empty window over an API that had been serving meetings for hours. It is a hosted
+  service now. And the global exception handler is the outermost middleware, so a refusal thrown as
+  a `ForbiddenException` passed through the meeting middleware with `Response.StatusCode` still at
+  its default 200: every refused meeting request was counted as a success, which is exactly
+  backwards for rules that alert on refusals. `ExceptionHandlingMiddleware.StatusCodeFor` is now the
+  single mapping both read. The general lesson: instrumentation registered as a passive singleton
+  starts when someone asks about it, and middleware that reads a response status has to know what
+  is outside it.
+- Backend `113/113`, frontend `291/291`, builds, lint, design lint, 42 contrast checks and EF drift
+  pass. No migration. One route added, so the ledger is `181/178`.
+
 ## 2026-09-05 (Meetings Phase 7 / P7.3 — declared capacity and concurrency)
 
 - Every meeting ceiling is now configuration read through `IMeetingPolicy` and refused server-side,

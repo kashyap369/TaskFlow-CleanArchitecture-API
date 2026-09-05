@@ -1,6 +1,8 @@
-using Dapper;
+﻿using Dapper;
 using MediatR;
+using System.Diagnostics;
 using Microsoft.Extensions.Logging;
+using TaskFlow.Application.Common.Observability;
 using TaskFlow.Application.Contracts.Meetings;
 using TaskFlow.Application.Contracts.Persistence;
 using TaskFlow.Application.Contracts.Security;
@@ -33,6 +35,16 @@ public sealed record DeleteMeetingRecordingCommand(int MeetingId, int RecordingI
 
 internal static class MeetingRecordingRules
 {
+    /// <summary>
+    /// Phase 7 / P7.4. Recording is the one meeting feature whose failures are invisible to the
+    /// people they affect: a host who is refused sees a message, but a recording that silently
+    /// never started, or consent collected from a roster the provider could not confirm, looks
+    /// exactly like success from every screen in the room. These counters are how an operator finds
+    /// out. Only the lifecycle event is recorded — never the meeting, the room or who consented.
+    /// </summary>
+    public static void Count(string lifecycleEvent) =>
+        MeetingTelemetry.Recordings.Add(1, new TagList { { MeetingTelemetry.Tags.Event, lifecycleEvent } });
+
     public static void EnsureHost(MeetingCollaborationActor actor)
     { if (actor.Participant.AccessLevel != MeetingAccessLevel.Host) throw new ForbiddenException("MEETING_RECORDING_DENIED", "Only the meeting host can manage recordings."); }
 
@@ -55,9 +67,10 @@ internal static class MeetingRecordingRules
             {
                 var started = await media.StartRoomRecordingAsync(actor.Meeting.RoomName, recording.StorageKey, ct);
                 recording.BeginStarting(started.ProviderEgressId, DateTime.UtcNow);
+                Count(MeetingRecordingEvents.Started);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
-            { recording.Fail("The recording service could not start."); }
+            { recording.Fail("The recording service could not start."); Count(MeetingRecordingEvents.StartFailed); }
         }
         recordings.Update(recording); await uow.SaveChangesAsync(ct);
         return ToDto(recording, actor);
@@ -103,6 +116,7 @@ public sealed class RequestMeetingRecordingCommandHandler(IMeetingRepository mee
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             logger.LogError(exception, "Could not read the live roster for meeting {MeetingId}", request.MeetingId);
+            MeetingRecordingRules.Count(MeetingRecordingEvents.RosterUnavailable);
             throw new BusinessException("MEETING_RECORDING_ROSTER_UNAVAILABLE",
                 "The list of people currently in the call could not be read, so consent cannot be requested. Try again.");
         }
@@ -117,11 +131,24 @@ public sealed class RequestMeetingRecordingCommandHandler(IMeetingRepository mee
             now.AddSeconds(Math.Clamp(request.ConsentTimeoutSeconds, 15, 300)));
         recording.RecordConsent(actor.Participant.Id, true, now);
         await recordings.AddAsync(recording, ct); await uow.SaveChangesAsync(ct);
+        MeetingRecordingRules.Count(MeetingRecordingEvents.Requested);
         if (recording.AllAccepted)
         {
-            try { var result = await media.StartRoomRecordingAsync(actor.Meeting.RoomName, recording.StorageKey, ct); recording.BeginStarting(result.ProviderEgressId, now); }
-            catch (Exception ex) when (ex is not OperationCanceledException) { recording.Fail("The recording service could not start."); }
+            try
+            {
+                var result = await media.StartRoomRecordingAsync(actor.Meeting.RoomName, recording.StorageKey, ct);
+                recording.BeginStarting(result.ProviderEgressId, now);
+                MeetingRecordingRules.Count(MeetingRecordingEvents.Started);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            { recording.Fail("The recording service could not start."); MeetingRecordingRules.Count(MeetingRecordingEvents.StartFailed); }
             recordings.Update(recording); await uow.SaveChangesAsync(ct);
+        }
+        else
+        {
+            // The host is alone in having accepted. Nothing is recording yet and nothing is wrong;
+            // counted so a room that never finishes consenting is distinguishable from one that did.
+            MeetingRecordingRules.Count(MeetingRecordingEvents.ConsentPending);
         }
         return MeetingRecordingRules.ToDto(recording, actor);
     }
@@ -148,6 +175,7 @@ public sealed class StopMeetingRecordingCommandHandler(IMeetingRepository meetin
         if (recording.Status is not (MeetingRecordingStatus.Starting or MeetingRecordingStatus.Recording) || string.IsNullOrWhiteSpace(recording.ProviderEgressId))
             throw new BusinessException("MEETING_RECORDING_NOT_ACTIVE", "This recording is not active.");
         await media.StopRoomRecordingAsync(recording.ProviderEgressId, ct); recording.MarkProcessing(DateTime.UtcNow);
+        MeetingRecordingRules.Count(MeetingRecordingEvents.Stopped);
         recordings.Update(recording); await uow.SaveChangesAsync(ct); return MeetingRecordingRules.ToDto(recording, actor);
     }
 }
