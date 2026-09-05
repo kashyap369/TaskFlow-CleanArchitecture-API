@@ -58,6 +58,19 @@ internal static class MeetingGuestAccessRules
         var parts = email.Split('@'); if (parts.Length != 2) return "••••";
         return $"{parts[0][0]}{new string('•', Math.Min(6, Math.Max(2, parts[0].Length - 1)))}@{parts[1]}".ToLowerInvariant();
     }
+    /// <summary>
+    /// A guest session only proves that this browser verified an email once. Every later use must
+    /// re-check the participant, because the organizer can revoke, deny or remove them at any time —
+    /// and the participant row can be gone entirely.
+    /// </summary>
+    public static MeetingParticipant EnsureStillAllowed(Meeting meeting, int participantId)
+    {
+        var participant = meeting.Participants.SingleOrDefault(x => x.Id == participantId && !x.IsDeleted)
+            ?? throw new UnauthorizedException("MEETING_GUEST_SESSION_INVALID", "Your meeting access is no longer available.");
+        if (participant.State is MeetingParticipantState.Revoked or MeetingParticipantState.Denied or MeetingParticipantState.Removed)
+            throw new UnauthorizedException("MEETING_GUEST_ACCESS_REVOKED", "The host has ended this guest's access.");
+        return participant;
+    }
     public static string RandomToken() => Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
 }
 
@@ -135,7 +148,8 @@ public sealed class VerifyMeetingGuestCodeCommandHandler(IMeetingGuestAccessRepo
         challenge.Consume(DateTime.UtcNow); guestAccess.UpdateChallenge(challenge); if (existingParticipant is null) link.RegisterUse(DateTime.UtcNow);
         meetings.Update(meeting); await unitOfWork.SaveChangesAsync(ct);
         var rawSession = MeetingGuestAccessRules.RandomToken(); var expires = DateTime.UtcNow.AddMinutes(request.SessionMinutes);
-        await guestAccess.AddSessionAsync(new MeetingGuestSession(meeting.Id, participant.Id, MeetingGuestAccessRules.Hash(rawSession), expires), ct);
+        await guestAccess.AddSessionAsync(new MeetingGuestSession(meeting.Id, participant.Id,
+            MeetingGuestAccessRules.Hash(rawSession), expires, link.Id), ct);
         await unitOfWork.SaveChangesAsync(ct);
         var host = await users.GetByIdAsync(meeting.CreatedByUserId, ct);
         var dto = ToSession(meeting, participant, request.Email.Trim(), host?.FullName.DisplayName ?? "TaskFlow host", expires);
@@ -156,9 +170,7 @@ public sealed class GetMeetingGuestSessionQueryHandler(IMeetingGuestAccessReposi
         var session = await guestAccess.GetSessionByHashAsync(MeetingGuestAccessRules.Hash(request.SessionToken), ct);
         if (session is null || !session.IsActive(DateTime.UtcNow)) throw new UnauthorizedException("MEETING_GUEST_SESSION_INVALID", "Your meeting session has expired. Verify your email again.");
         var meeting = await meetings.GetByIdAsync(session.MeetingId, ct) ?? throw new UnauthorizedException("MEETING_GUEST_SESSION_INVALID", "Your meeting session is no longer available.");
-        var participant = meeting.Participants.Single(x => x.Id == session.ParticipantId);
-        if (participant.State is MeetingParticipantState.Revoked or MeetingParticipantState.Denied or MeetingParticipantState.Removed)
-            throw new UnauthorizedException("MEETING_GUEST_ACCESS_REVOKED", "The host has ended this guest's access.");
+        var participant = MeetingGuestAccessRules.EnsureStillAllowed(meeting, session.ParticipantId);
         var host = await users.GetByIdAsync(meeting.CreatedByUserId, ct);
         return VerifyMeetingGuestCodeCommandHandler.ToSession(meeting, participant, participant.NormalizedEmail ?? string.Empty,
             host?.FullName.DisplayName ?? "TaskFlow host", session.ExpiresAtUtc);
@@ -173,6 +185,7 @@ public sealed class ConfirmMeetingGuestDisplayNameCommandHandler(IMeetingGuestAc
         var session = await guestAccess.GetSessionByHashAsync(MeetingGuestAccessRules.Hash(request.SessionToken), ct);
         if (session is null || !session.IsActive(DateTime.UtcNow)) throw new UnauthorizedException("MEETING_GUEST_SESSION_INVALID", "Your meeting session has expired.");
         var meeting = await meetings.GetByIdAsync(session.MeetingId, ct) ?? throw new NotFoundException("MEETING_NOT_FOUND", "Meeting not found.");
+        MeetingGuestAccessRules.EnsureStillAllowed(meeting, session.ParticipantId);
         meeting.ConfirmGuestDisplayName(session.ParticipantId, request.DisplayName); meetings.Update(meeting); await unitOfWork.SaveChangesAsync(ct);
         var participant = meeting.Participants.Single(x => x.Id == session.ParticipantId); var host = await users.GetByIdAsync(meeting.CreatedByUserId, ct);
         return VerifyMeetingGuestCodeCommandHandler.ToSession(meeting, participant, participant.NormalizedEmail ?? string.Empty,

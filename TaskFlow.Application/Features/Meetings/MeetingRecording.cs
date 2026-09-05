@@ -1,5 +1,6 @@
 using Dapper;
 using MediatR;
+using Microsoft.Extensions.Logging;
 using TaskFlow.Application.Contracts.Meetings;
 using TaskFlow.Application.Contracts.Persistence;
 using TaskFlow.Application.Contracts.Security;
@@ -41,6 +42,9 @@ internal static class MeetingRecordingRules
     {
         var recording = await recordings.GetByIdAsync(actor.Meeting.Id, recordingId, ct)
             ?? throw new NotFoundException("MEETING_RECORDING_NOT_FOUND", "Meeting recording not found.");
+        if (!accepted && !recording.WasConsentRequestedFrom(actor.Participant.Id))
+            throw new ForbiddenException("MEETING_RECORDING_CONSENT_NOT_REQUESTED",
+                "You were not asked to consent to this recording.");
         try { recording.RecordConsent(actor.Participant.Id, accepted, DateTime.UtcNow); }
         catch (InvalidOperationException ex) { throw new BusinessException("MEETING_RECORDING_CONSENT_CLOSED", ex.Message); }
         if (!accepted && recording.Status == MeetingRecordingStatus.PendingConsent)
@@ -74,7 +78,8 @@ internal static class MeetingRecordingRules
 
 public sealed class RequestMeetingRecordingCommandHandler(IMeetingRepository meetings,
     IMeetingGuestAccessRepository guests, IMeetingRecordingRepository recordings, ICurrentUserService user,
-    IMeetingMediaProvider media, IUnitOfWork uow) : IRequestHandler<RequestMeetingRecordingCommand, MeetingRecordingDto>
+    IMeetingMediaProvider media, IUnitOfWork uow, ILogger<RequestMeetingRecordingCommandHandler> logger)
+    : IRequestHandler<RequestMeetingRecordingCommand, MeetingRecordingDto>
 {
     public async Task<MeetingRecordingDto> Handle(RequestMeetingRecordingCommand request, CancellationToken ct)
     {
@@ -83,7 +88,26 @@ public sealed class RequestMeetingRecordingCommandHandler(IMeetingRepository mee
         MeetingCollaborationAccess.EnsureWritable(actor); MeetingRecordingRules.EnsureHost(actor);
         if (await recordings.GetActiveAsync(request.MeetingId, ct) is not null)
             throw new ConflictException("MEETING_RECORDING_ACTIVE", "A recording request or recording is already active.");
-        var current = actor.Meeting.Attendance.Where(x => x.LeftAtUtc is null).Select(x => x.ParticipantId)
+        // Attendance is written by provider webhooks. If one is delayed or lost, the open-attendance
+        // list is short, every listed participant is the host alone, consent completes instantly and
+        // people who are in the room right now get recorded without ever seeing a prompt. The live
+        // roster is the only truthful answer to "who is in this call", so read it and refuse to
+        // record when the provider cannot say — a recording that skips consent is worse than none.
+        IReadOnlyList<string> identities;
+        try
+        {
+            identities = await media.ListRoomParticipantIdentitiesAsync(actor.Meeting.RoomName, ct);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            logger.LogError(exception, "Could not read the live roster for meeting {MeetingId}", request.MeetingId);
+            throw new BusinessException("MEETING_RECORDING_ROSTER_UNAVAILABLE",
+                "The list of people currently in the call could not be read, so consent cannot be requested. Try again.");
+        }
+        var current = identities
+            .Select(identity => MeetingRoomModerationRules.TryParticipantId(actor.Meeting.Id, identity, out var id) ? id : 0)
+            .Where(id => id > 0)
+            .Concat(actor.Meeting.Attendance.Where(x => x.LeftAtUtc is null).Select(x => x.ParticipantId))
             .Append(actor.Participant.Id).Distinct().ToList();
         var now = DateTime.UtcNow;
         var recording = new MeetingRecording(request.MeetingId, actor.Participant.Id,

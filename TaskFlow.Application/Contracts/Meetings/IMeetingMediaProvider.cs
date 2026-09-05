@@ -15,6 +15,16 @@ public interface IMeetingMediaProvider
 
     Task CloseRoomAsync(string roomName, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// The identities currently connected to <paramref name="roomName"/>, straight from the provider.
+    /// Recording consent must be built from this rather than from webhook-derived attendance: if a
+    /// webhook is delayed or never arrives, attendance is silently short and people in the room are
+    /// recorded without ever being asked. Implementations throw when the provider cannot answer, so
+    /// callers fail closed instead of recording an unknown roster.
+    /// </summary>
+    Task<IReadOnlyList<string>> ListRoomParticipantIdentitiesAsync(string roomName,
+        CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
     Task<MeetingEgressStartResult> StartRoomRecordingAsync(string roomName, string storageKey,
         CancellationToken cancellationToken = default) => throw new NotSupportedException();
 

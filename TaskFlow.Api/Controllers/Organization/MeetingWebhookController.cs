@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using TaskFlow.Api.Filters;
 using TaskFlow.Application.Contracts.Meetings;
 using TaskFlow.Application.Features.Meetings;
@@ -11,6 +12,7 @@ namespace TaskFlow.Api.Controllers.Organization;
 [ApiController]
 [Route("api/meeting/webhooks/livekit")]
 [ServiceFilter(typeof(MeetingFeatureFilter))]
+[EnableRateLimiting("meeting-webhook")]
 public sealed class MeetingWebhookController(IMediator mediator, IMeetingMediaProvider mediaProvider) : ControllerBase
 {
     [HttpPost]

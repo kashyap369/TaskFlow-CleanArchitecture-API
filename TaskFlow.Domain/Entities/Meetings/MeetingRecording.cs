@@ -53,6 +53,13 @@ public sealed class MeetingRecording : AuditableEntity
 
     public bool AllAccepted => _consents.Count > 0 && _consents.All(x => x.Status == MeetingRecordingConsentStatus.Accepted);
     public bool HasDecline => _consents.Any(x => x.Status == MeetingRecordingConsentStatus.Declined);
+    /// <summary>
+    /// Whether this participant was actually asked. A late joiner may still accept — that is how the
+    /// join gate lets them in — but only someone in the requested set may decline, otherwise any
+    /// assigned participant who never joined the call could veto a recording they are not part of.
+    /// </summary>
+    public bool WasConsentRequestedFrom(int participantId) => _consents.Any(x => x.ParticipantId == participantId);
+
     public bool HasAcceptedConsent(int participantId) => _consents.Any(x => x.ParticipantId == participantId && x.Status == MeetingRecordingConsentStatus.Accepted);
 
     public void BeginStarting(string providerEgressId, DateTime utcNow)

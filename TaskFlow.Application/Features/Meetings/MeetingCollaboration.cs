@@ -154,6 +154,10 @@ internal static class MeetingMessageWrite
         if (!actor.CanChat) throw new ForbiddenException("MEETING_CHAT_DENIED", "Your meeting access does not allow chat.");
         var existing = await collaboration.GetMessageByClientIdAsync(actor.Meeting.Id, actor.Participant.Id, clientId, ct);
         if (existing is not null) return ToDto(existing, actor.Participant);
+        // A reply id arrives from the client and was never checked against this meeting, so a
+        // participant could anchor a message to a thread in a meeting they cannot see.
+        if (reply.HasValue && await collaboration.GetMessageAsync(actor.Meeting.Id, reply.Value, ct) is null)
+            throw new NotFoundException("MEETING_MESSAGE_NOT_FOUND", "The message being replied to is not part of this meeting.");
         var message = new MeetingMessage(actor.Meeting.Id, actor.Participant.Id, clientId, body, reply);
         await collaboration.AddMessageAsync(message, ct); await uow.SaveChangesAsync(ct); return ToDto(message, actor.Participant);
     }

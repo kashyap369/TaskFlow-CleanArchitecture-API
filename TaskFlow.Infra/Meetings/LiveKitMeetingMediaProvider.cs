@@ -114,6 +114,16 @@ public sealed class LiveKitMeetingMediaProvider : IMeetingMediaProvider
             await _roomService.DeleteRoom(new DeleteRoomRequest { Room = roomName });
     }
 
+    public async Task<IReadOnlyList<string>> ListRoomParticipantIdentitiesAsync(string roomName,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ArgumentException.ThrowIfNullOrWhiteSpace(roomName);
+        if (_roomService is null) throw new InvalidOperationException("LiveKit media is not enabled.");
+        var response = await _roomService.ListParticipants(new ListParticipantsRequest { Room = roomName });
+        return response.Participants.Select(x => x.Identity).ToList();
+    }
+
     public async Task<MeetingEgressStartResult> StartRoomRecordingAsync(string roomName,
         string storageKey, CancellationToken cancellationToken = default)
     {

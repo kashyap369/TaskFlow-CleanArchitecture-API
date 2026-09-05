@@ -109,8 +109,10 @@ public sealed class MeetingGuestSessionConfiguration : IEntityTypeConfiguration<
         builder.ToTable("MeetingGuestSessions"); builder.HasKey(x => x.Id); builder.Ignore(x => x.DomainEvents);
         builder.Property(x => x.TokenHash).HasMaxLength(64).IsRequired(); builder.HasIndex(x => x.TokenHash).IsUnique();
         builder.HasIndex(x => new { x.MeetingId, x.ParticipantId, x.ExpiresAtUtc });
+        builder.HasIndex(x => new { x.AccessLinkId, x.ExpiresAtUtc });
         builder.HasOne<Meeting>().WithMany().HasForeignKey(x => x.MeetingId).OnDelete(DeleteBehavior.Cascade);
         builder.HasOne<MeetingParticipant>().WithMany().HasForeignKey(x => x.ParticipantId).OnDelete(DeleteBehavior.Cascade);
+        builder.HasOne<MeetingAccessLink>().WithMany().HasForeignKey(x => x.AccessLinkId).OnDelete(DeleteBehavior.Cascade);
     }
 }
 

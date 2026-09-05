@@ -35,6 +35,8 @@ public sealed class MeetingGuestAccessRepository(TaskFlowDbContext context) : IM
         context.MeetingGuestSessions.FirstOrDefaultAsync(x => x.TokenHash == tokenHash, cancellationToken);
     public async Task<IReadOnlyList<MeetingGuestSession>> GetActiveSessionsAsync(int participantId, CancellationToken cancellationToken = default) =>
         await context.MeetingGuestSessions.Where(x => x.ParticipantId == participantId && x.RevokedAtUtc == null && x.ExpiresAtUtc > DateTime.UtcNow).ToListAsync(cancellationToken);
+    public async Task<IReadOnlyList<MeetingGuestSession>> GetActiveSessionsForLinkAsync(int accessLinkId, CancellationToken cancellationToken = default) =>
+        await context.MeetingGuestSessions.Where(x => x.AccessLinkId == accessLinkId && x.RevokedAtUtc == null && x.ExpiresAtUtc > DateTime.UtcNow).ToListAsync(cancellationToken);
     public Task AddChallengeAsync(MeetingGuestChallenge challenge, CancellationToken cancellationToken = default) =>
         context.MeetingGuestChallenges.AddAsync(challenge, cancellationToken).AsTask();
     public Task AddSessionAsync(MeetingGuestSession session, CancellationToken cancellationToken = default) =>
@@ -49,6 +51,8 @@ public sealed class MeetingCollaborationRepository(TaskFlowDbContext context) : 
 {
     public Task<MeetingMessage?> GetMessageByClientIdAsync(int meetingId, int participantId, Guid clientMessageId, CancellationToken cancellationToken = default) =>
         context.MeetingMessages.FirstOrDefaultAsync(x => x.MeetingId == meetingId && x.AuthorParticipantId == participantId && x.ClientMessageId == clientMessageId, cancellationToken);
+    public Task<MeetingMessage?> GetMessageAsync(int meetingId, int messageId, CancellationToken cancellationToken = default) =>
+        context.MeetingMessages.FirstOrDefaultAsync(x => x.MeetingId == meetingId && x.Id == messageId, cancellationToken);
     public Task<MeetingNote?> GetNoteAsync(int meetingId, CancellationToken cancellationToken = default) =>
         context.MeetingNotes.FirstOrDefaultAsync(x => x.MeetingId == meetingId, cancellationToken);
     public Task<MeetingAsset?> GetAssetAsync(int meetingId, int assetId, CancellationToken cancellationToken = default) =>

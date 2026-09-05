@@ -300,17 +300,59 @@ public sealed class CreateMeetingAccessLinkCommandHandler(IMeetingRepository mee
     }
 }
 
+/// <summary>
+/// Revoking a link is the organizer's only lever when a link leaks, so it has to reach the people who
+/// already used it. Marking the link revoked alone stops new verifications while everyone holding a
+/// session keeps the room, chat, files and archive until it expires by itself. Revoking those sessions
+/// closes that window: the guest is ejected from the media room and cannot verify again, because the
+/// link they would verify against is gone.
+/// </summary>
+internal static class MeetingAccessLinkRevocation
+{
+    public static async Task RevokeIssuedSessionsAsync(Meeting meeting, int linkId,
+        IMeetingGuestAccessRepository guestAccess, IMeetingMediaProvider media,
+        ILogger logger, CancellationToken ct)
+    {
+        var sessions = await guestAccess.GetActiveSessionsForLinkAsync(linkId, ct);
+        if (sessions.Count == 0) return;
+        var now = DateTime.UtcNow;
+        foreach (var session in sessions) { session.Revoke(now); guestAccess.UpdateSession(session); }
+        if (meeting.Status != MeetingStatus.Live || !media.IsEnabled) return;
+        foreach (var participantId in sessions.Select(x => x.ParticipantId).Distinct())
+        {
+            try
+            {
+                await media.RemoveParticipantsAsync(meeting.RoomName,
+                    MeetingRoomModerationRules.IdentityPrefix(meeting.Id, participantId), ct);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                // The session is already dead in TaskFlow, so the guest cannot rejoin or reach any
+                // meeting data. Their current media connection outlives this only until the room ends.
+                logger.LogError(exception,
+                    "Could not eject participant {ParticipantId} from meeting {MeetingId} after link revocation",
+                    participantId, meeting.Id);
+            }
+        }
+    }
+}
+
 public sealed class RevokeMeetingAccessLinkCommandHandler(IMeetingRepository meetings, ICurrentUserService user,
-    IOrganizationPermissionChecker permissions, IUnitOfWork unitOfWork) : IRequestHandler<RevokeMeetingAccessLinkCommand>
+    IOrganizationPermissionChecker permissions, IMeetingGuestAccessRepository guestAccess,
+    IMeetingMediaProvider media, ILogger<RevokeMeetingAccessLinkCommandHandler> logger,
+    IUnitOfWork unitOfWork) : IRequestHandler<RevokeMeetingAccessLinkCommand>
 {
     public async Task Handle(RevokeMeetingAccessLinkCommand request, CancellationToken ct)
     { var meeting = await new MeetingCommandAccess(meetings, user, permissions).LoadManageableAsync(request.MeetingId, ct);
       UpdateMeetingCommandHandler.Execute(() => meeting.RevokeAccessLink(request.LinkId, DateTime.UtcNow));
+      await MeetingAccessLinkRevocation.RevokeIssuedSessionsAsync(meeting, request.LinkId, guestAccess, media, logger, ct);
       meetings.Update(meeting); await unitOfWork.SaveChangesAsync(ct); }
 }
 
 public sealed class RotateMeetingAccessLinkCommandHandler(IMeetingRepository meetings, ICurrentUserService user,
-    IOrganizationPermissionChecker permissions, IUnitOfWork unitOfWork) : IRequestHandler<RotateMeetingAccessLinkCommand, CreatedMeetingAccessLinkDto>
+    IOrganizationPermissionChecker permissions, IMeetingGuestAccessRepository guestAccess,
+    IMeetingMediaProvider media, ILogger<RotateMeetingAccessLinkCommandHandler> logger,
+    IUnitOfWork unitOfWork) : IRequestHandler<RotateMeetingAccessLinkCommand, CreatedMeetingAccessLinkDto>
 {
     public async Task<CreatedMeetingAccessLinkDto> Handle(RotateMeetingAccessLinkCommand request, CancellationToken ct)
     {
@@ -318,9 +360,13 @@ public sealed class RotateMeetingAccessLinkCommandHandler(IMeetingRepository mee
         var old = meeting.AccessLinks.SingleOrDefault(x => x.Id == request.LinkId && !x.IsDeleted)
             ?? throw new NotFoundException("MEETING_ACCESS_LINK_NOT_FOUND", "Meeting access link not found.");
         meeting.RevokeAccessLink(old.Id, DateTime.UtcNow);
+        await MeetingAccessLinkRevocation.RevokeIssuedSessionsAsync(meeting, old.Id, guestAccess, media, logger, ct);
         var token = MeetingGuestAccessRules.RandomToken();
+        // A rotation is meant to hand out a working replacement. Reusing an expiry that has already
+        // passed would mint a link that is dead on arrival, so keep the later of the two.
+        var expires = old.ExpiresAtUtc > DateTime.UtcNow ? old.ExpiresAtUtc : DateTime.UtcNow.AddDays(7);
         var replacement = meeting.AddAccessLink(MeetingGuestAccessRules.Hash(token), old.Mode, old.LockedEmail,
-            old.DefaultAccessLevel, old.BadgeDefinitionId, old.ExpiresAtUtc, old.MaximumUses);
+            old.DefaultAccessLevel, old.BadgeDefinitionId, expires, old.MaximumUses);
         meetings.Update(meeting); await unitOfWork.SaveChangesAsync(ct);
         return new(replacement.Id, token, replacement.ExpiresAtUtc);
     }

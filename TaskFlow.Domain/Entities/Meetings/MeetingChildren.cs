@@ -133,12 +133,20 @@ public sealed class MeetingGuestSession : AuditableEntity
 {
     public int MeetingId { get; private set; }
     public int ParticipantId { get; private set; }
+    /// <summary>
+    /// The access link this session was exchanged for. Without it, revoking a leaked link only stops
+    /// *new* verifications: everyone who already traded the link for a session keeps the room, chat,
+    /// files and archive until the session expires on its own. Null only for sessions created before
+    /// the link was recorded.
+    /// </summary>
+    public int? AccessLinkId { get; private set; }
     public string TokenHash { get; private set; } = string.Empty;
     public DateTime ExpiresAtUtc { get; private set; }
     public DateTime? RevokedAtUtc { get; private set; }
     private MeetingGuestSession() { }
-    public MeetingGuestSession(int meetingId, int participantId, string tokenHash, DateTime expiresAtUtc)
-    { MeetingId = meetingId; ParticipantId = participantId; TokenHash = tokenHash; ExpiresAtUtc = DateTime.SpecifyKind(expiresAtUtc, DateTimeKind.Utc); }
+    public MeetingGuestSession(int meetingId, int participantId, string tokenHash, DateTime expiresAtUtc,
+        int? accessLinkId = null)
+    { MeetingId = meetingId; ParticipantId = participantId; AccessLinkId = accessLinkId; TokenHash = tokenHash; ExpiresAtUtc = DateTime.SpecifyKind(expiresAtUtc, DateTimeKind.Utc); }
     public bool IsActive(DateTime utcNow) => RevokedAtUtc is null && utcNow < ExpiresAtUtc;
     public void Revoke(DateTime utcNow) { RevokedAtUtc ??= DateTime.SpecifyKind(utcNow, DateTimeKind.Utc); MarkAsUpdated(); }
 }

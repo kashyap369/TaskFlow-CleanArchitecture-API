@@ -65,6 +65,22 @@ internal static partial class MeetingRoomModerationRules
 
     public static string IdentityPrefix(int meetingId, int participantId) => $"m{meetingId}-p{participantId}-";
 
+    /// <summary>
+    /// Reads the TaskFlow participant id back out of a media participant identity
+    /// (<c>m{meetingId}-p{participantId}-{nonce}</c>). Identities are minted server-side, so this is
+    /// the only supported way to map a provider roster entry onto a meeting participant.
+    /// </summary>
+    public static bool TryParticipantId(int meetingId, string identity, out int participantId)
+    {
+        participantId = 0;
+        if (string.IsNullOrEmpty(identity)) return false;
+        var prefix = $"m{meetingId}-p";
+        if (!identity.StartsWith(prefix, StringComparison.Ordinal)) return false;
+        var separator = identity.IndexOf('-', prefix.Length);
+        return separator > prefix.Length && int.TryParse(identity[prefix.Length..separator], out participantId)
+            && participantId > 0;
+    }
+
     [GeneratedRegex("^m[1-9][0-9]*-p[1-9][0-9]*-[a-f0-9]{32}$", RegexOptions.CultureInvariant)]
     private static partial Regex ParticipantIdentityPattern();
 }
@@ -208,7 +224,7 @@ public sealed class ProcessMeetingProviderWebhookCommandHandler(IMeetingReposito
             meeting.EndFromProvider(occurred, attended);
         }
         else if (!string.IsNullOrWhiteSpace(webhook.ParticipantIdentity) &&
-                 TryParticipantId(meeting.Id, webhook.ParticipantIdentity, out var participantId))
+                 MeetingRoomModerationRules.TryParticipantId(meeting.Id, webhook.ParticipantIdentity, out var participantId))
         {
             if (string.Equals(webhook.EventType, "participant_joined", StringComparison.Ordinal))
                 meeting.RegisterParticipantJoined(participantId, webhook.ParticipantIdentity,
@@ -224,15 +240,5 @@ public sealed class ProcessMeetingProviderWebhookCommandHandler(IMeetingReposito
             webhook.EventType, occurred), ct);
         meetings.Update(meeting);
         await unitOfWork.SaveChangesAsync(ct);
-    }
-
-    private static bool TryParticipantId(int meetingId, string identity, out int participantId)
-    {
-        participantId = 0;
-        var prefix = $"m{meetingId}-p";
-        if (!identity.StartsWith(prefix, StringComparison.Ordinal)) return false;
-        var separator = identity.IndexOf('-', prefix.Length);
-        return separator > prefix.Length && int.TryParse(identity[prefix.Length..separator], out participantId)
-            && participantId > 0;
     }
 }

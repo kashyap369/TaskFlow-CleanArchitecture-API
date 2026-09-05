@@ -79,6 +79,19 @@ builder.Services.AddRateLimiter(options =>
                 QueueLimit = 0,
                 AutoReplenishment = true
             }));
+    // The provider webhook is necessarily anonymous: only the signature authenticates it. Verifying
+    // one costs a body read and an HMAC, so an unauthenticated flood of forged bodies is otherwise
+    // free to send and not free to reject. LiveKit's real event rate is far below this ceiling.
+    options.AddPolicy("meeting-webhook", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 600,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
     options.AddPolicy("meeting-collaboration-write", httpContext =>
         RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: httpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ??
