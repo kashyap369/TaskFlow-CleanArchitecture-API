@@ -67,6 +67,10 @@ DB: PostgreSQL, connection string `DefaultConnection`. Seeds on startup: system 
 - [docs/MEETINGS.md](docs/MEETINGS.md) — canonical cross-repository Meetings roadmap and session
   handoff contract. Read it completely for any meeting, LiveKit, guest-link, badge, collaboration or
   recording task; Phase 0 is complete and Phase 1 is READY.
+- [docs/MEETINGS-THREAT-MODEL.md](docs/MEETINGS-THREAT-MODEL.md) — the Meetings security review:
+  assets, trust boundaries, actors, what was fixed, and the residual risks that are **accepted on
+  purpose**. Read it before changing anything in guest access, access links, join tokens, moderation,
+  uploads or recording consent — several of those surfaces look safer than they are.
 - [docs/SESSIONS.md](docs/SESSIONS.md) — session log: gotchas, dead ends, decisions
 - [infra/meetings/RUNBOOK.md](infra/meetings/RUNBOOK.md) — **production meetings triage.** What broke
   on 2026-09-04, how each fault was proved, how to read LiveKit logs, and how configuration survives

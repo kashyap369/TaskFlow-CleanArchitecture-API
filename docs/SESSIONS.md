@@ -1,5 +1,31 @@
 # TaskFlow — Session Log
 
+## 2026-09-05 (Meetings Phase 7 / P7.2 — threat model and abuse review)
+
+- Wrote [docs/MEETINGS-THREAT-MODEL.md](MEETINGS-THREAT-MODEL.md) by reading the feature end to end
+  rather than from the design docs, and fixed the eight defects that review found. It is deliberately
+  structured so the *accepted* risks are as visible as the fixed ones — five of the nine are owner
+  decisions from MEETINGS.md §12, not engineering choices, and they should not quietly become
+  engineering defaults.
+- **The finding worth remembering: revoking an access link evicted nobody.** `MeetingGuestSession`
+  had no reference to the link it came from, so revocation could only stop *future* verifications
+  while everyone already inside kept a live session. The lesson generalises — a credential derived
+  from another credential has to record its parent, or the parent cannot be revoked.
+- **Second: consent derived from webhook state is consent derived from something that can be late.**
+  The recording consent set came from open attendance intervals, which webhooks write; a lost webhook
+  made the host the only person asked. It now reads the provider's live roster and refuses to record
+  at all when the provider cannot answer. Recording is the one place where failing closed is cheap.
+- Dead end avoided: `UpdateMeetingParticipant` *looks* like a privilege-escalation path (its validator
+  does not exclude `Host`, unlike the add-participant validator). It is not — `Meeting.UpdateParticipant`
+  refuses host transfer and refuses to demote the creator, and badge ids are checked against the owning
+  meeting. Domain invariants, not validators, are what make that surface safe; do not "fix" the
+  validator and assume something was gained.
+- `MeetingRoomModerationRules.TryParticipantId` is now the single parser for
+  `m{meetingId}-p{participantId}-{nonce}` identities; the webhook handler had a private duplicate.
+- Backend `82/82` with nine new tests, one per finding. One additive migration,
+  `AddMeetingGuestSessionAccessLink`. No route added or changed, and the Angular repo needed no change
+  — it branches on no meeting error code, only `MEETING_READINESS_META`.
+
 ## 2026-09-04 (Meetings: production media works; auto-end and recording infrastructure)
 
 - `room_finished` no longer ends a meeting unconditionally. The room empties whenever the last

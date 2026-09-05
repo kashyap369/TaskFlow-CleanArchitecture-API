@@ -2,7 +2,21 @@
 
 > Keep the Current Status section up to date at the end of every session.
 
-## 🟡 Organization Meetings Phase 7 — P7.1 done: readiness and ready-anytime creation (2026-09-04)
+## 🟡 Organization Meetings Phase 7 — P7.2 done: threat model and abuse review (2026-09-05)
+
+The meeting attack surface is reviewed end to end and written up in
+[docs/MEETINGS-THREAT-MODEL.md](MEETINGS-THREAT-MODEL.md): assets, trust boundaries, actors,
+per-surface findings, attacker walkthroughs, and nine residual risks accepted with reasons. Eight
+live defects were found and fixed, each pinned by a test in
+`TaskFlow.Tests/Application/MeetingSecurityHardeningTests.cs`. The two that mattered: **revoking a
+leaked access link evicted nobody** — guests who had already exchanged it kept a working session for
+up to an hour — and **recording consent could be collected from an empty room**, because the consent
+set came from webhook-written attendance rather than the provider's live roster. One additive
+migration (`AddMeetingGuestSessionAccessLink`). Backend `82/82`, build and EF drift clean; no route
+changed and the Angular client needed no change. Five packages remain: P7.3 capacity, P7.4 telemetry,
+P7.5 E2E, P7.6 infrastructure, P7.7 policy docs.
+
+## ✅ Organization Meetings Phase 7 — P7.1 done: readiness and ready-anytime creation (2026-09-04)
 
 The ready-anytime creation bug is fixed and the deployment blindness behind the 2026-09-02 deferral is
 now observable. `GET /admin/meetings/readiness` (AdminOnly) reports what the running process actually
@@ -37,6 +51,15 @@ Two things to settle in the same session:
 
 Also still unproven: whether Dokploy `v0.30.5` fixed the environment-injection bug at all. The first
 API deploy on it answers that — watch readiness immediately after.
+
+**Note (2026-09-05):** this task was deferred once, to complete P7.2 (threat model) instead, at the
+owner's direction. It is still the first thing to do before the next production deploy — P7.2 shipped
+an additive migration, so the next deploy is not far off.
+
+After it, the next code-shaped package is **P7.3 — declared capacity and concurrency tests**:
+participants per meeting, simultaneous meetings, message/file/recording ceilings, plus the two
+capacity items the threat model parked there (expired guest sessions and challenges are never purged;
+the whole guest controller shares one 12/minute per-IP budget).
 
 ## ▶️ Organization Meetings resumed (2026-09-04)
 

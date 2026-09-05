@@ -825,10 +825,33 @@ caused the 2026-09-02 deferral now has an operator-facing answer.
   This satisfies Phase 7's "prove join-token issuance before attempting the two-device media test"
   and makes a save-without-propagation deployment visible before a member is refused at join.
 
-Remaining Phase 7 packages, in priority order: P7.2 threat model and abuse review; P7.3 declared
-capacity and concurrency tests; P7.4 structured metrics/traces/logs with alerts and runbooks;
-P7.5 critical E2E coverage; P7.6 production LiveKit/Redis/TURN provisioning and staged flag rollout
-(infrastructure, owner-gated); P7.7 privacy/retention/support documentation.
+**Work-package checkpoint (2026-09-05) — P7.2 threat model and abuse review, DONE:**
+the full meeting attack surface — links, OTP, guest sessions, IDOR, privilege escalation, webhook
+replay, file abuse, meeting enumeration, recording access and token leakage — is reviewed against the
+code and written up in [MEETINGS-THREAT-MODEL.md](MEETINGS-THREAT-MODEL.md). Eight live defects were
+found and fixed, each with a regression test in `TaskFlow.Tests/Application/MeetingSecurityHardeningTests.cs`.
+The two that mattered:
+
+- *Revoking a leaked access link evicted nobody.* Marking the link revoked stops new verifications,
+  but every guest who had already exchanged that link kept a working session — room, chat, files and
+  archive — for the rest of `Meetings:GuestSessionMinutes`. Revocation is the organizer's only lever
+  when a link leaks and it did not reach the people the leak let in. Guest sessions now record the
+  link they came from (`AddMeetingGuestSessionAccessLink`, additive and nullable), and revoke/rotate
+  kill those sessions and eject the guests from the live room.
+- *Recording consent could be collected from an empty room.* The required-consent set came from open
+  attendance intervals, which webhooks write. A delayed or lost webhook left the host alone in the
+  set, consent completed instantly, and everyone already connected was recorded with no prompt — the
+  join-token consent gate does not help, it only blocks new joins. The set is now built from the
+  provider's live roster, and a roster the provider cannot answer refuses the request outright.
+
+Nine residual risks are recorded as accepted with reasons, five of which are the owner decisions in
+§12 rather than engineering choices. Backend `82/82`; build, EF drift clean. No frontend change was
+needed — the Angular client renders server messages and branches on no meeting error code.
+
+Remaining Phase 7 packages, in priority order: P7.3 declared capacity and concurrency tests;
+P7.4 structured metrics/traces/logs with alerts and runbooks; P7.5 critical E2E coverage;
+P7.6 production LiveKit/Redis/TURN provisioning and staged flag rollout (infrastructure,
+owner-gated); P7.7 privacy/retention/support documentation.
 
 **Exit criteria:** security review has no unresolved high-risk item; performance/capacity evidence meets
 declared limits; monitoring/runbooks and rollback are tested; migrations and object storage are backed
@@ -869,6 +892,23 @@ Until approved, phases use the conservative defaults stated in this document and
 guest/recording behavior disabled in production.
 
 ## 13. Evidence and decision log
+
+- **2026-09-05 — Phase 7 / P7.2 completed (threat model and abuse review):** wrote
+  [MEETINGS-THREAT-MODEL.md](MEETINGS-THREAT-MODEL.md) — assets, trust boundaries, actors, per-surface
+  findings, attacker walkthroughs — and fixed the eight defects it found. The two serious ones were
+  access-link revocation that did not evict guests already holding sessions, and a recording-consent
+  set derived from webhook-written attendance, which let a delayed webhook produce a recording nobody
+  was asked about. Also fixed: any assigned participant could veto any recording by declining one they
+  were never asked about; a removed guest could still rename themselves; a chat reply could be anchored
+  to another meeting's message; a session for a soft-deleted participant produced a 500 instead of an
+  authorization failure; the anonymous provider webhook had no rate limit; and rotating a lapsed link
+  minted a replacement that was already expired. One additive migration
+  (`AddMeetingGuestSessionAccessLink`). Nine residual risks are recorded as accepted with reasons —
+  five of them are owner decisions from §12, not engineering choices. Backend tests `82/82` (nine new,
+  one per finding), build and EF drift clean; no route was added or changed, so the ledger stays at
+  `180/177`, and the Angular client needed no change because it branches on no meeting error code.
+  Media reachability, capacity and E2E coverage remain unproven — those are P7.3, P7.5 and P7.6.
+  Next package: P7.3 declared capacity and concurrency tests.
 
 - **2026-09-05 — Dokploy upgraded to `v0.30.5`; production runbook written:** the platform that
   failed to inject the API service environment on `v0.29.14` is upgraded, and the LiveKit
