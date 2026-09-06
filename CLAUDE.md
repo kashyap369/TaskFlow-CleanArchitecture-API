@@ -82,8 +82,9 @@ DB: PostgreSQL, connection string `DefaultConnection`. Seeds on startup: system 
   name, title or identifier in a tag) that a test enforces. Also read §5 when an alert fires.
 - [docs/MEETINGS-PRIVACY.md](docs/MEETINGS-PRIVACY.md) — what one meeting stores, how long each
   piece survives, and what "deleted" actually does to it. Read it before changing retention, the
-  cleanup service, or any statement about how long meeting data is kept — §8 lists what the system
-  does **not** do, including the personal data retention never reaches.
+  cleanup service, or any statement about how long meeting data is kept — §2 is the sweep's exact
+  behaviour (including which meetings it skips and which columns it nulls) and §8 lists what the
+  system deliberately does **not** do.
 - [docs/MEETINGS-SUPPORT.md](docs/MEETINGS-SUPPORT.md) — user-facing troubleshooting: symptom →
   error code → who can fix it, for members, guests, collaboration and recording.
 - [docs/SESSIONS.md](docs/SESSIONS.md) — session log: gotchas, dead ends, decisions

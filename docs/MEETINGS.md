@@ -993,13 +993,53 @@ the writing of them turned up six things about retention that nobody had stated 
   changed**, so the ledger stays at `181/178`. The procedures in OPERATIONS.md are written but **not
   yet exercised**, and the document says so in its own status line.
 
+**Work-package checkpoint (2026-09-07) — P7.8 retention reaches personal data, DONE:**
+the three gaps P7.7 wrote down are closed in `MeetingRetentionCleanupService`. Retention now erases
+the personal data it was leaving behind, and it reaches meetings it was never looking at.
+
+- *The roster and the invitations are redacted, not deleted.* `MeetingParticipant.RedactPersonalData()`
+  nulls `NormalizedEmail` and `DisplayName`; `MeetingAccessLink.RedactPersonalData(utcNow)` nulls
+  `LockedEmail` **and revokes the link** — a private invitation is matched against its locked address
+  at verification, so leaving one active with a null lock would be a link whose audience nothing
+  describes. The rows themselves have to stay: attendance, messages, consents and the guest
+  moderation trail all reference a participant and would be orphaned. Reads already fall back to the
+  linked user's name or `Participant`, so a redacted guest renders as an unnamed participant. This is
+  a null, not a soft-delete flag — a flag would have left the addresses sitting in PostgreSQL, which
+  is the whole complaint.
+- *Every meeting is now swept, not only `Ended` ones with an `ActualEndUtc`.* The clock is
+  `ActualEndUtc ?? ScheduledEndUtc ?? UpdatedAt ?? CreatedAt`; the first three terms are exactly what
+  `MeetingCollaborationAccess.RetainUntil` already uses to make an archive unreachable, and
+  `UpdatedAt` is the extra term the never-ended states need so that editing a long-lived draft
+  restarts its window rather than leaving it eligible from the day it was created. Cancelled
+  meetings, abandoned drafts and meetings wedged in `Live` are therefore reached. **One deliberate
+  exception:** a `Live` meeting with an open attendance interval is skipped, because somebody is on
+  that call however old the row looks — without that guard the widened sweep would delete a meeting
+  in progress, which is a worse bug than the one it fixes.
+- *Every recording object is erased, whatever the recording's status.* Only `Ready` ones were, so a
+  `Failed` or `Processing` Egress could leave a partial composite file behind — the video outlived
+  the meeting precisely when the recording had gone wrong. The matching hazard is that a recording
+  which never wrote anything must not stall its meeting forever, so a *missing* object now counts as
+  a successful delete while any other storage error still blocks the row delete and is retried.
+- *The silent stall is at least audible.* A pass that could not finish a meeting's storage deletes now
+  logs an **error** naming how many meetings it left holding data past their window, instead of only
+  a per-object warning. No alert rule watches it yet; that is stated in
+  [MEETINGS-PRIVACY.md](MEETINGS-PRIVACY.md) §8 rather than implied away.
+- *Verification:* backend `116/116` (1 new integration test driving one real retention pass over real
+  HTTP and a real PostgreSQL database: a cancelled meeting with a guest, a private invitation and a
+  `Failed` recording object, alongside a `Live` meeting somebody is still connected to). It was
+  **mutation-checked four ways** — restoring the `Ended`-only eligibility, restoring `Ready`-only
+  object deletion, removing the redaction call, and removing the live-call guard each fail it. Build
+  and EF drift clean, **no migration** — P7.8 writes nulls into columns that already exist — and **no
+  route added or changed**, so the ledger stays at `181/178`.
+- *Two things this did not do, on purpose.* Meeting titles and descriptions still survive retention
+  (the `Meetings` row is made unreachable, never removed), and the privacy policy's sentence about
+  invitee records being "retained beyond that point in a form that is no longer readable through the
+  service" is now more cautious than the system behaves. That sentence lives on the frontend branch
+  `meetings/p7.3-capacity`, which **was never merged into frontend `main`** — see the evidence entry.
+
 Remaining Phase 7 packages: P7.6 production LiveKit/Redis/TURN provisioning, TURN verification from
-restrictive networks, and the staged flag rollout — infrastructure, owner-gated, and the only thing
-between Phase 7 and completion. P7.8 is proposed but not required for the phase: make retention reach
-the personal data it currently leaves behind (guest email and display name on `MeetingParticipants`,
-`LockedEmail` on `MeetingAccessLinks`), sweep cancelled and abandoned meetings, and erase non-`Ready`
-recording objects. Until P7.8 lands, [MEETINGS-PRIVACY.md](MEETINGS-PRIVACY.md) §8 is the truthful
-statement of what retention does.
+restrictive networks, and the staged flag rollout — infrastructure, owner-gated, and now the only
+thing between Phase 7 and completion.
 
 **Exit criteria:** security review has no unresolved high-risk item; performance/capacity evidence meets
 declared limits; monitoring/runbooks and rollback are tested; migrations and object storage are backed
@@ -1040,6 +1080,36 @@ Until approved, phases use the conservative defaults stated in this document and
 guest/recording behavior disabled in production.
 
 ## 13. Evidence and decision log
+
+- **2026-09-07 — Phase 7 / P7.8 completed (retention reaches personal data):** closed the three
+  gaps P7.7 documented. `MeetingRetentionCleanupService` now redacts guest email addresses and
+  display names on `MeetingParticipants` and the locked address on `MeetingAccessLinks` (revoking
+  those links), sweeps meetings in **every** state rather than only `Ended` ones with an
+  `ActualEndUtc`, and erases every recording object rather than only the `Ready` ones. Backend
+  `116/116`, build and EF drift clean, no migration, no route change — ledger unchanged at
+  `181/178`.
+- **Widening the sweep created a hazard the original narrowness was hiding.** Once cancelled,
+  abandoned and `Live` meetings became eligible, "expired" could describe a call that was happening:
+  a `Live` meeting has no `ActualEndUtc`, so its clock falls back to a `ScheduledEndUtc` or
+  `UpdatedAt` that may be months old. **Decision:** skip a `Live` meeting that still has an open
+  attendance interval. The test asserts it, and removing the guard fails the test.
+- **A retention sweep must not be blocked by an object that was never written.** Extending erasure
+  to non-`Ready` recordings means asking storage to delete keys for Egress runs that produced
+  nothing — and a failed delete skips the meeting for the *next* pass too, forever. **Decision:**
+  a missing object counts as a successful delete; every other storage error still blocks. That is
+  the difference between "erase more" and "stall more".
+- **The test was mutation-checked four ways, not assumed.** Restoring `Ended`-only eligibility,
+  restoring `Ready`-only object deletion, removing the redaction call, and removing the live-call
+  guard each fail
+  `MeetingRetention_RedactsGuestIdentity_SweepsCancelledMeetings_AndErasesFailedRecordings`.
+- **Found while checking the privacy policy against the new behaviour: the P7.7 frontend commit was
+  never merged.** `docs(legal): cover meetings, calls and recordings in the privacy policy (P7.7)`
+  (frontend `645ab14`) exists only on the frontend branch `meetings/p7.3-capacity`; frontend `main`
+  has no Meetings section in `legal-documents.ts` at all. The P7.7 checkpoint above reads as though
+  that shipped. **Decision:** report it rather than merge someone else's branch inside this package —
+  merging an unrelated frontend branch is a separate, owner-visible action. Its retention sentence
+  ("retained beyond that point in a form that is no longer readable through the service") is also now
+  more cautious than the system behaves, so it wants a copy edit when that branch is landed.
 
 - **2026-09-06 — Phase 7 / P7.7 completed (privacy, retention, support and operations):** added
   `docs/MEETINGS-PRIVACY.md`, `docs/MEETINGS-SUPPORT.md` and `infra/meetings/OPERATIONS.md`, and

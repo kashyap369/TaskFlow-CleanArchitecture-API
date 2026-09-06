@@ -852,6 +852,88 @@ public sealed class PlannerApiIntegrationTests : IClassFixture<PlannerApiFixture
         Assert.Equal(1, remaining.Decisions);
     }
 
+    /// <summary>
+    /// Phase 7 / P7.8. Retention deleted what a meeting <i>held</i> but never who was in it, and it
+    /// only ever looked at <c>Ended</c> meetings. So a cancelled meeting kept its guests' email
+    /// addresses and its invitation addresses forever, and a recording that failed before it was
+    /// <c>Ready</c> kept whatever Egress had already written. This drives one real pass over a real
+    /// database and proves the three gaps MEETINGS-PRIVACY.md §8 listed are closed — and that a call
+    /// somebody is still connected to is not swept just because its row looks old.
+    /// </summary>
+    [Fact]
+    public async Task MeetingRetention_RedactsGuestIdentity_SweepsCancelledMeetings_AndErasesFailedRecordings()
+    {
+        using var owner = _fixture.CreateClient(_fixture.CapacityOwnerUserId);
+        var cancelledResponse = await owner.PostAsJsonAsync("api/meeting", new
+        {
+            organizationId = _fixture.CapacityOrganizationId, title = "P7.8 cancelled with a guest",
+            timeZone = "UTC", guestsAllowed = true, retentionDays = 30
+        });
+        var cancelledId = await cancelledResponse.Content.ReadFromJsonAsync<int>();
+        var liveResponse = await owner.PostAsJsonAsync("api/meeting", new
+        {
+            organizationId = _fixture.CapacityOrganizationId, title = "P7.8 still in progress",
+            timeZone = "UTC", guestsAllowed = true, retentionDays = 30
+        });
+        var liveId = await liveResponse.Content.ReadFromJsonAsync<int>();
+        Assert.Equal(HttpStatusCode.NoContent, (await owner.PostAsync($"api/meeting/{liveId}/start", null)).StatusCode);
+
+        var failedRecordingKey = $"meetings/{cancelledId}/recordings/failed-egress.mp4";
+        await using (var partial = new MemoryStream("a partial composite file"u8.ToArray()))
+            await _fixture.Storage.UploadAsync(failedRecordingKey, partial, "video/mp4");
+
+        var participants = await _fixture.WithDbContextAsync(async context =>
+        {
+            var cancelled = await context.Meetings.Include(x => x.Participants).Include(x => x.AccessLinks)
+                .SingleAsync(x => x.Id == cancelledId);
+            var guest = cancelled.AddGuestParticipant("leaver@example.test", "Departed Guest",
+                TaskFlow.Domain.Enums.Meetings.MeetingAccessLevel.Participant, null);
+            cancelled.AddAccessLink(new string('a', 64),
+                TaskFlow.Domain.Enums.Meetings.MeetingAccessLinkMode.PrivateInvitation, "invited@example.test",
+                TaskFlow.Domain.Enums.Meetings.MeetingAccessLevel.Participant, null, DateTime.UtcNow.AddHours(1), 1);
+            cancelled.Cancel();
+            await context.SaveChangesAsync();
+
+            // An Egress that failed after writing something. Nothing but P7.8 ever deletes this object.
+            var recording = new MeetingRecording(cancelledId, guest.Id, failedRecordingKey,
+                [guest.Id], DateTime.UtcNow.AddMinutes(5));
+            recording.Fail("Egress never produced a usable file.");
+            context.MeetingRecordings.Add(recording);
+
+            var live = await context.Meetings.Include(x => x.Participants).Include(x => x.Attendance)
+                .SingleAsync(x => x.Id == liveId);
+            var stillHere = live.AddGuestParticipant("present@example.test", "Present Guest",
+                TaskFlow.Domain.Enums.Meetings.MeetingAccessLevel.Participant, null);
+            await context.SaveChangesAsync();
+            live.RegisterParticipantJoined(stillHere.Id, "conn-p78-open", null, DateTime.UtcNow.AddHours(-2));
+            await context.SaveChangesAsync();
+            return new { GuestId = guest.Id, PresentGuestId = stillHere.Id };
+        });
+
+        // Both rows now look far older than their 30-day window. Only the cancelled meeting is swept:
+        // the live one still has an open attendance interval, so the call is in progress.
+        await _fixture.WithDbContextAsync(context => context.Database.ExecuteSqlRawAsync(
+            """UPDATE "Meetings" SET "CreatedAt" = {0}, "UpdatedAt" = {0} WHERE "Id" IN ({1}, {2})""",
+            DateTime.UtcNow.AddDays(-400), cancelledId, liveId));
+
+        await _fixture.RunRetentionCleanupAsync();
+
+        var after = await _fixture.WithDbContextAsync(async context => new
+        {
+            Guest = await context.MeetingParticipants.IgnoreQueryFilters().SingleAsync(x => x.Id == participants.GuestId),
+            Link = await context.MeetingAccessLinks.IgnoreQueryFilters().SingleAsync(x => x.MeetingId == cancelledId),
+            LiveGuest = await context.MeetingParticipants.IgnoreQueryFilters().SingleAsync(x => x.Id == participants.PresentGuestId)
+        });
+        // The row survives — attendance and consents point at it — but it no longer names anyone.
+        Assert.Null(after.Guest.NormalizedEmail);
+        Assert.Null(after.Guest.DisplayName);
+        Assert.Null(after.Link.LockedEmail);
+        Assert.NotNull(after.Link.RevokedAtUtc);
+        Assert.False(_fixture.Storage.Contains(failedRecordingKey));
+        Assert.Equal("PRESENT@EXAMPLE.TEST", after.LiveGuest.NormalizedEmail);
+        Assert.Equal("Present Guest", after.LiveGuest.DisplayName);
+    }
+
     private static Task<HttpResponseMessage> UploadAsync(HttpClient client, int meetingId, string fileName)
     {
         var content = new MultipartFormDataContent();
@@ -1744,6 +1826,8 @@ public sealed class PlannerTestObjectStorage : IObjectStorage
         Task.FromResult(_objects[objectKey]);
     public Task DeleteAsync(string objectKey, CancellationToken cancellationToken = default)
     { _objects.TryRemove(objectKey, out _); return Task.CompletedTask; }
+    /// <summary>Whether the object is still stored — how a test proves retention really erased one.</summary>
+    public bool Contains(string objectKey) => _objects.ContainsKey(objectKey);
 }
 
 public sealed class PlannerTestEmailService : IEmailService

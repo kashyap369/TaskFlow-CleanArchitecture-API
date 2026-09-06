@@ -1,6 +1,6 @@
 # TaskFlow Meetings — Privacy, retention and deletion
 
-> **Phase 7 / P7.7.** What a meeting stores, how long each piece survives, what "deleted" actually
+> **Phase 7 / P7.7, revised by P7.8.** What a meeting stores, how long each piece survives, what "deleted" actually
 > does to it, and where meeting data leaves TaskFlow. Read this before answering a data-subject
 > request, before changing `Meetings:DefaultRetentionDays` or the cleanup service, and before
 > telling anyone — a customer, a reviewer, the privacy policy — how long a meeting is kept.
@@ -20,9 +20,9 @@ own, not merely by joining to another table.
 | Store | What it holds | Personal data | Removed by retention? |
 |---|---|---|---|
 | `Meetings` | title, description, schedule, timezone, settings, opaque room name, `RetentionDays` | title/description are free text and may contain anything a person typed | **No — the row survives indefinitely** |
-| `MeetingParticipants` | one row per invited person: `UserId` **or** `NormalizedEmail`, `DisplayName`, access level, badge, admission state | **Yes — a guest's email address and chosen display name** | **No** |
+| `MeetingParticipants` | one row per invited person: `UserId` **or** `NormalizedEmail`, `DisplayName`, access level, badge, admission state | **Yes — a guest's email address and chosen display name** | Yes — the row survives, but the email and display name are cleared (§2) |
 | `MeetingBadgeDefinitions` | label, colour, icon | no | No |
-| `MeetingAccessLinks` | SHA-256 `TokenHash`, mode, `LockedEmail`, use count, expiry, revocation | **Yes — the invited address on a private invitation** | **No** |
+| `MeetingAccessLinks` | SHA-256 `TokenHash`, mode, `LockedEmail`, use count, expiry, revocation | **Yes — the invited address on a private invitation** | Yes — `LockedEmail` is cleared and the link is revoked (§2) |
 | `MeetingGuestChallenges` | email, HMAC-SHA256 code hash, attempts, expiry | **Yes — email** | Yes — separate 30-day sweep once spent |
 | `MeetingGuestSessions` | SHA-256 session-token hash, participant, originating link, expiry, revocation | by reference only | Yes — separate 30-day sweep once spent |
 | `MeetingGuestDecisions` | who admitted or denied which guest, and when | by reference only | **No — deliberately: it is the moderation audit trail** |
@@ -30,7 +30,7 @@ own, not merely by joining to another table.
 | `MeetingMessages` | chat body, author, reply target, client message id | **Yes — free text written by people** | Yes (soft delete — see §3) |
 | `MeetingNotes`, `MeetingNoteRevisions` | current note body and its revision history | **Yes — free text** | Yes (soft delete) |
 | `MeetingAssets` | file metadata plus a storage key under `meetings/{meetingId}/…` | file names are free text | Yes — **and the object is really erased** |
-| `MeetingRecordings` | status, Egress id, storage key `meetings/{id}/recordings/…`, size, duration, failure reason | the video itself | Yes — **and the object is really erased**, `Ready` ones only |
+| `MeetingRecordings` | status, Egress id, storage key `meetings/{id}/recordings/…`, size, duration, failure reason | the video itself | Yes — **and the object is really erased**, whatever the status |
 | `MeetingRecordingConsents` | per-participant accepted / declined / timed-out and when | by reference only | Yes (soft delete) |
 | `MeetingWebhookReceipts` | provider event id, event type, timestamp | no | **No** |
 | Object storage | shared files and completed recordings, private, no public URL | the file and video contents | Yes — a real `DeleteAsync` |
@@ -51,13 +51,26 @@ keys a bucket in memory, and in whatever the reverse proxy logs.
      it is evaluated per request against the clock, so an expired archive becomes unreachable the
      moment the window passes, whether or not any sweep has run.
   2. `MeetingRetentionCleanupService` — a hosted service on a **6-hour** timer — actually deletes.
-- **The sweep only considers meetings that are `Ended` *and* have an `ActualEndUtc`.** A meeting that
-  is `Cancelled`, still `Draft`, still `Scheduled`, or wedged in `Live` is never swept. See §8.
+- **The sweep considers every meeting, in whatever state it stopped.** Since P7.8 the sweep's clock
+  is `ActualEndUtc ?? ScheduledEndUtc ?? UpdatedAt ?? CreatedAt` — the first three terms are the same
+  ones `RetainUntil` uses, and `UpdatedAt` is the extra term the never-ended states need, so editing
+  a long-lived draft restarts its window rather than leaving it eligible from the day it was created.
+  A cancelled meeting, an abandoned draft and a meeting wedged in `Live` are therefore all swept.
+  **The one exception:** a `Live` meeting with an open attendance interval is skipped, because
+  somebody is still on the call however old the row looks.
 - **Storage first, database second.** For each expired meeting the sweep deletes every asset object
-  and every `Ready` recording object, and only soft-deletes the rows if *every* object delete
-  succeeded. A storage failure logs a warning and skips that meeting entirely, so the next pass
-  retries it. The consequence to know: a meeting whose object storage is unreachable keeps its rows
-  indefinitely and quietly — the warning log is the only signal.
+  and every recording object — since P7.8 that is *every* recording, not only the `Ready` ones, so a
+  partial artefact written by a failed Egress goes too. Rows are only cleared if every object delete
+  succeeded. An object that is already missing counts as success; any other storage failure skips
+  that meeting entirely, so the next pass retries it. The consequence to know: a meeting whose
+  object storage is unreachable keeps its rows — the pass logs an error naming how many meetings it
+  could not finish, but nothing alerts on it.
+- **Personal data on the roster and the invitations is cleared, not deleted.** Since P7.8 the sweep
+  also nulls `NormalizedEmail` and `DisplayName` on every `MeetingParticipants` row and `LockedEmail`
+  on every `MeetingAccessLinks` row, and revokes each of those links. The rows themselves stay,
+  because attendance, messages, consents and the guest moderation trail all reference them and would
+  otherwise be orphaned — but they stop naming a person. Reads already fall back to the linked user's
+  name or `Participant`, so a redacted guest renders as an unnamed participant.
 - **Guest access records are on their own clock.** Spent guest sessions and OTP challenges — expired,
   revoked or consumed — are hard-deleted once older than `Meetings:GuestAccessRecordRetentionDays`
   (30), independent of any meeting's retention. See [MEETINGS-CAPACITY.md](MEETINGS-CAPACITY.md) §5.
@@ -76,18 +89,24 @@ It nulls out no column. A global EF query filter hides the row and every Dapper 
 `IsDeleted = FALSE`, so the content is unreachable through all API routes — but **the chat body, the
 note text and the file name are still bytes in PostgreSQL** after retention has run.
 
+Personal columns are the exception, and they are the reason a soft delete was not enough: since
+P7.8 retention **nulls** the guest email address, the guest display name and a private invitation's
+locked address rather than flagging their rows (§2). Those bytes really are gone from PostgreSQL.
+
 So the accurate claim is: *after the retention window, meeting content is permanently inaccessible
-through TaskFlow, and shared files and recordings are erased from storage; residual database records
-are retained in a non-readable state.* The inaccurate claim is "we delete your meeting data after
-N days".
+through TaskFlow; shared files and recordings are erased from storage; the email addresses and
+display names identifying guests and invitees are erased from the database; and residual content
+records are retained in a non-readable state.* The inaccurate claim is "we delete your meeting data
+after N days".
 
 ## 4. Guests
 
 A guest is not a TaskFlow account. What TaskFlow learns about one, and keeps:
 
 - **Their email address**, given to request a code, stored normalized (upper-cased) on
-  `MeetingParticipants` and on the challenge. The challenge goes after 30 days. **The participant row
-  does not** — see §8.
+  `MeetingParticipants` and on the challenge. The challenge goes after 30 days; the participant row
+  stays but its address and display name are cleared when the meeting's retention window closes
+  (§2). Between those two points the address is held.
 - **A display name** they type at the lobby, which becomes their name in the room and on every chat
   message. Any printable text up to 120 characters (threat model A-06).
 - **No password, no profile, no account.** The session is an opaque random token; TaskFlow stores
@@ -146,7 +165,8 @@ export endpoint; assemble from those routes.
 **Access / export — a guest.** They hold a scoped session for the one meeting they were invited to
 and can read the same archive through the guest routes until the retention window closes. Beyond
 that, what TaskFlow holds about them is their address and display name on `MeetingParticipants` plus
-their admission decision — reachable only by an operator with database access.
+their admission decision — reachable only by an operator with database access, and only until
+retention clears the address and display name.
 
 **Erasure — a member.** Removing them from a meeting changes participant state; it does not erase the
 chat they wrote. Content erasure is per artefact: the host can delete assets and recordings, and
@@ -158,8 +178,10 @@ answered honestly rather than improvised:
 1. Revoke the access links they used (`DELETE /meeting/{id}/access-links/{linkId}`), which also kills
    their sessions and ejects them from any live room.
 2. Their spent sessions and challenges disappear within 30 days on their own.
-3. **Their email address on `MeetingParticipants` does not disappear at all**, and no route removes
-   it. Today this needs a manual, audited database update by an operator. See §8.1.
+3. **Their email address and display name on `MeetingParticipants` are cleared when the meeting's
+   retention window closes**, along with the address any private invitation was locked to (§2).
+   Before that point no route removes them, so an erasure request that cannot wait for the window
+   still needs a manual, audited database update by an operator.
 
 **Legal hold.** There is no hold mechanism. The only lever that keeps the sweep away from a meeting is
 raising that meeting's `RetentionDays`, which is not exposed after creation — so a hold is currently a
@@ -169,22 +191,20 @@ database change.
 
 Stated here so nobody has to discover them during an audit.
 
-1. **Retention does not erase personal data from the database.** Guest email addresses and display
-   names on `MeetingParticipants`, and the invited address on a private `MeetingAccessLink`, survive
-   the retention sweep indefinitely — the sweep never touches those tables. Meeting titles and
-   descriptions likewise. A privacy policy must not claim meeting data is deleted after N days
-   without this qualification. *Closing it is a code change, proposed as P7.8.*
-2. **Soft-deleted content remains in PostgreSQL.** §3.
-3. **Only `Ended` meetings with an `ActualEndUtc` are ever swept.** Cancelled, abandoned and
-   never-started meetings keep their content and participant rows indefinitely.
-4. **A `Failed` or `Processing` recording's object is never deleted by retention** — only `Ready`
-   ones are. A partial Egress artefact written before a failure can outlive its meeting.
-5. **Retention stalls quietly when object storage is unreachable**, because a failed delete skips the
-   meeting. Nothing alerts on this; the warning log is the only trace.
-6. **No data-subject export, erasure or legal-hold tooling exists.** §7 is a manual procedure.
-7. **The retention default (90 days) and the guest archive window are not owner-approved.** They are
+1. **Meeting titles and descriptions survive retention.** They are free text and may contain
+   anything a person typed, and the `Meetings` row is never deleted or redacted — the archive is
+   made unreachable rather than removed. Guest email addresses, guest display names and the address
+   a private invitation was locked to are no longer in this list: P7.8 made the sweep clear them.
+2. **Soft-deleted content remains in PostgreSQL.** §3. This is the reason the redaction in §2 nulls
+   the columns rather than relying on a soft delete: a flag would have left the addresses in place.
+3. **Retention stalls quietly when object storage is unreachable**, because a failed delete skips the
+   meeting. The pass logs an error naming how many meetings it could not finish, but no alert rule
+   watches it, so nothing pages anyone — and since P7.8 what is held past its window includes the
+   personal data the sweep would otherwise have cleared.
+4. **No data-subject export, erasure or legal-hold tooling exists.** §7 is a manual procedure.
+5. **The retention default (90 days) and the guest archive window are not owner-approved.** They are
    the conservative defaults of [MEETINGS.md](MEETINGS.md) §12, items 2 and 7.
-8. **Data residency is undecided** (§12 item 6), and no jurisdiction-specific recording-consent review
+6. **Data residency is undecided** (§12 item 6), and no jurisdiction-specific recording-consent review
    has been recorded. That review is a Phase 6 exit criterion and remains open.
 
 ## 9. Related documents

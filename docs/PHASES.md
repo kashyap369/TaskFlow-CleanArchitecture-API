@@ -2,6 +2,34 @@
 
 > Keep the Current Status section up to date at the end of every session.
 
+## 🟡 Organization Meetings Phase 7 — P7.8 done: retention reaches personal data (2026-09-07)
+
+The three gaps P7.7 wrote down are closed in `MeetingRetentionCleanupService`.
+
+- **Guest identity is erased, not left behind.** Retention now nulls `NormalizedEmail` and
+  `DisplayName` on `MeetingParticipants` and `LockedEmail` on `MeetingAccessLinks`, and revokes those
+  links. The rows stay — attendance, messages, consents and the guest moderation trail reference them
+  — but they stop naming a person. A null, deliberately, not a soft-delete flag: a flag would have
+  left the addresses sitting in PostgreSQL, which was the complaint.
+- **Every meeting is swept, not only `Ended` ones with an `ActualEndUtc`.** The clock is
+  `ActualEndUtc ?? ScheduledEndUtc ?? UpdatedAt ?? CreatedAt`, so cancelled meetings, abandoned
+  drafts and meetings wedged in `Live` are reached. **Exception:** a `Live` meeting with an open
+  attendance interval is skipped — somebody is on that call however old the row looks.
+- **Every recording object is erased, whatever its status.** A `Failed` Egress could leave a partial
+  composite file behind. A *missing* object counts as a successful delete, so a recording that never
+  wrote anything cannot stall its meeting's retention forever; any other storage error still blocks
+  and is retried, and a pass that leaves meetings unfinished now logs an error saying how many.
+
+Backend `116/116` (1 new integration test over real HTTP and a real PostgreSQL database,
+**mutation-checked four ways** — restoring `Ended`-only eligibility, restoring `Ready`-only object
+deletion, removing the redaction, and removing the live-call guard each fail it). Build and EF drift
+clean, **no migration**, no route change — the ledger stays at `181/178`. No frontend change.
+
+Meeting titles and descriptions still survive retention, on purpose, and
+[MEETINGS-PRIVACY.md](MEETINGS-PRIVACY.md) §8 now says so as the first item. Separately: the P7.7
+frontend privacy-policy commit was never merged into frontend `main` — it sits on the frontend branch
+`meetings/p7.3-capacity`. **One package remains: P7.6 infrastructure.**
+
 ## 🟡 Organization Meetings Phase 7 — P7.7 done: privacy, retention, support and operations (2026-09-06)
 
 The policy and procedure half of Phase 7. Three new documents —
@@ -21,9 +49,8 @@ have their object deleted, so a failed Egress artefact can outlive its meeting. 
 stalls the sweep silently. And rotating `JwtSettings:SecretKey` also kills every pending guest OTP,
 because `OneTimeCodeSettings:SecretKey` falls back to it and production leaves it unset.
 
-The privacy policy is worded to match that reality rather than the intent. Closing the gaps is
-proposed as **P7.8** (make retention reach participant/access-link personal data, sweep cancelled
-meetings, erase non-`Ready` recording objects) and is not required for Phase 7.
+The privacy policy is worded to match that reality rather than the intent. Closing the gaps was
+proposed as **P7.8** and landed on 2026-09-07 — see the entry above.
 
 Frontend typecheck, production build, `291/291` specs, lint, design lint and all 42 contrast checks
 pass. No backend change, **no migration**, no route change — the ledger stays at `181/178`. The

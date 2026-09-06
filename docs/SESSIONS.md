@@ -1,5 +1,41 @@
 # TaskFlow — Session Log
 
+## 2026-09-07 (Meetings Phase 7 / P7.8 — retention reaches personal data)
+
+- Closed the three gaps P7.7 documented, all inside `MeetingRetentionCleanupService` plus two new
+  domain methods (`MeetingParticipant.RedactPersonalData()`,
+  `MeetingAccessLink.RedactPersonalData(utcNow)`). No migration — P7.8 writes nulls into columns that
+  already exist — and no route added or changed, so the ledger stays at `181/178`.
+- **Redaction had to be a null, not a soft delete.** The obvious move was to `SoftDelete()` the
+  participant row, and it would have been wrong twice: the row is referenced by attendance, messages,
+  consents and the guest moderation trail, and `SoftDelete()` nulls no column — the email address
+  would still have been bytes in PostgreSQL, which is the exact complaint P7.7 raised.
+- **Widening the sweep created a hazard the old narrowness was hiding.** With cancelled/abandoned/
+  `Live` meetings eligible, "expired" can describe a call in progress: a `Live` meeting has no
+  `ActualEndUtc`, so its clock falls back to a `ScheduledEndUtc` or `UpdatedAt` that may be months
+  old. Guard: skip a `Live` meeting with an open attendance interval. Worth remembering that
+  *broadening a deletion rule is a change that can delete live data*, not only old data.
+- **`UpdatedAt` is in the clock on purpose.** The archive-expiry rule uses
+  `ActualEndUtc ?? ScheduledEndUtc ?? CreatedAt`; for a never-ended draft that would make the window
+  run from the day it was created, so a draft edited weekly for a year would be swept while in use.
+  `UpdatedAt` sits ahead of `CreatedAt` in the fallback chain so editing restarts the window.
+- **Erasing more objects risks stalling on objects that never existed.** A `Failed` Egress may have
+  written nothing, and a failed storage delete skips the meeting for every future pass too. So a
+  missing object now counts as success (`FileNotFoundException` / `DirectoryNotFoundException`) while
+  any other error still blocks and retries — and a pass that left meetings unfinished logs an
+  **error** with the count instead of only per-object warnings.
+- **Mutation-checked four ways rather than trusted.** Restoring `Ended`-only eligibility, restoring
+  `Ready`-only object deletion, removing the redaction call, and removing the live-call guard each
+  fail the new test. Backend `116/116`, build and EF drift clean.
+- **Found in passing, not fixed here: the P7.7 frontend privacy-policy commit is not on frontend
+  `main`.** `645ab14 docs(legal): cover meetings, calls and recordings in the privacy policy (P7.7)`
+  exists only on the frontend branch `meetings/p7.3-capacity`; `main`'s `legal-documents.ts` has no
+  Meetings section at all, so the published policy says nothing about meetings. Reported rather than
+  merged — landing an unrelated branch in another repository is not this package's call. When it is
+  landed, its sentence about invitee records being "retained beyond that point in a form that is no
+  longer readable through the service" is now more cautious than the system behaves and wants a copy
+  edit.
+
 ## 2026-09-06 (Meetings Phase 7 / P7.7 — privacy, retention, support and operations)
 
 - Added `docs/MEETINGS-PRIVACY.md`, `docs/MEETINGS-SUPPORT.md` and `infra/meetings/OPERATIONS.md`,

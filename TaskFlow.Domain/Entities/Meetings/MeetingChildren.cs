@@ -65,6 +65,20 @@ public sealed class MeetingParticipant : AuditableEntity
     }
     internal void Update(MeetingAccessLevel accessLevel, int? badgeDefinitionId, MeetingParticipantState state)
     { AccessLevel = accessLevel; BadgeDefinitionId = badgeDefinitionId; State = state; MarkAsUpdated(); }
+
+    /// <summary>
+    /// Phase 7 / P7.8. Retention deleted what a meeting <i>held</i> but never touched who was in it,
+    /// so a guest's email address and chosen display name outlived the window indefinitely. The row
+    /// itself stays — attendance, messages and the moderation trail all point at it and would be
+    /// orphaned — but it stops naming a person. Reads already fall back to the linked user's name or
+    /// "Participant", so a redacted guest renders as an unnamed participant rather than breaking.
+    /// Returns whether anything was actually cleared, so a sweep can report what it reached.
+    /// </summary>
+    public bool RedactPersonalData()
+    {
+        if (NormalizedEmail is null && DisplayName is null) return false;
+        NormalizedEmail = null; DisplayName = null; MarkAsUpdated(); return true;
+    }
 }
 
 public sealed class MeetingAccessLink : AuditableEntity
@@ -100,6 +114,21 @@ public sealed class MeetingAccessLink : AuditableEntity
     {
         if (!IsAvailable(utcNow)) throw new InvalidOperationException("Meeting access link is no longer available.");
         UseCount++; MarkAsUpdated();
+    }
+
+    /// <summary>
+    /// Phase 7 / P7.8. The invited address on a private invitation is personal data, and retention
+    /// never reached this table. Clearing it also revokes the link, deliberately: a private
+    /// invitation is matched against <see cref="LockedEmail"/> at verification, so a link left
+    /// active with a null lock would be a link whose audience nothing describes any more.
+    /// Returns whether anything changed.
+    /// </summary>
+    public bool RedactPersonalData(DateTime utcNow)
+    {
+        if (LockedEmail is null && RevokedAtUtc is not null) return false;
+        LockedEmail = null;
+        RevokedAtUtc ??= DateTime.SpecifyKind(utcNow, DateTimeKind.Utc);
+        MarkAsUpdated(); return true;
     }
 }
 
