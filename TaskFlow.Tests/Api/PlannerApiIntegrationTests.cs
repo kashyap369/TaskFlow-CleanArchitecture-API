@@ -26,6 +26,7 @@ using TaskFlow.Domain.Entities.Identity;
 using TaskFlow.Domain.Entities.Meetings;
 using TaskFlow.Domain.Entities.Organization;
 using TaskFlow.Domain.Enums.Identity;
+using TaskFlow.Domain.Enums.Meetings;
 using TaskFlow.Domain.Enums.WorkManagement;
 using TaskFlow.Domain.ValueObjects;
 using TaskFlow.Infra.Persistence.Context;
@@ -407,6 +408,316 @@ public sealed class PlannerApiIntegrationTests : IClassFixture<PlannerApiFixture
             new { clientMessageId = Guid.NewGuid(), body = "too late" })).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await member.GetAsync($"api/meeting/{meetingId}/assets/{assetId}")).StatusCode);
     }
+
+    /// <summary>
+    /// Phase 7 / P7.5. The critical journey, end to end and in order, over real HTTP and a real
+    /// PostgreSQL database: create → invite → guest OTP → admit → join → call → collaborate →
+    /// record → stop → end → archive → playback.
+    ///
+    /// Every leg of this already has a focused test. This one exists because those tests each start
+    /// from a fixture they built themselves, and the failures that reach users are the ones between
+    /// the legs — a guest who is admitted but whose session cannot reach the room, a recording whose
+    /// consent set is right but whose file lands under a key playback never looks at, an archive
+    /// assembled from state that ending the meeting quietly changed. Nothing here is stubbed except
+    /// the media provider itself, which is what LiveKit would be.
+    /// </summary>
+    [Fact]
+    public async Task Meeting_CriticalJourney_FromInviteToRecordedArchive_HoldsTogetherOverTheRealPath()
+    {
+        using var host = _fixture.CreateClient(_fixture.CapacityOwnerUserId);
+        using var member = _fixture.CreateClient(_fixture.CapacityMemberUserId);
+        using var guest = _fixture.CreateAnonymousClient();
+        using var outsider = _fixture.CreateClient(_fixture.OtherOrganizationOwnerUserId);
+
+        // --- create ---------------------------------------------------------------------------
+        var created = await host.PostAsJsonAsync("api/meeting", new
+        {
+            organizationId = _fixture.CapacityOrganizationId, title = "Critical journey",
+            description = "P7.5 end to end", timeZone = "UTC", guestsAllowed = true,
+            retentionDays = 90, participantUserIds = new[] { _fixture.CapacityMemberUserId }
+        });
+        Assert.True(created.IsSuccessStatusCode,
+            $"Meeting create failed: {created.StatusCode} {await created.Content.ReadAsStringAsync()}");
+        var meetingId = await created.Content.ReadFromJsonAsync<int>();
+
+        // --- invite: a reusable link, then guest OTP --------------------------------------------
+        var linkToken = await CreateAccessLinkAsync(host, meetingId, maximumUses: 5);
+        var guestSession = await VerifyGuestAsync(guest, linkToken, "journey-guest@example.test", "Journey guest");
+        guest.DefaultRequestHeaders.Add("X-Meeting-Guest-Session", guestSession);
+
+        // A verified guest is known to the meeting but not yet allowed into the room. Admission is
+        // the host's decision and the join gate reads it, so assert the refusal before admitting.
+        Assert.Equal(HttpStatusCode.Forbidden, (await guest.PostAsync("api/meeting/guest/join-token", null)).StatusCode);
+        var roster = await host.GetFromJsonAsync<MeetingDetailResponse>($"api/meeting/{meetingId}");
+        var guestParticipant = Assert.Single(roster!.Participants, x => x.Email == "JOURNEY-GUEST@EXAMPLE.TEST");
+        var hostParticipant = Assert.Single(roster.Participants, x => x.UserId == _fixture.CapacityOwnerUserId);
+        await AdmitAsync(host, meetingId, guestParticipant.Id);
+
+        // --- join ---------------------------------------------------------------------------------
+        Assert.Equal(HttpStatusCode.NoContent, (await host.PostAsync($"api/meeting/{meetingId}/start", null)).StatusCode);
+        var hostIdentity = await JoinIdentityAsync(host, $"api/meeting/{meetingId}/join-token");
+        var memberIdentity = await JoinIdentityAsync(member, $"api/meeting/{meetingId}/join-token");
+        var guestIdentity = await JoinIdentityAsync(guest, "api/meeting/guest/join-token");
+        Assert.StartsWith($"m{meetingId}-p{hostParticipant.Id}-", hostIdentity, StringComparison.Ordinal);
+        Assert.StartsWith($"m{meetingId}-p{guestParticipant.Id}-", guestIdentity, StringComparison.Ordinal);
+
+        // --- call: the provider reports the three arrivals -------------------------------------------
+        var roomName = (await _fixture.ReadMeetingEvidenceAsync(meetingId)).RoomName;
+        using var webhooks = _fixture.CreateAnonymousClient();
+        webhooks.DefaultRequestHeaders.Authorization =
+            AuthenticationHeaderValue.Parse(TestMeetingMediaProvider.Authorization);
+        var joinedAt = DateTimeOffset.UtcNow.AddMinutes(-5);
+        foreach (var identity in new[] { hostIdentity, memberIdentity, guestIdentity })
+        {
+            Assert.Equal(HttpStatusCode.OK, (await webhooks.PostAsJsonAsync("api/meeting/webhooks/livekit", new
+            {
+                eventId = $"journey-joined-{identity}", eventType = "participant_joined", roomName,
+                participantIdentity = identity, participantSid = $"PA_{identity}", occurredAtUtc = joinedAt
+            })).StatusCode);
+        }
+        Assert.Equal(3, (await _fixture.ReadMeetingEvidenceAsync(meetingId)).AttendanceCount);
+
+        // --- collaborate -----------------------------------------------------------------------------
+        Assert.Equal(HttpStatusCode.OK, (await member.PostAsJsonAsync($"api/meeting/{meetingId}/messages",
+            new { clientMessageId = Guid.NewGuid(), body = "Member is on the call" })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await guest.PostAsJsonAsync("api/meeting/guest/messages",
+            new { clientMessageId = Guid.NewGuid(), body = "Guest is on the call" })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await host.PutAsJsonAsync($"api/meeting/{meetingId}/note",
+            new { content = "Journey decision", expectedVersion = 0 })).StatusCode);
+        using var upload = new MultipartFormDataContent();
+        var attachment = new ByteArrayContent("journey attachment"u8.ToArray());
+        attachment.Headers.ContentType = new MediaTypeHeaderValue("text/plain");
+        upload.Add(attachment, "file", "journey.txt");
+        Assert.Equal(HttpStatusCode.OK, (await guest.PostAsync("api/meeting/guest/assets", upload)).StatusCode);
+
+        // --- record -----------------------------------------------------------------------------------
+        // Consent is built from the provider's live roster, not from attendance, so the roster is
+        // what decides who must be asked. All three are in the room.
+        _fixture.Media.SetRoster(roomName, hostIdentity, memberIdentity, guestIdentity);
+        var requested = await host.PostAsync($"api/meeting/{meetingId}/recordings", null);
+        Assert.True(requested.IsSuccessStatusCode,
+            $"Recording request failed: {requested.StatusCode} {await requested.Content.ReadAsStringAsync()}");
+        using var requestedJson = JsonDocument.Parse(await requested.Content.ReadAsStringAsync());
+        var recordingId = requestedJson.RootElement.GetProperty("id").GetInt32();
+        Assert.Equal((int)MeetingRecordingStatus.PendingConsent, requestedJson.RootElement.GetProperty("status").GetInt32());
+        Assert.Equal(3, requestedJson.RootElement.GetProperty("consents").GetArrayLength());
+        Assert.DoesNotContain(roomName, _fixture.Media.StartedRecordingRooms);
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await member.PostAsync(
+            $"api/meeting/{meetingId}/recordings/{recordingId}/stop", null)).StatusCode);
+
+        Assert.Equal((int)MeetingRecordingStatus.PendingConsent, await ConsentAsync(
+            member, $"api/meeting/{meetingId}/recordings/{recordingId}/consent", accepted: true));
+        Assert.Equal((int)MeetingRecordingStatus.Starting, await ConsentAsync(
+            guest, $"api/meeting/guest/recordings/{recordingId}/consent", accepted: true));
+        Assert.Contains(roomName, _fixture.Media.StartedRecordingRooms);
+
+        var egressId = await ReadEgressIdAsync(meetingId, recordingId);
+        Assert.Equal(HttpStatusCode.OK, (await webhooks.PostAsJsonAsync("api/meeting/webhooks/livekit", new
+        {
+            eventId = $"journey-egress-active-{recordingId}", eventType = "egress_updated", roomName,
+            occurredAtUtc = DateTimeOffset.UtcNow, egressId, egressStatus = "EGRESS_ACTIVE"
+        })).StatusCode);
+        Assert.Equal((int)MeetingRecordingStatus.Recording, await ReadRecordingStatusAsync(host, meetingId, recordingId));
+
+        // --- stop, then the file arrives and the provider says so ---------------------------------------
+        var stopped = await host.PostAsync($"api/meeting/{meetingId}/recordings/{recordingId}/stop", null);
+        Assert.Equal(HttpStatusCode.OK, stopped.StatusCode);
+        Assert.Contains(egressId, _fixture.Media.StoppedEgressIds);
+        Assert.Equal(HttpStatusCode.BadRequest, (await host.GetAsync(
+            $"api/meeting/{meetingId}/recordings/{recordingId}/content")).StatusCode);
+
+        var composite = "journey recording bytes"u8.ToArray();
+        await _fixture.Media.DeliverRecordingFileAsync(egressId, composite);
+        Assert.Equal(HttpStatusCode.OK, (await webhooks.PostAsJsonAsync("api/meeting/webhooks/livekit", new
+        {
+            eventId = $"journey-egress-complete-{recordingId}", eventType = "egress_ended", roomName,
+            occurredAtUtc = DateTimeOffset.UtcNow, egressId, egressStatus = "EGRESS_COMPLETE",
+            egressFileSize = (long)composite.Length, egressDurationMilliseconds = 42_000L
+        })).StatusCode);
+        Assert.Equal((int)MeetingRecordingStatus.Ready, await ReadRecordingStatusAsync(host, meetingId, recordingId));
+
+        // --- end -------------------------------------------------------------------------------------------
+        Assert.Equal(HttpStatusCode.NoContent, (await host.PostAsync($"api/meeting/{meetingId}/end", null)).StatusCode);
+
+        // --- archive and playback, after the meeting is over ------------------------------------------------
+        var archive = await member.GetAsync($"api/meeting/{meetingId}/archive");
+        Assert.Equal(HttpStatusCode.OK, archive.StatusCode);
+        var archiveBody = await archive.Content.ReadAsStringAsync();
+        Assert.Contains("Member is on the call", archiveBody);
+        Assert.Contains("Guest is on the call", archiveBody);
+        Assert.Contains("Journey decision", archiveBody);
+        Assert.Contains("journey.txt", archiveBody);
+        using var archiveJson = JsonDocument.Parse(archiveBody);
+        Assert.Equal((int)MeetingStatus.Ended, archiveJson.RootElement.GetProperty("status").GetInt32());
+        Assert.Equal(3, archiveJson.RootElement.GetProperty("attendance").GetArrayLength());
+        Assert.All(archiveJson.RootElement.GetProperty("attendance").EnumerateArray(),
+            entry => Assert.NotEqual(JsonValueKind.Null, entry.GetProperty("leftAtUtc").ValueKind));
+
+        var playback = await host.GetAsync($"api/meeting/{meetingId}/recordings/{recordingId}/content");
+        Assert.Equal(HttpStatusCode.OK, playback.StatusCode);
+        Assert.Equal(composite, await playback.Content.ReadAsByteArrayAsync());
+        var guestPlayback = await guest.GetAsync($"api/meeting/guest/recordings/{recordingId}/content");
+        Assert.Equal(HttpStatusCode.OK, guestPlayback.StatusCode);
+        Assert.Equal(composite, await guestPlayback.Content.ReadAsByteArrayAsync());
+        Assert.Equal(HttpStatusCode.Forbidden, (await outsider.GetAsync(
+            $"api/meeting/{meetingId}/recordings/{recordingId}/content")).StatusCode);
+    }
+
+    /// <summary>
+    /// Phase 7 / P7.5. The refusal half of the journey. Each of these is a place where failing open
+    /// would be worse than failing: a link that is revoked but leaves the guests it let in still
+    /// connected, a recording that starts without asking the room, and consent that is treated as
+    /// given by someone who declined.
+    /// </summary>
+    [Fact]
+    public async Task Meeting_DenialPaths_RevokeEvictsGuests_AndRecordingFailsClosed()
+    {
+        using var host = _fixture.CreateClient(_fixture.CapacityOwnerUserId);
+        using var member = _fixture.CreateClient(_fixture.CapacityMemberUserId);
+        using var guest = _fixture.CreateAnonymousClient();
+
+        var created = await host.PostAsJsonAsync("api/meeting", new
+        {
+            organizationId = _fixture.CapacityOrganizationId, title = "Journey denials",
+            timeZone = "UTC", guestsAllowed = true, retentionDays = 90,
+            participantUserIds = new[] { _fixture.CapacityMemberUserId }
+        });
+        var meetingId = await created.Content.ReadFromJsonAsync<int>();
+        Assert.Equal(HttpStatusCode.NoContent, (await host.PostAsync($"api/meeting/{meetingId}/start", null)).StatusCode);
+        var roomName = (await _fixture.ReadMeetingEvidenceAsync(meetingId)).RoomName;
+
+        var linkResponse = await host.PostAsJsonAsync($"api/meeting/{meetingId}/access-links", new
+        {
+            meetingId, mode = 2, lockedEmail = (string?)null, defaultAccessLevel = 3,
+            badgeDefinitionId = (int?)null, expiresAtUtc = DateTimeOffset.UtcNow.AddHours(1), maximumUses = 5
+        });
+        Assert.Equal(HttpStatusCode.OK, linkResponse.StatusCode);
+        using var linkJson = JsonDocument.Parse(await linkResponse.Content.ReadAsStringAsync());
+        var linkId = linkJson.RootElement.GetProperty("id").GetInt32();
+        var linkToken = linkJson.RootElement.GetProperty("token").GetString()!;
+        var guestSession = await VerifyGuestAsync(guest, linkToken, "denial-guest@example.test", "Denial guest");
+        guest.DefaultRequestHeaders.Add("X-Meeting-Guest-Session", guestSession);
+        var detail = await host.GetFromJsonAsync<MeetingDetailResponse>($"api/meeting/{meetingId}");
+        var guestParticipant = Assert.Single(detail!.Participants, x => x.Email == "DENIAL-GUEST@EXAMPLE.TEST");
+        await AdmitAsync(host, meetingId, guestParticipant.Id);
+        var guestIdentity = await JoinIdentityAsync(guest, "api/meeting/guest/join-token");
+        var hostIdentity = await JoinIdentityAsync(host, $"api/meeting/{meetingId}/join-token");
+
+        // Recording is the host's decision alone, however far into the meeting anyone else is.
+        var memberRequest = await member.PostAsync($"api/meeting/{meetingId}/recordings", null);
+        Assert.Equal(HttpStatusCode.Forbidden, memberRequest.StatusCode);
+        Assert.Contains("MEETING_RECORDING_DENIED", await memberRequest.Content.ReadAsStringAsync());
+
+        // A roster the provider cannot answer must refuse the request outright. Falling back to
+        // webhook-derived attendance is what let a host record a room nobody in it had been asked.
+        _fixture.Media.MakeRosterUnreadable(roomName);
+        var blindRequest = await host.PostAsync($"api/meeting/{meetingId}/recordings", null);
+        Assert.Equal(HttpStatusCode.BadRequest, blindRequest.StatusCode);
+        Assert.Contains("MEETING_RECORDING_ROSTER_UNAVAILABLE", await blindRequest.Content.ReadAsStringAsync());
+        Assert.DoesNotContain(roomName, _fixture.Media.StartedRecordingRooms);
+
+        // One declining participant fails the recording, and the provider is never asked to start.
+        _fixture.Media.ClearRosterFault(roomName);
+        _fixture.Media.SetRoster(roomName, hostIdentity, guestIdentity);
+        var requested = await host.PostAsync($"api/meeting/{meetingId}/recordings", null);
+        Assert.True(requested.IsSuccessStatusCode,
+            $"Recording request failed: {requested.StatusCode} {await requested.Content.ReadAsStringAsync()}");
+        using var requestedJson = JsonDocument.Parse(await requested.Content.ReadAsStringAsync());
+        var recordingId = requestedJson.RootElement.GetProperty("id").GetInt32();
+        Assert.Equal((int)MeetingRecordingStatus.Failed, await ConsentAsync(
+            guest, $"api/meeting/guest/recordings/{recordingId}/consent", accepted: false));
+        Assert.DoesNotContain(roomName, _fixture.Media.StartedRecordingRooms);
+        Assert.Equal(HttpStatusCode.BadRequest, (await host.GetAsync(
+            $"api/meeting/{meetingId}/recordings/{recordingId}/content")).StatusCode);
+
+        // Revoking a leaked link has to reach the people the leak let in: the session dies and the
+        // guest is ejected from the live room, not merely blocked from verifying the link again.
+        Assert.Equal(HttpStatusCode.OK, (await guest.GetAsync("api/meeting/guest/session")).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await host.DeleteAsync($"api/meeting/{meetingId}/access-links/{linkId}")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await guest.GetAsync("api/meeting/guest/session")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await guest.PostAsync("api/meeting/guest/join-token", null)).StatusCode);
+        Assert.Contains($"m{meetingId}-p{guestParticipant.Id}-", _fixture.Media.RemovedPrefixes);
+        Assert.NotEqual(HttpStatusCode.NoContent, (await guest.PostAsJsonAsync(
+            "api/meeting/guest/access/request-code",
+            new { token = linkToken, email = "denial-guest@example.test" })).StatusCode);
+
+        Assert.Equal(HttpStatusCode.NoContent, (await host.PostAsync($"api/meeting/{meetingId}/end", null)).StatusCode);
+    }
+
+    // ---- P7.5 journey helpers -----------------------------------------------------------------------
+
+    private static async Task<string> CreateAccessLinkAsync(HttpClient host, int meetingId, int maximumUses)
+    {
+        var response = await host.PostAsJsonAsync($"api/meeting/{meetingId}/access-links", new
+        {
+            meetingId, mode = 2, lockedEmail = (string?)null, defaultAccessLevel = 3,
+            badgeDefinitionId = (int?)null, expiresAtUtc = DateTimeOffset.UtcNow.AddHours(1), maximumUses
+        });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        return json.RootElement.GetProperty("token").GetString()!;
+    }
+
+    private async Task<string> VerifyGuestAsync(HttpClient guest, string linkToken, string email, string displayName)
+    {
+        Assert.Equal(HttpStatusCode.NoContent, (await guest.PostAsJsonAsync(
+            "api/meeting/guest/access/request-code", new { token = linkToken, email })).StatusCode);
+        var response = await guest.PostAsJsonAsync("api/meeting/guest/access/verify-code", new
+        {
+            token = linkToken, email, code = _fixture.Email.LastCode, displayName,
+            bindRegisteredAccount = false
+        });
+        Assert.True(response.IsSuccessStatusCode,
+            $"Guest verification failed: {response.StatusCode} {await response.Content.ReadAsStringAsync()}");
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        return json.RootElement.GetProperty("sessionToken").GetString()!;
+    }
+
+    private static async Task AdmitAsync(HttpClient host, int meetingId, int participantId) =>
+        Assert.Equal(HttpStatusCode.NoContent, (await host.PutAsJsonAsync(
+            $"api/meeting/{meetingId}/participants/{participantId}", new
+            {
+                meetingId, participantId, accessLevel = (int)MeetingAccessLevel.Participant,
+                badgeDefinitionId = (int?)null, state = (int)MeetingParticipantState.Admitted
+            })).StatusCode);
+
+    private static async Task<string> JoinIdentityAsync(HttpClient client, string route)
+    {
+        var response = await client.PostAsync(route, null);
+        Assert.True(response.IsSuccessStatusCode,
+            $"Join token failed for {route}: {response.StatusCode} {await response.Content.ReadAsStringAsync()}");
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        return json.RootElement.GetProperty("participantIdentity").GetString()!;
+    }
+
+    private static async Task<int> ConsentAsync(HttpClient client, string route, bool accepted)
+    {
+        var response = await client.PostAsJsonAsync(route, new { accepted });
+        Assert.True(response.IsSuccessStatusCode,
+            $"Consent failed for {route}: {response.StatusCode} {await response.Content.ReadAsStringAsync()}");
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        return json.RootElement.GetProperty("status").GetInt32();
+    }
+
+    private static async Task<int> ReadRecordingStatusAsync(HttpClient client, int meetingId, int recordingId)
+    {
+        using var json = JsonDocument.Parse(await client.GetStringAsync($"api/meeting/{meetingId}/recordings"));
+        var recording = Assert.Single(json.RootElement.EnumerateArray()
+            .Where(x => x.GetProperty("id").GetInt32() == recordingId));
+        return recording.GetProperty("status").GetInt32();
+    }
+
+    /// <summary>
+    /// The Egress id is deliberately absent from every response — it is a provider identifier and no
+    /// client has business holding one — so the test reads it from the row, in order to send the
+    /// webhook LiveKit would have sent.
+    /// </summary>
+    private async Task<string> ReadEgressIdAsync(int meetingId, int recordingId) =>
+        await _fixture.WithDbContextAsync(async context => (await context.MeetingRecordings
+            .Where(x => x.MeetingId == meetingId && x.Id == recordingId)
+            .Select(x => x.ProviderEgressId).SingleAsync())!);
 
     /// <summary>
     /// Phase 7 / P7.3. The declared ceilings have to hold over the real HTTP and database path, not
@@ -1030,7 +1341,10 @@ public sealed class PlannerApiFixture : IAsyncLifetime
     public int CapacityMemberUserId { get; private set; }
     public int OtherOrganizationOwnerUserId { get; private set; }
     public PlannerTestEmailService Email { get; } = new();
-    public TestMeetingMediaProvider Media { get; } = new();
+    public PlannerTestObjectStorage Storage { get; } = new();
+    public TestMeetingMediaProvider Media { get; }
+
+    public PlannerApiFixture() => Media = new TestMeetingMediaProvider(Storage);
 
     public async Task InitializeAsync()
     {
@@ -1079,6 +1393,7 @@ public sealed class PlannerApiFixture : IAsyncLifetime
                         ["ObjectStorage:LocalPath"] = "App_Data/integration-test-objects",
                         ["Meetings:Enabled"] = "true",
                         ["Meetings:GuestsEnabled"] = "true",
+                        ["Meetings:RecordingEnabled"] = "true",
                         // Small on purpose: a ceiling nobody can reach in a test proves nothing.
                         // These are per meeting, and every test uses its own meeting.
                         ["Meetings:MaxMessagesPerMeeting"] = "10",
@@ -1094,7 +1409,7 @@ public sealed class PlannerApiFixture : IAsyncLifetime
                 builder.ConfigureTestServices(services =>
                 {
                     services.RemoveAll<IObjectStorage>();
-                    services.AddSingleton<IObjectStorage, PlannerTestObjectStorage>();
+                    services.AddSingleton<IObjectStorage>(Storage);
                     services.RemoveAll<IEmailService>();
                     services.AddSingleton<IEmailService>(Email);
                     services.RemoveAll<IMeetingMediaProvider>();
@@ -1312,12 +1627,55 @@ public sealed class PlannerApiFixture : IAsyncLifetime
 
 public sealed record MeetingEvidence(string RoomName, int AttendanceCount, int ReceiptCount);
 
-public sealed class TestMeetingMediaProvider : IMeetingMediaProvider
+/// <summary>
+/// Phase 7 / P7.5. Stands in for LiveKit across the whole recording lifecycle, because that leg of
+/// the critical journey cannot be driven any other way: the API only ever learns what a recording is
+/// doing from the provider — the live roster it reads before asking for consent, the start/stop calls
+/// it makes, and the signed Egress webhooks it is sent afterwards.
+///
+/// Every fault knob is keyed by room name rather than being a global flag. One fixture is shared by
+/// the whole test class, so a global "make the roster unreadable" switch would leak into whichever
+/// test happened to run next.
+/// </summary>
+public sealed class TestMeetingMediaProvider(PlannerTestObjectStorage storage) : IMeetingMediaProvider
 {
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, IReadOnlyList<string>> _rosters = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> _unreadableRosters = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> _refusingRooms = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _egressStorageKeys = new();
+    private int _nextEgressId;
+
     public const string Authorization = "Test meeting-webhook-signature";
     public bool IsEnabled => true;
     public string WebSocketUrl => "ws://livekit.integration.test";
     public System.Collections.Concurrent.ConcurrentBag<string> RemovedPrefixes { get; } = [];
+    public System.Collections.Concurrent.ConcurrentBag<string> StartedRecordingRooms { get; } = [];
+    public System.Collections.Concurrent.ConcurrentBag<string> StoppedEgressIds { get; } = [];
+
+    /// <summary>Who the provider will say is connected to <paramref name="roomName"/> right now.</summary>
+    public void SetRoster(string roomName, params string[] identities) => _rosters[roomName] = identities;
+
+    /// <summary>Makes the live-roster read throw, the way an unreachable or erroring LiveKit does.</summary>
+    public void MakeRosterUnreadable(string roomName) => _unreadableRosters[roomName] = 0;
+
+    /// <summary>Lets the room answer again, so one test can drive both the refusal and the recovery.</summary>
+    public void ClearRosterFault(string roomName) => _unreadableRosters.TryRemove(roomName, out _);
+
+    /// <summary>Makes the Egress start call throw after consent has already been collected.</summary>
+    public void MakeRecordingStartFail(string roomName) => _refusingRooms[roomName] = 0;
+
+    /// <summary>
+    /// Writes the composite file to the bucket under the key the API handed to
+    /// <see cref="StartRoomRecordingAsync"/>, which is what Egress does before it sends its
+    /// completion webhook. Playback reads exactly that key, so a test that skipped this step would
+    /// be asserting against a file the real system would have written and this one never did.
+    /// </summary>
+    public async Task DeliverRecordingFileAsync(string providerEgressId, byte[] content)
+    {
+        var storageKey = _egressStorageKeys[providerEgressId];
+        using var buffer = new MemoryStream(content);
+        await storage.UploadAsync(storageKey, buffer, "video/mp4");
+    }
 
     public MeetingJoinToken CreateJoinToken(MeetingJoinTokenRequest request) =>
         new($"test-token-{request.ParticipantIdentity}", DateTimeOffset.UtcNow.Add(request.Lifetime));
@@ -1331,6 +1689,28 @@ public sealed class TestMeetingMediaProvider : IMeetingMediaProvider
 
     public Task CloseRoomAsync(string roomName, CancellationToken cancellationToken = default) => Task.CompletedTask;
 
+    public Task<IReadOnlyList<string>> ListRoomParticipantIdentitiesAsync(string roomName,
+        CancellationToken cancellationToken = default)
+    {
+        if (_unreadableRosters.ContainsKey(roomName))
+            throw new InvalidOperationException("The test provider cannot read this room's roster.");
+        return Task.FromResult(_rosters.TryGetValue(roomName, out var identities) ? identities : []);
+    }
+
+    public Task<MeetingEgressStartResult> StartRoomRecordingAsync(string roomName, string storageKey,
+        CancellationToken cancellationToken = default)
+    {
+        if (_refusingRooms.ContainsKey(roomName))
+            throw new InvalidOperationException("The test provider refused to start Egress.");
+        var providerEgressId = $"EG_test_{Interlocked.Increment(ref _nextEgressId)}";
+        _egressStorageKeys[providerEgressId] = storageKey;
+        StartedRecordingRooms.Add(roomName);
+        return Task.FromResult(new MeetingEgressStartResult(providerEgressId));
+    }
+
+    public Task StopRoomRecordingAsync(string providerEgressId, CancellationToken cancellationToken = default)
+    { StoppedEgressIds.Add(providerEgressId); return Task.CompletedTask; }
+
     public MeetingProviderWebhook VerifyWebhook(string rawBody, string authorizationHeader)
     {
         if (!string.Equals(authorizationHeader, Authorization, StringComparison.Ordinal))
@@ -1339,11 +1719,14 @@ public sealed class TestMeetingMediaProvider : IMeetingMediaProvider
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
             ?? throw new InvalidOperationException("Invalid test webhook payload.");
         return new(payload.EventId, payload.EventType, payload.RoomName, payload.ParticipantIdentity,
-            payload.ParticipantSid, payload.OccurredAtUtc);
+            payload.ParticipantSid, payload.OccurredAtUtc, payload.EgressId, payload.EgressStatus,
+            payload.EgressError, payload.EgressFileSize, payload.EgressDurationMilliseconds);
     }
 
     private sealed record TestWebhookPayload(string EventId, string EventType, string RoomName,
-        string? ParticipantIdentity, string? ParticipantSid, DateTimeOffset? OccurredAtUtc);
+        string? ParticipantIdentity, string? ParticipantSid, DateTimeOffset? OccurredAtUtc,
+        string? EgressId, string? EgressStatus, string? EgressError, long? EgressFileSize,
+        long? EgressDurationMilliseconds);
 }
 
 public sealed class PlannerTestObjectStorage : IObjectStorage

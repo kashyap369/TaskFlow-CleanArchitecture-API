@@ -926,9 +926,45 @@ them. The signal catalogue, the privacy contract and a runbook per rule are in
   lint, design lint and all 42 contrast checks pass. One route added — `GET /admin/meetings/health`
   — so the ledger moves to `181/178`.
 
-Remaining Phase 7 packages, in priority order: P7.5 critical E2E coverage; P7.6 production
-LiveKit/Redis/TURN provisioning and staged flag rollout (infrastructure, owner-gated); P7.7
-privacy/retention/support documentation.
+**Work-package checkpoint (2026-09-06) — P7.5 critical E2E coverage, DONE:**
+the critical journey is now driven end to end in one test, over real HTTP and a real PostgreSQL
+database, and so is its refusal half. Two tests in
+`TaskFlow.Tests/Api/PlannerApiIntegrationTests.cs`:
+
+- *`Meeting_CriticalJourney_FromInviteToRecordedArchive_HoldsTogetherOverTheRealPath`* walks
+  create → access link → guest OTP → admission → join tokens for host, member and guest →
+  `participant_joined` webhooks → chat, note and a guest file upload → recording request →
+  per-participant consent → Egress start → `EGRESS_ACTIVE` → stop → file delivery →
+  `EGRESS_COMPLETE` → end → archive → playback by host and by guest, with the other
+  organization's owner refused at the recording content route.
+- *`Meeting_DenialPaths_RevokeEvictsGuests_AndRecordingFailsClosed`* covers the refusals that must
+  not fail open: a non-host requesting a recording, an unreadable live roster refusing the request
+  outright, one participant declining consent (the recording fails and the provider is never asked
+  to start), and revoking a leaked link killing the guest's session **and** ejecting them from the
+  live room.
+
+- *The gap this closed is bigger than "one more test".* Every leg already had focused coverage, but
+  the integration fixture ran with `Meetings:RecordingEnabled` unset — so the recording routes, the
+  whole `PendingConsent → Starting → Recording → Processing → Ready` lifecycle and both playback
+  routes had **never been exercised over HTTP at all**. Recording was reachable only through
+  handler-level tests, where the provider, the object storage and the webhook pipeline are all
+  substituted at once.
+- *What the test provider now does, and why it matters.* `TestMeetingMediaProvider` gained the
+  Egress half of `IMeetingMediaProvider` plus per-room fault knobs (roster unreadable, start
+  refused) — keyed by room name rather than global flags, because one fixture is shared by the whole
+  class and a global switch would leak into whichever test ran next. It writes the composite file
+  into the same object storage the API reads, under the key the API handed to
+  `StartRoomRecordingAsync`; a test that skipped that step would assert against a file the real
+  system writes and the test never did.
+- *Both tests were mutation-checked rather than assumed.* Reverting the P7.2 roster fail-closed to a
+  silent empty-roster fallback fails the denial test; changing the `EGRESS_COMPLETE` branch to mark
+  `Processing` instead of `Ready` fails the journey test. Neither passes by accident.
+- *Verification:* backend `115/115` (2 new), build and EF drift clean, **no migration**, and **no
+  route added or changed** — the ledger stays at `181/178`. No frontend change: this package adds
+  backend coverage only.
+
+Remaining Phase 7 packages, in priority order: P7.6 production LiveKit/Redis/TURN provisioning and
+staged flag rollout (infrastructure, owner-gated); P7.7 privacy/retention/support documentation.
 
 **Exit criteria:** security review has no unresolved high-risk item; performance/capacity evidence meets
 declared limits; monitoring/runbooks and rollback are tested; migrations and object storage are backed
@@ -969,6 +1005,42 @@ Until approved, phases use the conservative defaults stated in this document and
 guest/recording behavior disabled in production.
 
 ## 13. Evidence and decision log
+
+- **2026-09-06 — Phase 7 / P7.5 completed (critical E2E coverage):** added two tests to
+  `TaskFlow.Tests/Api/PlannerApiIntegrationTests.cs` that drive the critical meeting journey and its
+  denial paths over real HTTP against a disposable PostgreSQL database, with only the media provider
+  substituted. `Meeting_CriticalJourney_FromInviteToRecordedArchive_HoldsTogetherOverTheRealPath`
+  runs create → access link → guest OTP → admission → join tokens → attendance webhooks →
+  chat/note/file → recording request → consent from member and guest → Egress start → active → stop
+  → file delivery → complete → end → archive → playback by host and guest, with the other
+  organization's owner refused. `Meeting_DenialPaths_RevokeEvictsGuests_AndRecordingFailsClosed`
+  covers non-host recording refusal, the unreadable-roster refusal, a declined consent failing the
+  recording without ever calling the provider, and link revocation killing a live guest session and
+  ejecting the guest from the room.
+- **What this found, which is the reason the package was worth its own run:** the integration
+  fixture had never set `Meetings:RecordingEnabled`, so every recording route was answering
+  `MEETING_RECORDING_DISABLED` and the entire recording lifecycle — consent, Egress start/stop, the
+  status webhooks and both playback routes — had **no HTTP-level coverage at all**. It was reachable
+  only through handler tests, which substitute the provider, the object storage and the webhook
+  pipeline simultaneously. Nothing was broken, but nothing was proven either; the composite-file
+  key in particular is written by one component and read by another and had never been checked to
+  agree.
+- **Test-provider design:** `TestMeetingMediaProvider` now implements the Egress half of
+  `IMeetingMediaProvider` and delivers the recording file into the same object storage the API reads
+  from, under the key the API passed to `StartRoomRecordingAsync` — the sequence real Egress
+  follows. Its fault knobs (unreadable roster, refused start) are keyed **by room name**, not global
+  flags: the fixture is shared across the class, so a global switch would leak into the next test.
+- **Both tests were mutation-checked, not assumed.** Reverting the P7.2 roster fail-closed to an
+  empty-roster fallback fails the denial test; changing the `EGRESS_COMPLETE` webhook branch to mark
+  `Processing` instead of `Ready` fails the journey test.
+- **Verification:** backend `115/115` (2 new), build and EF drift clean, **no migration**, **no
+  route added or changed** — the ledger stays at `181/178`, and `docs/ProjectCompletion.md` needs no
+  edit because the API surface did not move. No frontend change.
+- **Still unproven, and deliberately out of this package:** this is not a media test and not a load
+  test. No real browser, no real LiveKit, no two-device call, and no run has held 50 participants.
+  Those are P7.6 and the Phase 6 staging certification. Next package: **P7.6 production
+  LiveKit/Redis/TURN provisioning and staged flag rollout** — infrastructure, owner-gated, and still
+  behind the Dokploy File Mount task in `docs/PHASES.md`.
 
 - **2026-09-05 — Phase 7 / P7.4 completed (structured metrics, traces and logs):** wrote
   [MEETINGS-OBSERVABILITY.md](MEETINGS-OBSERVABILITY.md) and instrumented the meeting stack against

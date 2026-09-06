@@ -110,8 +110,14 @@ an additive migration, so the next deploy is not far off.
 Dokploy access this session did not have. P7.3 shipped **no migration**, so it does not itself force
 a deploy — but P7.2's migration still does, and this task is still the thing to do before it.
 
-After it, the next code-shaped package is **P7.4 — structured metrics, traces and logs** with
-actionable alerts and runbook entries, and no sensitive content in any field.
+**Note (2026-09-06):** P7.4 (metrics/traces/logs) and P7.5 (critical E2E coverage) have both been
+completed since. Neither shipped a migration, so neither forces a deploy — but P7.2's migration
+still does, and this File Mount task is still the thing to do before it.
+
+**Every remaining code-shaped Phase 7 package is now done.** What is left is
+**P7.6 — production LiveKit/Redis/TURN provisioning and staged flag rollout**, which is
+infrastructure and owner-gated, and **P7.7 — privacy/retention/support documentation**. P7.6 starts
+with this File Mount task, so the two are the same next step.
 
 ## ▶️ Organization Meetings resumed (2026-09-04)
 

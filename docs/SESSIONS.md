@@ -1,5 +1,34 @@
 # TaskFlow — Session Log
 
+## 2026-09-06 (Meetings Phase 7 / P7.5 — critical E2E coverage)
+
+- Added two tests to `TaskFlow.Tests/Api/PlannerApiIntegrationTests.cs` that drive the whole critical
+  meeting journey and its refusal paths over real HTTP against a disposable PostgreSQL database, with
+  only the media provider substituted: create → access link → guest OTP → admission → join tokens →
+  attendance webhooks → chat/note/file → recording request → consent → Egress start/active/stop/
+  complete → end → archive → playback; and separately, non-host recording refusal, unreadable-roster
+  refusal, declined consent, and link revocation evicting a live guest.
+- **The gotcha worth remembering: the integration fixture had never set `Meetings:RecordingEnabled`.**
+  Every recording route was quietly answering `MEETING_RECORDING_DISABLED`, so the entire recording
+  lifecycle and both playback routes had zero HTTP coverage — reachable only through handler tests,
+  which substitute the provider, the object storage and the webhook pipeline all at once. That is the
+  shape of gap to look for elsewhere: a feature flag that is off in the test fixture makes a whole
+  surface *look* covered because the tests around it pass. Nothing was actually broken, but the
+  composite-file storage key is written by one component and read by another and had never been
+  checked to agree.
+- **Decision: the fake provider's fault knobs are keyed by room name, not global flags.** One
+  `IClassFixture` is shared by every test in the class, so a global "make the roster unreadable"
+  switch leaks into whichever test runs next. Same reasoning applies to any future knob added there.
+- **Both tests were mutation-checked before being believed.** Reverting the P7.2 roster fail-closed
+  to an empty-roster fallback fails the denial test; changing the `EGRESS_COMPLETE` branch to mark
+  `Processing` instead of `Ready` fails the journey test. Worth doing routinely for a test that
+  passes on the first run against code it did not change.
+- Backend `115/115`, build and EF drift clean, no migration, no route change — so
+  `docs/ProjectCompletion.md` needed no edit and the ledger stays at `181/178`. No frontend change.
+- **Not proven by any of this:** no browser, no real LiveKit, no two-device call, no load. Next is
+  P7.6 (production LiveKit/Redis/TURN provisioning and staged rollout), which starts with the Dokploy
+  File Mount task still sitting at the top of [PHASES.md](PHASES.md).
+
 ## 2026-09-05 (Meetings Phase 7 / P7.4 — metrics, traces, logs and alerts)
 
 - Instrumented the meeting stack against a new [docs/MEETINGS-OBSERVABILITY.md](MEETINGS-OBSERVABILITY.md):
