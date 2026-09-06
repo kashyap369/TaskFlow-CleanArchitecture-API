@@ -2,6 +2,34 @@
 
 > Keep the Current Status section up to date at the end of every session.
 
+## 🟡 Organization Meetings Phase 7 — P7.7 done: privacy, retention, support and operations (2026-09-06)
+
+The policy and procedure half of Phase 7. Three new documents —
+[docs/MEETINGS-PRIVACY.md](MEETINGS-PRIVACY.md) (what one meeting stores, how long each piece
+survives, what leaves TaskFlow, how to answer a data-subject request),
+[docs/MEETINGS-SUPPORT.md](MEETINGS-SUPPORT.md) (symptom → error code → who can fix it) and
+[infra/meetings/OPERATIONS.md](../infra/meetings/OPERATIONS.md) (backup/restore, per-secret rotation
+blast radius, incident procedure) — plus a **Meetings, calls and recordings** section and a
+meeting-specific retention paragraph in the public privacy policy.
+
+Writing them against the code established six things nobody had stated. The retention sweep **never
+touches `MeetingParticipants` or `MeetingAccessLinks`**, so guest email addresses and invited
+addresses outlive the window indefinitely. `SoftDelete()` nulls no column, so chat and note bodies
+stay in PostgreSQL after retention — "unreachable", not "erased". Only `Ended` meetings with an
+`ActualEndUtc` are swept, so cancelled and abandoned meetings are permanent. Only `Ready` recordings
+have their object deleted, so a failed Egress artefact can outlive its meeting. A storage outage
+stalls the sweep silently. And rotating `JwtSettings:SecretKey` also kills every pending guest OTP,
+because `OneTimeCodeSettings:SecretKey` falls back to it and production leaves it unset.
+
+The privacy policy is worded to match that reality rather than the intent. Closing the gaps is
+proposed as **P7.8** (make retention reach participant/access-link personal data, sweep cancelled
+meetings, erase non-`Ready` recording objects) and is not required for Phase 7.
+
+Frontend typecheck, production build, `291/291` specs, lint, design lint and all 42 contrast checks
+pass. No backend change, **no migration**, no route change — the ledger stays at `181/178`. The
+OPERATIONS.md procedures are written but **not yet exercised**; no restore or rotation drill has been
+run and the document says so in its own status line. **One package remains: P7.6 infrastructure.**
+
 ## 🟡 Organization Meetings Phase 7 — P7.4 done: metrics, traces, logs and alerts (2026-09-05)
 
 Meetings now emit signals, and the failures nobody can see from a screen have rules watching them.
@@ -114,10 +142,13 @@ a deploy — but P7.2's migration still does, and this task is still the thing t
 completed since. Neither shipped a migration, so neither forces a deploy — but P7.2's migration
 still does, and this File Mount task is still the thing to do before it.
 
-**Every remaining code-shaped Phase 7 package is now done.** What is left is
-**P7.6 — production LiveKit/Redis/TURN provisioning and staged flag rollout**, which is
-infrastructure and owner-gated, and **P7.7 — privacy/retention/support documentation**. P7.6 starts
-with this File Mount task, so the two are the same next step.
+**Note (2026-09-06, later):** P7.7 (privacy/retention/support/operations documentation) is done too,
+and shipped no backend change and no migration.
+
+**P7.6 is the only Phase 7 package left**, and every other package is complete. It is production
+LiveKit/Redis/TURN provisioning, TURN verification from restrictive networks, and the staged flag
+rollout — infrastructure and owner-gated. It starts with this File Mount task, so the two are the
+same next step. P7.2's migration still forces the next deploy.
 
 ## ▶️ Organization Meetings resumed (2026-09-04)
 

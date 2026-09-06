@@ -80,11 +80,21 @@ DB: PostgreSQL, connection string `DefaultConnection`. Seeds on startup: system 
   alert rule that watches it, and the runbook for each rule. Read it before adding a metric, tag or
   log field to anything meeting-related: it carries the privacy contract (no email, token, room
   name, title or identifier in a tag) that a test enforces. Also read §5 when an alert fires.
+- [docs/MEETINGS-PRIVACY.md](docs/MEETINGS-PRIVACY.md) — what one meeting stores, how long each
+  piece survives, and what "deleted" actually does to it. Read it before changing retention, the
+  cleanup service, or any statement about how long meeting data is kept — §8 lists what the system
+  does **not** do, including the personal data retention never reaches.
+- [docs/MEETINGS-SUPPORT.md](docs/MEETINGS-SUPPORT.md) — user-facing troubleshooting: symptom →
+  error code → who can fix it, for members, guests, collaboration and recording.
 - [docs/SESSIONS.md](docs/SESSIONS.md) — session log: gotchas, dead ends, decisions
 - [infra/meetings/RUNBOOK.md](infra/meetings/RUNBOOK.md) — **production meetings triage.** What broke
   on 2026-09-04, how each fault was proved, how to read LiveKit logs, and how configuration survives
   a redeploy. Read this before diagnosing a meeting failure — three of the four faults looked like
   networking and none were.
+- [infra/meetings/OPERATIONS.md](infra/meetings/OPERATIONS.md) — backup/restore, secret rotation and
+  the meetings incident procedure. Read it before rotating any secret (the blast radius is not
+  intuitive — rotating the JWT key also invalidates pending guest OTPs) and before restoring a
+  database, which can resurrect revoked access links and their guest sessions.
 
 ## Session Habit
 At the end of each working session: update PHASES.md status, append a short entry to SESSIONS.md, **and

@@ -963,8 +963,43 @@ database, and so is its refusal half. Two tests in
   route added or changed** — the ledger stays at `181/178`. No frontend change: this package adds
   backend coverage only.
 
-Remaining Phase 7 packages, in priority order: P7.6 production LiveKit/Redis/TURN provisioning and
-staged flag rollout (infrastructure, owner-gated); P7.7 privacy/retention/support documentation.
+**Work-package checkpoint (2026-09-06) — P7.7 privacy, retention, support and operations, DONE:**
+the policy and procedure half of Phase 7. Three new documents plus the public privacy policy, and
+the writing of them turned up six things about retention that nobody had stated out loud.
+
+- *[MEETINGS-PRIVACY.md](MEETINGS-PRIVACY.md)* — a per-store inventory of what one meeting holds,
+  which columns are personal data, and which of them retention actually reaches; how the clock works;
+  what leaves TaskFlow and to whom; and a procedure for a data-subject request.
+- *[MEETINGS-SUPPORT.md](MEETINGS-SUPPORT.md)* — symptom to error code to who can fix it, for
+  members, guests, in-meeting collaboration and recording, with an explicit escalation boundary into
+  the RUNBOOK. Every message quoted is the one the API actually returns.
+- *[infra/meetings/OPERATIONS.md](../infra/meetings/OPERATIONS.md)* — what must be backed up and in
+  which order, what a restore does *not* give back, per-secret rotation blast radius, and the
+  meetings incident procedure with its containment levers.
+- *Privacy policy* — the frontend legal document gained a **Meetings, calls and recordings** section
+  and a meeting-specific retention paragraph; sharing now names the media, storage and email
+  providers. Dated 2026-09-06.
+- *What the writing found, all documented rather than papered over:* retention **never touches
+  `MeetingParticipants` or `MeetingAccessLinks`**, so guest email addresses and invited addresses
+  outlive the window indefinitely — the policy is worded to match, and the fix is proposed as P7.8.
+  `SoftDelete()` nulls no column, so chat and note bodies remain in PostgreSQL after retention. Only
+  `Ended` meetings with an `ActualEndUtc` are ever swept, leaving cancelled and abandoned meetings
+  permanent. Only `Ready` recordings have their object erased, so a failed Egress artefact can
+  outlive its meeting. A storage outage stalls the sweep silently. And rotating
+  `JwtSettings:SecretKey` also invalidates every pending guest OTP, because
+  `OneTimeCodeSettings:SecretKey` falls back to it and production leaves it unset.
+- *Verification:* documentation and one data-only frontend constant. Frontend typecheck, production
+  build, specs, lint, design lint and contrast gates pass; no backend change, **no route added or
+  changed**, so the ledger stays at `181/178`. The procedures in OPERATIONS.md are written but **not
+  yet exercised**, and the document says so in its own status line.
+
+Remaining Phase 7 packages: P7.6 production LiveKit/Redis/TURN provisioning, TURN verification from
+restrictive networks, and the staged flag rollout — infrastructure, owner-gated, and the only thing
+between Phase 7 and completion. P7.8 is proposed but not required for the phase: make retention reach
+the personal data it currently leaves behind (guest email and display name on `MeetingParticipants`,
+`LockedEmail` on `MeetingAccessLinks`), sweep cancelled and abandoned meetings, and erase non-`Ready`
+recording objects. Until P7.8 lands, [MEETINGS-PRIVACY.md](MEETINGS-PRIVACY.md) §8 is the truthful
+statement of what retention does.
 
 **Exit criteria:** security review has no unresolved high-risk item; performance/capacity evidence meets
 declared limits; monitoring/runbooks and rollback are tested; migrations and object storage are backed
@@ -1006,6 +1041,18 @@ guest/recording behavior disabled in production.
 
 ## 13. Evidence and decision log
 
+- **2026-09-06 — Phase 7 / P7.7 completed (privacy, retention, support and operations):** added
+  `docs/MEETINGS-PRIVACY.md`, `docs/MEETINGS-SUPPORT.md` and `infra/meetings/OPERATIONS.md`, and
+  extended the public privacy policy with a Meetings section and a meeting-specific retention
+  paragraph. Reading the code to write them established six previously unstated facts about
+  retention — most importantly that it never touches `MeetingParticipants` or `MeetingAccessLinks`,
+  so guest email addresses outlive the window indefinitely, and that `SoftDelete()` leaves content in
+  PostgreSQL. All six are recorded in MEETINGS-PRIVACY.md §8 and the policy is worded to match rather
+  than to the intent. **Decision:** state the gaps and close them in a separate package (P7.8) rather
+  than expand this one; the package boundary in §1 exists precisely for this. Verified: frontend
+  typecheck, production build, specs, lint, design lint and contrast pass; no backend change, no
+  migration, no route change, ledger stays at `181/178`. The OPERATIONS.md procedures are written but
+  **not exercised** — no restore or rotation drill has been run, and the document says so.
 - **2026-09-06 — Phase 7 / P7.5 completed (critical E2E coverage):** added two tests to
   `TaskFlow.Tests/Api/PlannerApiIntegrationTests.cs` that drive the critical meeting journey and its
   denial paths over real HTTP against a disposable PostgreSQL database, with only the media provider

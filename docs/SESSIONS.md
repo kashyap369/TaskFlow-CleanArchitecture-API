@@ -1,5 +1,42 @@
 # TaskFlow — Session Log
 
+## 2026-09-06 (Meetings Phase 7 / P7.7 — privacy, retention, support and operations)
+
+- Added `docs/MEETINGS-PRIVACY.md`, `docs/MEETINGS-SUPPORT.md` and `infra/meetings/OPERATIONS.md`,
+  and extended the public privacy policy (frontend `legal-documents.ts`) with a **Meetings, calls and
+  recordings** section plus a meeting-specific retention paragraph. Docs and one data-only frontend
+  constant; no backend change, no migration, no route change.
+- **The lesson of the package: writing a retention document is a way of testing retention.** Six
+  facts came out of reading `MeetingRetentionCleanupService` line by line, and not one of them was
+  visible from the roadmap:
+  - The sweep deletes assets, recordings, consents, messages, notes, note revisions and attendance.
+    It **never touches `MeetingParticipants` or `MeetingAccessLinks`** — which is exactly where the
+    guest email addresses and the invited address live. Guest emails are the most sensitive thing a
+    meeting collects and they are the one thing retention does not reach.
+  - `AuditableEntity.SoftDelete()` sets two flags and nulls no column, so "retention deleted the
+    chat" means the API cannot read it, not that PostgreSQL stopped holding it.
+  - Only `Ended` meetings **with an `ActualEndUtc`** are considered, so cancelled, abandoned and
+    stuck-`Live` meetings are permanent. (This is also why a post-restore stuck-`Live` meeting must
+    be ended rather than left alone — it never gets a retention clock otherwise.)
+  - Only `Ready` recordings have their object erased; a `Failed` one's partial artefact stays.
+  - A failed object-storage delete `continue`s the loop, so the meeting is skipped and retried later
+    — correct, but it means a storage outage silently keeps data past its declared window, and
+    nothing alerts on it.
+  - `OneTimeCodeSettings:SecretKey` falls back to `JwtSettings:SecretKey` and production leaves it
+    unset, so **rotating the JWT key invalidates every guest OTP in flight.** Easy to trip over
+    during an incident, when both rotation and guest logins are happening at once.
+- **Decision: document the gaps, do not fix them here.** The package boundary in MEETINGS.md §1
+  exists for this; the fix is proposed as P7.8. The privacy policy is worded to the behaviour that
+  exists ("no longer readable through the service", records identifying who was invited retained
+  beyond the window) rather than to the behaviour intended.
+- The OPERATIONS.md procedures are **written but unexercised** — no restore or rotation drill has
+  been run against production, and the document leads with that instead of implying otherwise.
+- Verified: frontend typecheck, production build, `291/291` specs, lint, design lint, 42/42 contrast.
+- Checked Dokploy (owner logged in) — the production environment has `api`, `frontend` and
+  `meetings-media`. The API's environment values are masked and were left that way; the meaningful
+  check for configuration propagation is the readiness panel at `/admin/settings`, which needs an
+  admin login. Nothing in Dokploy was changed.
+
 ## 2026-09-06 (Meetings Phase 7 / P7.5 — critical E2E coverage)
 
 - Added two tests to `TaskFlow.Tests/Api/PlannerApiIntegrationTests.cs` that drive the whole critical
