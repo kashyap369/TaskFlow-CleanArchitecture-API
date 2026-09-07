@@ -1,5 +1,39 @@
 # TaskFlow — Session Log
 
+## 2026-09-07 (Meetings Phase 7 / P7.6 — production TURN topology and staged rollout)
+
+- **The gap was a configuration nobody was wrong about.** RUNBOOK §4 recorded TURN as a red herring
+  for the 2026-09-04 mobile fault — correct — and in the same sentence noted it was "UDP-only with no
+  `domain`, which is genuinely incomplete". Both are true and independent. Clearing it as *that*
+  incident's cause left it unfixed, so a participant on a network permitting only `443/tcp` had no
+  path into a meeting at all: UDP `7882`, TURN/UDP `3478` and ICE/TCP `7881` are each blocked by such
+  a firewall, and the product would have shown a bare connection failure.
+- **`turn.tls_port` must be 443, and this is the trap.** With `external_tls: true` LiveKit expects
+  plaintext on `tls_port` and **still advertises that number verbatim** as the `turns:` candidate it
+  hands the browser. Behind a proxy the natural choice is 5349, which would advertise a port the
+  restricted client's own firewall rejects — every local check passes and exactly the intended users
+  fail. Verified against the upstream config sample and helm chart before writing it.
+- **Binding 443 inside the container is only safe by accident of the base image.** `livekit-server`
+  declares no `USER` and runs as root. Verified against the upstream Dockerfile rather than assumed,
+  and recorded in the compose file, because a future non-root image turns this into a startup failure
+  whose fix is `sysctl net.ipv4.ip_unprivileged_port_start=443` — `cap_add` does **not** work, since
+  Docker grants no ambient capabilities.
+- **The proof harness had to answer two different questions.** `infra/meetings/turn-check.html`
+  connects with `iceTransportPolicy: 'relay'`, which discards host and srflx candidates, so a
+  successful connection went through TURN with nothing else left to explain it. Separately it reports
+  the `iceServers` LiveKit advertised — captured by wrapping `RTCPeerConnection` rather than reading
+  livekit-client internals, which keeps it version-proof. "No `turns:443` was offered" and "the relay
+  did not work" are different faults and now read differently.
+- **The rollout file's fallback sets every `Meetings__*` flag to false.** A Dokploy File Mount is the
+  floor a deployment lands on when its environment is dropped — the 2026-09-02 failure — so the floor
+  is the safe state and the service environment raises flags above it. `ROLLOUT.md` also records that
+  rolling back with `LiveKit__Enabled=false` is wrong: it leaves meetings listed and joinable-looking
+  while every join refuses, which is that same failure wearing a different hat.
+- No backend or frontend code changed; no migration; endpoint ledger unchanged at `181/178`. The
+  harness was exercised locally against an unreachable endpoint — failure path, per-check reporting,
+  verdict and evidence capture all render. **A `PASS` needs the host**: DNS, redeploy, certificate,
+  and a device on a genuinely UDP-blocked network.
+
 ## 2026-09-07 (Meetings Phase 7 / P7.8 — retention reaches personal data)
 
 - Closed the three gaps P7.7 documented, all inside `MeetingRetentionCleanupService` plus two new

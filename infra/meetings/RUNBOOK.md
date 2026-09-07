@@ -105,6 +105,7 @@ silent until someone cannot join.
 > **STATUS (2026-09-05): NOT YET CONFIGURED — planned for the next session.** Production currently
 > relies on the manual `docker service update` values, so a redeploy can still drop them. Until the
 > File Mount exists, the post-deploy checklist below is mandatory, not a formality.
+> Configuring it is [ROLLOUT.md](ROLLOUT.md) §4, which carries the safe-floor version of the file.
 
 **Preferred: a Dokploy File Mount** (api -> **Advanced -> Volumes -> Add Volume -> File Mount**). It
 is stored in Dokploy, applied on every deploy, and keeps secrets out of git:
@@ -196,7 +197,10 @@ Recorded so the same hours are not spent twice:
 
 - **TURN / TLS.** Diagnosed as the cause of the mobile failure. It was not. TURN is configured
   UDP-only with no `domain`, which is genuinely incomplete, but media established over plain UDP
-  throughout - the phone's failure was fault B.
+  throughout - the phone's failure was fault B. The UDP-only TURN noted here as "genuinely
+  incomplete" was real, though, and was completed in P7.6: TURN/TLS on 443 via Traefik SNI. It would
+  never have explained *this* incident, but it did mean a firewalled participant could not have
+  joined at all. See [ROLLOUT.md](ROLLOUT.md) §1.
 - **The firewall.** `ufw` allows only 22/80/443, which looks alarming. It is irrelevant: Docker
   publishes ports through its own chain and bypasses ufw's INPUT rules. `7881/tcp`, `7882/udp` and
   `3478/udp` were listening and reachable the whole time.

@@ -78,6 +78,14 @@ Traefik routing, and publishes WebRTC TCP `7881`, WebRTC UDP `7882`, TURN/UDP `3
 TURN relay range `30000–30100/udp`. Configure `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` in the
 Compose environment.
 
+It also serves **TURN/TLS on 443**, terminated by Traefik and matched by SNI on
+`turn.inksphere.space`. That path is what makes a meeting reachable from a network permitting only
+`443/tcp`; without it every other path (UDP `7882`, TURN/UDP `3478`, ICE/TCP `7881`) is blocked and
+such a participant cannot join at all. `turn.tls_port` is `443` rather than the conventional `5349`
+because `external_tls` makes LiveKit advertise that number to browsers verbatim — it is the port the
+client dials. Provisioning order, certificate verification and the relay proof are in
+[ROLLOUT.md](ROLLOUT.md).
+
 After deployment, add `livekit.inksphere.space` in the Compose **Domains** tab with service `livekit`,
 container port `7880`, HTTPS enabled, then point its DNS A/AAAA record at the Dokploy server and
 redeploy the Compose stack. Ensure the host/cloud firewall accepts TCP `7881` and UDP

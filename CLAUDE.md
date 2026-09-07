@@ -92,6 +92,11 @@ DB: PostgreSQL, connection string `DefaultConnection`. Seeds on startup: system 
   on 2026-09-04, how each fault was proved, how to read LiveKit logs, and how configuration survives
   a redeploy. Read this before diagnosing a meeting failure — three of the four faults looked like
   networking and none were.
+- [infra/meetings/ROLLOUT.md](infra/meetings/ROLLOUT.md) — **production provisioning and the staged
+  flag rollout (P7.6).** The TURN/TLS topology and why `tls_port` must be 443, the relay-proof
+  harness, the File Mount that keeps configuration alive across a redeploy, and the
+  `Enabled` → `GuestsEnabled` → `RecordingEnabled` order with rollback triggers. Read it before
+  changing a `Meetings__*` flag in production or touching the TURN configuration.
 - [infra/meetings/OPERATIONS.md](infra/meetings/OPERATIONS.md) — backup/restore, secret rotation and
   the meetings incident procedure. Read it before rotating any secret (the blast radius is not
   intuitive — rotating the JWT key also invalidates pending guest OTPs) and before restoring a

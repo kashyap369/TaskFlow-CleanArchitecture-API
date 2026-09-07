@@ -1037,9 +1037,53 @@ the personal data it was leaving behind, and it reaches meetings it was never lo
   service" is now more cautious than the system behaves. That sentence lives on the frontend branch
   `meetings/p7.3-capacity`, which **was never merged into frontend `main`** — see the evidence entry.
 
-Remaining Phase 7 packages: P7.6 production LiveKit/Redis/TURN provisioning, TURN verification from
-restrictive networks, and the staged flag rollout — infrastructure, owner-gated, and now the only
-thing between Phase 7 and completion.
+Remaining Phase 7 work is **P7.6 execution only**. The package's code and configuration are
+complete (see the checkpoint below); what is left is host-side and owner-gated: applying the DNS
+record and redeploying, running the relay proof from a genuinely restrictive network, configuring the
+File Mount, and raising the three flags in stages. [`infra/meetings/ROLLOUT.md`](../infra/meetings/ROLLOUT.md)
+is the procedure and carries the evidence checklist Phase 7's exit criteria require.
+
+**Work-package checkpoint (2026-09-07) — P7.6 production topology and staged rollout, CODE COMPLETE /
+EXECUTION PENDING:** the TURN topology was incomplete in a way that no test and no alert would have
+surfaced, and the rollout had no written procedure. Both are now closed in the repository; applying
+them to the host is not.
+
+- *The gap.* TURN ran UDP-only with no `domain` and no TLS. RUNBOOK §4 had already recorded this as
+  "genuinely incomplete" while correctly clearing it as the cause of the 2026-09-04 mobile fault, and
+  the two facts are independent: it did not cause that incident, and it did mean a participant on a
+  network permitting only `443/tcp` had **no path into a meeting at all** — UDP `7882`, TURN/UDP
+  `3478` and ICE/TCP `7881` are each blocked by such a firewall. The product would have shown a
+  connection failure and no explanation.
+- *The fix.* `dokploy.compose.yml` adds TURN/TLS on `443`, terminated by Traefik and matched by SNI
+  on `turn.inksphere.space`, with `external_tls: true`.
+- *The number that is easy to get wrong.* With `external_tls`, LiveKit expects plaintext on
+  `tls_port` **and still advertises `tls_port` verbatim** as the `turns:` candidate handed to the
+  browser. It is therefore the port the client dials. The conventional 5349 — the natural choice
+  behind a proxy — would advertise a port the restricted client's own firewall rejects, and the
+  deployment would look correct while failing precisely the users TURN exists for. Verified against
+  the upstream LiveKit config sample and helm chart on 2026-09-07.
+- *Binding 443 in-container* is safe only because `livekit/livekit-server` declares no `USER` and
+  runs as root (verified against the upstream Dockerfile the same day). Recorded in the compose file
+  because a future non-root image turns this into a startup failure, and the fix is a sysctl, not
+  `cap_add`.
+- *Proving it.* [`infra/meetings/turn-check.html`](../infra/meetings/turn-check.html) connects to a
+  real meeting with `iceTransportPolicy: 'relay'`, which discards host and server-reflexive
+  candidates outright — a connection that succeeds under it went **through** TURN, because nothing
+  else was left. It separately reports the `iceServers` LiveKit advertised, captured by wrapping
+  `RTCPeerConnection` rather than reading livekit-client internals, so it answers both "was a
+  `turns:443` candidate offered" and "did media actually relay", which are different failures. It
+  emits a copyable evidence block for this log. Exercised locally against an unreachable endpoint:
+  the failure path, per-check reporting and verdict render correctly; a `PASS` requires the host.
+- *The rollout* is [`infra/meetings/ROLLOUT.md`](../infra/meetings/ROLLOUT.md): TURN provisioning with
+  certificate verification, the relay proof, the File Mount that closes RUNBOOK §2's still-open
+  configuration-persistence gap (written with all three `Meetings__*` flags **false**, so the fallback
+  floor is the safe state), then `Enabled` → `GuestsEnabled` → `RecordingEnabled` one at a time with
+  per-stage verification and rollback triggers. It records that rolling back via `LiveKit__Enabled`
+  is wrong — it leaves meetings listed and joinable-looking while every join refuses, which is the
+  2026-09-02 failure exactly.
+- *Not done, and not doable from the repository:* the DNS record, the redeploy, the certificate, a
+  `PASS` from a real restrictive network on desktop and mobile, the File Mount, the staged flag
+  raises, and the backup/restore drill OPERATIONS.md still lists as unexercised.
 
 **Exit criteria:** security review has no unresolved high-risk item; performance/capacity evidence meets
 declared limits; monitoring/runbooks and rollback are tested; migrations and object storage are backed
@@ -1081,6 +1125,23 @@ guest/recording behavior disabled in production.
 
 ## 13. Evidence and decision log
 
+- **2026-09-07 — Phase 7 / P7.6 code complete (production TURN topology and staged rollout):**
+  added TURN/TLS on 443 via Traefik SNI to `dokploy.compose.yml`, the relay-only verification harness
+  `infra/meetings/turn-check.html`, and `infra/meetings/ROLLOUT.md` covering provisioning, the
+  configuration File Mount and the three-stage flag rollout. No backend or frontend code changed; no
+  migration; ledger unchanged at `181/178`.
+- **A red herring and a real defect can be the same configuration.** RUNBOOK §4 cleared TURN as the
+  cause of the 2026-09-04 mobile fault, correctly — and that clearance quietly left a UDP-only TURN
+  in production for three days. **Decision:** record both facts side by side in the runbook rather
+  than deleting the herring entry, because the next reader needs to know it did not cause that
+  incident *and* that it was fixed for a different reason.
+- **`turn.tls_port` is 443, not 5349.** `external_tls` makes LiveKit advertise `tls_port` verbatim
+  to browsers, so the value is the port the client dials rather than an internal listen port. 5349
+  behind the proxy would have produced a deployment that passes every local check and fails every
+  firewalled user. Verified against the upstream config sample and helm chart, 2026-09-07.
+- **The rollout's fallback file sets every `Meetings__*` flag false.** A File Mount is the floor a
+  deployment lands on when its environment is dropped — the 2026-09-02 failure mode — so the floor
+  must be the safe state, with the service environment raising flags above it.
 - **2026-09-07 — Phase 7 / P7.8 completed (retention reaches personal data):** closed the three
   gaps P7.7 documented. `MeetingRetentionCleanupService` now redacts guest email addresses and
   display names on `MeetingParticipants` and the locked address on `MeetingAccessLinks` (revoking

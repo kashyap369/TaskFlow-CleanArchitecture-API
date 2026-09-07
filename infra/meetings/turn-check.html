@@ -1,0 +1,235 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TaskFlow Meetings — TURN relay check</title>
+<style>
+  :root { color-scheme: light dark; --fg:#111; --dim:#666; --bg:#fff; --line:#d8d8d8;
+          --ok:#0a7d33; --bad:#b3261e; --warn:#8a6100; --code:#f4f4f5; }
+  @media (prefers-color-scheme: dark) {
+    :root { --fg:#e9e9ea; --dim:#a1a1a6; --bg:#151517; --line:#34343a; --ok:#4ade80;
+            --bad:#ff6b61; --warn:#e3b341; --code:#202024; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:20px; max-width:760px; font:15px/1.55 system-ui,-apple-system,Segoe UI,sans-serif;
+         color:var(--fg); background:var(--bg); }
+  h1 { font-size:19px; margin:0 0 4px; }
+  p.sub { color:var(--dim); margin:0 0 20px; }
+  label { display:block; font-weight:600; margin:14px 0 4px; font-size:13px; }
+  input[type=text], textarea { width:100%; padding:10px; font:13px/1.4 ui-monospace,Menlo,Consolas,monospace;
+         border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--fg); }
+  textarea { height:84px; resize:vertical; }
+  .row { display:flex; gap:10px; align-items:center; margin:16px 0; flex-wrap:wrap; }
+  button { padding:11px 18px; font-size:15px; font-weight:600; border-radius:8px; border:1px solid var(--line);
+           background:var(--fg); color:var(--bg); cursor:pointer; }
+  button.secondary { background:transparent; color:var(--fg); }
+  button[disabled] { opacity:.5; cursor:default; }
+  .verdict { margin:20px 0 10px; padding:14px 16px; border-radius:10px; border:1px solid var(--line);
+             font-weight:600; }
+  .verdict.ok { border-color:var(--ok); color:var(--ok); }
+  .verdict.bad { border-color:var(--bad); color:var(--bad); }
+  .verdict.warn { border-color:var(--warn); color:var(--warn); }
+  pre { background:var(--code); padding:12px; border-radius:8px; overflow-x:auto; font-size:12px; }
+  .check { margin:6px 0; }
+  small { color:var(--dim); }
+</style>
+
+<h1>TURN relay check</h1>
+<p class="sub">Proves a browser on <em>this</em> network can reach a TaskFlow meeting when only TURN is
+available. Run it from the restrictive network you need evidence for.</p>
+
+<label for="url">LiveKit URL</label>
+<input id="url" type="text" value="wss://livekit.inksphere.space" spellcheck="false">
+
+<label for="token">Join token</label>
+<textarea id="token" spellcheck="false" placeholder="Paste a join token from POST /api/meeting/{id}/join-token"></textarea>
+<small>Tokens are short-lived. Issue a fresh one immediately before running this.</small>
+
+<div class="row">
+  <label style="margin:0;font-weight:400"><input type="checkbox" id="mic"> Publish microphone (needs https)</label>
+</div>
+
+<div class="row">
+  <button id="run">Run check</button>
+  <button id="copy" class="secondary" disabled>Copy evidence</button>
+</div>
+
+<div id="verdict"></div>
+<div id="checks"></div>
+<pre id="log" hidden></pre>
+
+<script src="https://cdn.jsdelivr.net/npm/livekit-client@2.22.1/dist/livekit-client.umd.js"></script>
+<script>
+// Capture every RTCPeerConnection LiveKit builds, together with the config it was built with. This
+// is the whole point of the harness: the iceServers list is what the server ADVERTISED, which is a
+// different question from whether the relay then worked, and only that config object holds it.
+// Reading it here keeps the check independent of livekit-client's internals.
+const peers = [];
+const NativePC = window.RTCPeerConnection;
+window.RTCPeerConnection = function (config, ...rest) {
+  const pc = new NativePC(config, ...rest);
+  peers.push({ pc, config });
+  return pc;
+};
+window.RTCPeerConnection.prototype = NativePC.prototype;
+
+const LK = window.LivekitClient || window.LiveKitClient;
+const $ = (id) => document.getElementById(id);
+const lines = [];
+function log(msg) {
+  lines.push(msg);
+  $('log').hidden = false;
+  $('log').textContent = lines.join('\n');
+}
+
+// Read the token from the fragment so it can be sent to a phone as a link without landing in a
+// server log or a history entry — the same reason guest access links carry their secret there.
+(function prefill() {
+  const f = new URLSearchParams(location.hash.slice(1));
+  if (f.get('url')) $('url').value = f.get('url');
+  if (f.get('token')) $('token').value = f.get('token');
+  if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+})();
+
+function renderChecks(items) {
+  $('checks').innerHTML = items.map(function (item) {
+    const state = item[0], label = item[1], detail = item[2];
+    const mark = state === 'ok' ? '&#10003;' : state === 'bad' ? '&#10007;' : '&#8226;';
+    const color = state === 'ok' ? 'var(--ok)' : state === 'bad' ? 'var(--bad)' : 'var(--warn)';
+    return '<div class="check"><b style="color:' + color + '">' + mark + '</b> ' + label +
+           (detail ? ' &mdash; <small>' + detail + '</small>' : '') + '</div>';
+  }).join('');
+}
+
+async function selectedPair(pc) {
+  const stats = await pc.getStats();
+  const byId = new Map();
+  stats.forEach((r) => byId.set(r.id, r));
+  let pair = null;
+  stats.forEach((r) => {
+    if (r.type !== 'candidate-pair') return;
+    // Chrome sets `selected`; Firefox only nominates a succeeded pair.
+    if (r.selected || (r.state === 'succeeded' && r.nominated)) pair = r;
+  });
+  if (!pair) return null;
+  return { pair: pair, local: byId.get(pair.localCandidateId), remote: byId.get(pair.remoteCandidateId) };
+}
+
+let evidence = '';
+
+$('run').onclick = async () => {
+  const url = $('url').value.trim();
+  const token = $('token').value.trim();
+  if (!url || !token) { alert('LiveKit URL and join token are both required.'); return; }
+  if (!LK) { alert('livekit-client failed to load. Check network access to the CDN.'); return; }
+
+  $('run').disabled = true;
+  $('copy').disabled = true;
+  $('verdict').innerHTML = '<div class="verdict warn">Connecting with relay-only ICE&hellip;</div>';
+  lines.length = 0;
+  peers.length = 0;
+
+  const room = new LK.Room();
+  let connected = false;
+  let failure = null;
+
+  try {
+    // iceTransportPolicy 'relay' discards host and server-reflexive candidates outright. If this
+    // connects, it connected THROUGH the TURN server — no other path was left for it to take,
+    // which is what makes the result evidence rather than an inference.
+    await room.connect(url, token, {
+      rtcConfig: { iceTransportPolicy: 'relay' },
+      autoSubscribe: true
+    });
+    connected = true;
+    log('connected: room "' + room.name + '" as "' + room.localParticipant.identity + '"');
+
+    if ($('mic').checked) {
+      try {
+        await room.localParticipant.setMicrophoneEnabled(true);
+        log('microphone published over the relay');
+      } catch (e) {
+        log('microphone publish failed (not fatal for the TURN result): ' + e.message);
+      }
+    }
+
+    // Let ICE settle on a pair before reading stats.
+    await new Promise((r) => setTimeout(r, 2500));
+  } catch (e) {
+    failure = e;
+    log('connect failed: ' + (e && e.message ? e.message : String(e)));
+  }
+
+  // What did the server advertise?
+  const advertised = [];
+  peers.forEach(function (entry) {
+    const servers = (entry.config && entry.config.iceServers) || [];
+    servers.forEach(function (s) {
+      [].concat(s.urls || s.url || []).forEach(function (u) { advertised.push(u); });
+    });
+  });
+  const uniqueAdvertised = Array.from(new Set(advertised));
+  const turnsOn443 = uniqueAdvertised.some((u) => u.indexOf('turns:') === 0 && /:443(\?|$)/.test(u));
+  const anyTurn = uniqueAdvertised.some((u) => u.indexOf('turn:') === 0 || u.indexOf('turns:') === 0);
+
+  // What actually carried the media?
+  let relayed = false, pairDetail = '';
+  for (const entry of peers) {
+    const found = await selectedPair(entry.pc).catch(() => null);
+    if (!found || !found.local) continue;
+    if (found.local.candidateType === 'relay') {
+      relayed = true;
+      const proto = found.local.relayProtocol || found.local.protocol || '?';
+      pairDetail = 'relay/' + proto + ' -> ' + (found.remote ? found.remote.candidateType : '?');
+    }
+  }
+
+  renderChecks([
+    [anyTurn ? 'ok' : 'bad', 'LiveKit advertised a TURN server',
+      uniqueAdvertised.length ? uniqueAdvertised.join(', ') : 'no ICE servers offered'],
+    [turnsOn443 ? 'ok' : 'warn', 'A turns: candidate on port 443 was advertised',
+      turnsOn443 ? 'reachable from networks that allow only 443/tcp'
+                 : 'without this, a UDP-blocked client has no path in'],
+    [connected ? 'ok' : 'bad', 'Relay-only connection established',
+      connected ? 'host and srflx candidates were disabled'
+                : (failure ? failure.message : 'failed')],
+    [relayed ? 'ok' : (connected ? 'warn' : 'bad'), 'Media path used a relay candidate',
+      relayed ? pairDetail : 'no selected relay candidate pair observed']
+  ]);
+
+  const pass = connected && relayed && turnsOn443;
+  const partial = connected && relayed;
+  $('verdict').innerHTML = pass
+    ? '<div class="verdict ok">PASS &mdash; this network can join a meeting over TURN/TLS on 443.</div>'
+    : partial
+      ? '<div class="verdict warn">PARTIAL &mdash; the relay worked, but not over turns:443. A stricter network may still fail.</div>'
+      : '<div class="verdict bad">FAIL &mdash; this network cannot reach a meeting when only TURN is available.</div>';
+
+  evidence = [
+    'TaskFlow Meetings — TURN relay check',
+    'timestamp:  ' + new Date().toISOString(),
+    'livekit:    ' + url,
+    'user agent: ' + navigator.userAgent,
+    'advertised: ' + (uniqueAdvertised.join(', ') || 'none'),
+    'connected:  ' + connected,
+    'relayed:    ' + relayed + (pairDetail ? ' (' + pairDetail + ')' : ''),
+    'verdict:    ' + (pass ? 'PASS' : partial ? 'PARTIAL' : 'FAIL'),
+    '',
+    lines.join('\n')
+  ].join('\n');
+
+  try { await room.disconnect(); } catch (ignored) { /* the check is already recorded */ }
+  $('run').disabled = false;
+  $('copy').disabled = false;
+};
+
+$('copy').onclick = async () => {
+  try {
+    await navigator.clipboard.writeText(evidence);
+    $('copy').textContent = 'Copied';
+    setTimeout(() => ($('copy').textContent = 'Copy evidence'), 1500);
+  } catch (ignored) {
+    $('log').hidden = false;
+    $('log').textContent = evidence;
+  }
+};
+</script>

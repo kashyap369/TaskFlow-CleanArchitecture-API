@@ -36,11 +36,29 @@ services:
             - https://api.inksphere.space/api/meeting/webhooks/livekit
         turn:
           enabled: true
+          # Must match the TLS certificate Traefik serves for the TURN SNI router below.
+          domain: turn.inksphere.space
+          # Traefik terminates TLS on 443 and forwards plaintext to tls_port, so LiveKit must
+          # NOT hold a certificate itself. What makes this subtle: with external_tls LiveKit still
+          # advertises `tls_port` verbatim as the turns: candidate it hands to browsers. The number
+          # here is therefore the port a client DIALS, not an internal one — set it to anything but
+          # 443 and a UDP-blocked client is handed a candidate its own firewall rejects, which is
+          # the exact failure this router exists to remove.
+          # Binding 443 inside the container is only safe because livekit/livekit-server declares no
+          # USER and runs as root (verified against the upstream Dockerfile, 2026-09-07). If a future
+          # image drops to a non-root user this bind fails with "permission denied" at startup and
+          # needs sysctl net.ipv4.ip_unprivileged_port_start=443 — cap_add alone will not fix it,
+          # because Docker adds no ambient capabilities.
+          external_tls: true
+          tls_port: 443
           udp_port: 3478
           relay_range_start: 30000
           relay_range_end: 30100
     expose:
       - "7880"
+      # Plaintext TURN/TLS target for the Traefik router. Never publish this to the host: it is
+      # unencrypted, and it is only safe because Traefik is the sole thing that can reach it.
+      - "443"
     ports:
       - target: 7881
         published: 7881
@@ -60,6 +78,21 @@ services:
       - dokploy-network
     deploy:
       replicas: 1
+      # Traefik's Swarm provider reads labels from `deploy.labels`, not from a service-level
+      # `labels:` block. If this stack is ever deployed with plain `docker compose` instead of as a
+      # Swarm stack, these must move up to `labels:` on the service or Traefik will not see them
+      # and TURN/TLS will silently stay unrouted while everything else keeps working.
+      labels:
+        - traefik.enable=true
+        - traefik.docker.network=dokploy-network
+        # A TCP router matching on SNI. It shares entrypoint 443 with the ordinary HTTP router for
+        # livekit.inksphere.space; the two never collide because they match different SNI names.
+        - traefik.tcp.routers.livekit-turn.rule=HostSNI(`turn.inksphere.space`)
+        - traefik.tcp.routers.livekit-turn.entrypoints=websecure
+        - traefik.tcp.routers.livekit-turn.tls=true
+        - traefik.tcp.routers.livekit-turn.tls.certresolver=letsencrypt
+        - traefik.tcp.routers.livekit-turn.service=livekit-turn
+        - traefik.tcp.services.livekit-turn.loadbalancer.server.port=443
       resources:
         limits:
           cpus: "2.00"

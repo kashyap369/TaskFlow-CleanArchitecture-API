@@ -2,6 +2,27 @@
 
 > Keep the Current Status section up to date at the end of every session.
 
+## 🟡 Organization Meetings Phase 7 — P7.6 code complete: production TURN and staged rollout (2026-09-07)
+
+Production TURN was UDP-only with no domain or TLS, so a participant on a network permitting only
+`443/tcp` had no path into a meeting at all. RUNBOOK §4 had cleared TURN as the cause of the
+2026-09-04 mobile fault — correctly — and that clearance left the real gap in place.
+
+- **TURN/TLS on 443**, terminated by Traefik and matched by SNI on `turn.inksphere.space`, added to
+  `dokploy.compose.yml` with `external_tls: true`. `tls_port` is `443` rather than 5349 because
+  LiveKit advertises that number verbatim to browsers: it is the port the client dials.
+- **`infra/meetings/turn-check.html`** proves it. Relay-only ICE means a successful connection went
+  through TURN with no other path left, and the harness separately reports which ICE servers were
+  advertised, so "no `turns:443` offered" and "the relay failed" read differently.
+- **`infra/meetings/ROLLOUT.md`** carries provisioning order, certificate verification, the File Mount
+  that closes RUNBOOK §2's configuration-persistence gap, and the `Enabled` → `GuestsEnabled` →
+  `RecordingEnabled` staging with per-stage verification and rollback triggers.
+
+No code, migration or endpoint change — ledger stays `181/178`. **Execution is host-side and pending:**
+DNS, redeploy, certificate, a `PASS` from a real restrictive network on desktop and mobile, the File
+Mount, and the staged flag raises. Recording additionally stays gated on Phase 6's playable-MP4 and
+legal decision.
+
 ## 🟡 Organization Meetings Phase 7 — P7.8 done: retention reaches personal data (2026-09-07)
 
 The three gaps P7.7 wrote down are closed in `MeetingRetentionCleanupService`.
