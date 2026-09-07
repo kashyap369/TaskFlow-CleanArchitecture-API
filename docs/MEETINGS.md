@@ -1125,6 +1125,23 @@ guest/recording behavior disabled in production.
 
 ## 13. Evidence and decision log
 
+- **2026-09-07 — P7.6 partially executed in production (deployed; DNS outstanding):** the P7.6 push
+  redeployed `meetings-media` immediately, because it is a Dokploy Compose service using the **Git
+  provider with Auto Deploy on**, tracking `main`. LiveKit came back healthy (`200 OK`, 44ms), which
+  **proves the in-container 443 bind in production** — the single largest risk in the change, and the
+  reason the root-user check was done up front rather than assumed. Remaining: `turn.inksphere.space`
+  is still `NXDOMAIN`, so Traefik serves `CN=TRAEFIK DEFAULT CERT` for that SNI and the TURN/TLS path
+  is deployed but not yet usable. Add an A record to `72.61.231.225` and re-check the subject.
+- **Any push to `main` restarts LiveKit and ends every room in progress.** Auto Deploy watches the
+  repository, not the paths inside it, so a documentation-only commit redeploys the media stack.
+  `infra/meetings/dokploy.compose.yml` is therefore not a reference copy of production — it *is*
+  production, applied on the next push. **Decision:** record this in RUNBOOK §1b rather than relying
+  on whoever pushes next to know it, and time pushes when meetings may be live.
+- **A stack missing from Dokploy's sidebar is not a stack that stopped existing.** After the platform
+  upgrade `meetings-media` no longer appears in the left sidebar; it is a Compose service under
+  Projects → Taskflow → production, and Swarm keeps running it regardless of what the panel shows.
+  Reasoning from its absence produced a wrong conclusion about whether pushes deploy it. RUNBOOK §3
+  now names the real path and prefers `docker stack services` / `docker service logs` over the UI.
 - **2026-09-07 — Phase 7 / P7.6 code complete (production TURN topology and staged rollout):**
   added TURN/TLS on 443 via Traefik SNI to `dokploy.compose.yml`, the relay-only verification harness
   `infra/meetings/turn-check.html`, and `infra/meetings/ROLLOUT.md` covering provisioning, the

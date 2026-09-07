@@ -96,6 +96,22 @@ order and the still-open legal/consent gate.
 
 ---
 
+## 1b. How this stack gets deployed (and why a docs commit can drop a call)
+
+`meetings-media` is a Dokploy **Compose service with the Git provider and Auto Deploy ON**, tracking
+`main` of the API repository. Two consequences that are not obvious and have already bitten once:
+
+- **Any push to `main` redeploys it** - including a commit that touches only documentation. Dokploy
+  watches the repository, not the paths inside it.
+- **A redeploy restarts LiveKit, and restarting LiveKit ends every room in progress.** Participants
+  are dropped and must rejoin. There is no drain or handover.
+
+So `infra/meetings/dokploy.compose.yml` is not a reference copy of production - it *is* production,
+applied on the next push. Treat an edit to it as a deployment, and time pushes to `main` accordingly
+when meetings may be live. Confirmed 2026-09-07, after a P7.6 push redeployed the stack immediately.
+
+---
+
 ## 2. Surviving a redeploy
 
 Anything applied with `docker service update --env-add` lives **outside** Dokploy. A Dokploy deploy
@@ -170,7 +186,23 @@ is fixed and this checklist becomes a formality.
 
 ## 3. Reading LiveKit logs without drowning
 
-Dokploy -> **meetings-media -> Logs -> container `...-livekit-1`**. Individual entries are enormous
+Dokploy -> **Projects -> Taskflow -> production -> meetings-media -> Logs**. The stack is not in the
+left sidebar; it is a Compose service inside the project, which is easy to read as "it is gone" after
+a Dokploy upgrade when the services are in fact running normally.
+
+Swarm is the authority regardless of what the panel shows, so prefer the CLI when the UI is
+uncertain:
+
+```bash
+docker stack services meetings-media
+```
+
+```bash
+docker service logs -f --tail 200 meetings-media_livekit
+```
+
+`docker stack services` is also the fastest answer to "did the last deploy actually come up" - a
+replica count of `0/1` means the container is failing to start, which the logs will then explain. Individual entries are enormous
 (a join logs the entire SDP), so filter to the lifecycle lines: `starting RTC session`,
 `participant active`, `participant closing`, `room closed`.
 

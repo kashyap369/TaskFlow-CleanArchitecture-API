@@ -84,8 +84,11 @@ and `7882`, `3478` and `30000–30100` on UDP. Note from RUNBOOK §4 that `ufw` 
 here — Docker publishes through its own chain and bypasses ufw's INPUT rules — so check the cloud
 provider's security group, not just the host.
 
-**3. Redeploy `meetings-media`.** The Traefik labels live in `deploy.labels`, which is where Traefik's
-Swarm provider reads them. If this stack is ever switched to plain `docker compose`, they must move to
+**3. Redeploy `meetings-media`.** Note that this is usually **not a manual step**: the stack is a
+Dokploy Compose service with the Git provider and Auto Deploy on, so it redeploys on any push to
+`main` — a documentation-only commit included — and each redeploy restarts LiveKit and ends every
+room in progress. Push deliberately. The Traefik labels live in `deploy.labels`, which is where
+Traefik's Swarm provider reads them. If this stack is ever switched to plain `docker compose`, they must move to
 a service-level `labels:` block or TURN/TLS silently stays unrouted while everything else keeps
 working.
 
