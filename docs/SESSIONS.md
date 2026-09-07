@@ -1,5 +1,36 @@
 # TaskFlow — Session Log
 
+## 2026-09-07 (Meetings Phase 7 / P7.6 — TURN/TLS deployed and proven in production)
+
+- **The deployment model was not what anyone had written down.** `meetings-media` is a Dokploy Compose
+  service on the **Raw provider**, so the compose is pasted into Dokploy and no push to `main` has
+  ever deployed it. Two commits earlier in the same day asserted the opposite (git + auto-deploy) and
+  were corrected. Consequence worth keeping: `infra/meetings/dokploy.compose.yml` is a **reference
+  copy that can drift**, and it already had — it carried an `egress` service production has never run.
+  Pasting the repository file wholesale would have put a Chromium/GStreamer worker on a host
+  RECORDING.md says lacks the headroom for one. Only the LiveKit changes were applied.
+- **Reasoning from a UI absence produced a wrong conclusion.** The stack had stopped appearing in
+  Dokploy's sidebar after the platform upgrade, and that was read as "Dokploy no longer manages it".
+  It is a Compose service under Projects → Taskflow → production, running normally. Swarm keeps
+  services alive regardless of what the panel lists; the panel is not evidence about deployment.
+- **A certificate is not proof that a route works.** After the deploy, `CN=turn.inksphere.space`
+  issued and it would have been easy to call the job done. Traefik terminates TLS at the edge, so the
+  certificate says nothing about whether anything answers behind it. A **STUN Binding Request** needs
+  no credentials, so a working TURN server replies to one: the response came back `01 01` with the
+  transaction ID echoed, which proves client → TLS 443 → Traefik → LiveKit TURN end to end. Recorded
+  as a reusable command in ROLLOUT.md §2 step 6.
+- **The label-collision risk was real but did not fire.** Dokploy generates its own Traefik labels for
+  the `livekit.inksphere.space` domain; hand-written `labels:`/`deploy.labels:` on the same service
+  could have replaced them and taken down every meeting rather than just TURN. They coexist. The
+  labels are declared in **both** places deliberately, because this Traefik runs the Docker *and*
+  Swarm providers and they read different locations — idempotent, and it removes a silent failure mode
+  where the router never registers at all.
+- **Still open, and the one that quietly undoes this work:** the `appsettings.Production.json` File
+  Mount is still not configured, and the **api** service *is* git auto-deployed — so a deploy can drop
+  `LiveKit__*` and nothing reports it until someone is refused at join. ROLLOUT.md §7 is the ordered
+  resume list.
+- No code, no migration, ledger unchanged at `181/178`.
+
 ## 2026-09-07 (Meetings Phase 7 / P7.6 — production TURN topology and staged rollout)
 
 - **The gap was a configuration nobody was wrong about.** RUNBOOK §4 recorded TURN as a red herring

@@ -1037,11 +1037,12 @@ the personal data it was leaving behind, and it reaches meetings it was never lo
   service" is now more cautious than the system behaves. That sentence lives on the frontend branch
   `meetings/p7.3-capacity`, which **was never merged into frontend `main`** — see the evidence entry.
 
-Remaining Phase 7 work is **P7.6 execution only**. The package's code and configuration are
-complete (see the checkpoint below); what is left is host-side and owner-gated: applying the DNS
-record and redeploying, running the relay proof from a genuinely restrictive network, configuring the
-File Mount, and raising the three flags in stages. [`infra/meetings/ROLLOUT.md`](../infra/meetings/ROLLOUT.md)
-is the procedure and carries the evidence checklist Phase 7's exit criteria require.
+Remaining Phase 7 work is **P7.6 evidence and rollout**. The topology is complete, deployed and
+proven as of 2026-09-07: TURN/TLS on 443 is live, certificated, and answers a STUN Binding Request
+end to end. What is left is host-side and owner-gated — the relay `PASS` from a genuinely restrictive
+network, the `appsettings.Production.json` File Mount, the staged flag raises, and the backup/restore
+drill. [`infra/meetings/ROLLOUT.md`](../infra/meetings/ROLLOUT.md) §7 is the ordered resume list and
+§6 the evidence checklist Phase 7's exit criteria require.
 
 **Work-package checkpoint (2026-09-07) — P7.6 production topology and staged rollout, CODE COMPLETE /
 EXECUTION PENDING:** the TURN topology was incomplete in a way that no test and no alert would have
@@ -1081,9 +1082,12 @@ them to the host is not.
   per-stage verification and rollback triggers. It records that rolling back via `LiveKit__Enabled`
   is wrong — it leaves meetings listed and joinable-looking while every join refuses, which is the
   2026-09-02 failure exactly.
-- *Not done, and not doable from the repository:* the DNS record, the redeploy, the certificate, a
-  `PASS` from a real restrictive network on desktop and mobile, the File Mount, the staged flag
-  raises, and the backup/restore drill OPERATIONS.md still lists as unexercised.
+- *Executed 2026-09-07:* DNS, the (manual, Raw-provider) deploy, the certificate and an end-to-end
+  STUN proof are all done — see the evidence log. **Still outstanding:** a `PASS` from a real
+  restrictive network on desktop and mobile, the `appsettings.Production.json` File Mount, the staged
+  flag raises, and the backup/restore drill OPERATIONS.md still lists as unexercised.
+  [`infra/meetings/ROLLOUT.md`](../infra/meetings/ROLLOUT.md) §7 is the ordered resume list — start
+  there in the next session.
 
 **Exit criteria:** security review has no unresolved high-risk item; performance/capacity evidence meets
 declared limits; monitoring/runbooks and rollback are tested; migrations and object storage are backed
@@ -1125,6 +1129,14 @@ guest/recording behavior disabled in production.
 
 ## 13. Evidence and decision log
 
+- **2026-09-07 — a certificate is not proof that a route works.** After the deploy issued
+  `CN=turn.inksphere.space` it would have been easy to call P7.6 done. Traefik terminates TLS at the
+  edge, so the certificate says nothing about whether LiveKit answers behind it. A **STUN Binding
+  Request** requires no credentials, so a working TURN server replies to one: the response returned
+  `01 01` (Binding Success) with the transaction ID echoed, proving client → TLS 443 → Traefik →
+  LiveKit TURN end to end. **Decision:** keep this as a standing verification step
+  ([ROLLOUT.md](../infra/meetings/ROLLOUT.md) §2 step 6) rather than a one-off, because "the cert
+  exists" and "the relay answers" fail independently and only the second one matters to a user.
 - **2026-09-07 — P7.6 TURN/TLS is live in production.** `turn.inksphere.space` resolves to
   `72.61.231.225`, Traefik issued `CN=turn.inksphere.space` (valid to 2026-12-06), and
   `livekit.inksphere.space` kept routing throughout (`200 OK`, cert unchanged). LiveKit came up with

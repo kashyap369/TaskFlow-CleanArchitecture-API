@@ -112,6 +112,23 @@ docker exec $(docker ps -qf name=livekit) sh -c "netstat -lnt | grep ':443'"
 
 Nothing listening means the container failed the bind — check its logs for `permission denied`.
 
+**6. Prove the path end to end.** The certificate only shows Traefik is listening; it says nothing
+about whether traffic reaches LiveKit behind it. A STUN Binding Request needs no credentials, so a
+working TURN server answers one — and a reply proves Traefik is forwarding, not just terminating TLS:
+
+```bash
+echo 'AAEAACESpEJBQkNERUZHSElKS0w=' | base64 -d > /tmp/stun.bin
+```
+
+```bash
+timeout 20 openssl s_client -connect turn.inksphere.space:443 -servername turn.inksphere.space -quiet -no_ign_eof < /tmp/stun.bin 2>/dev/null | od -An -tx1 | head -4
+```
+
+A reply starting `01 01` (Binding Success) that echoes the transaction ID `41 42 … 4c` means the
+whole chain works. No reply, or an immediate close after the handshake, means the router exists but
+its backend does not answer — check that LiveKit bound 443 (step 5). The mapped address in the reply
+will be Traefik's own overlay address, not yours, because Traefik proxies at L4; that is expected.
+
 ---
 
 ## 3. Stage 1 — prove TURN from a restrictive network
@@ -258,9 +275,33 @@ exact confusing failure that deferred the rollout on 2026-09-02. Lower the `Meet
 Phase 7's exit criteria are met only when all of these are recorded in the MEETINGS.md evidence log
 and the ProjectCompletion ledger:
 
-- [ ] `dig` and `openssl s_client` output showing `turn.inksphere.space` resolving with a real certificate
+- [x] **2026-09-07** — `turn.inksphere.space` resolves to `72.61.231.225`; Traefik serves
+      `CN=turn.inksphere.space`, valid to 2026-12-06
+- [x] **2026-09-07** — STUN Binding Success returned through Traefik (`01 01`, transaction ID echoed),
+      proving the client → TLS 443 → Traefik → LiveKit TURN chain end to end
+- [x] **2026-09-07** — `livekit.inksphere.space` kept routing across the deploy, so the hand-written
+      Traefik labels do not clobber Dokploy's generated domain labels
 - [ ] A `PASS` evidence block from `turn-check.html` on a genuinely UDP-blocked network, desktop and mobile
 - [ ] A deploy completing with the File Mount in place and readiness still **Ready**, with no `docker service update`
 - [ ] Production health and one synthetic meeting after stage 3a
 - [ ] A backup taken and a restore rehearsed per [OPERATIONS.md](OPERATIONS.md) — still unexercised as of 2026-09-07
 - [ ] The stage 3b guest verification, including link revocation ejecting a live guest
+
+---
+
+## 7. Resume here
+
+State as of **2026-09-07**: the TURN topology is complete, deployed and proven. What remains is
+evidence and rollout, in this order.
+
+| # | Next action | Who / where | Blocks |
+|---|---|---|---|
+| 1 | Confirm flag state and post-deploy health at `/admin/settings` → **Meetings readiness** | platform admin | nothing; do it first, it is one look |
+| 2 | Run `turn-check.html` from a UDP-blocked network, desktop **and** mobile; paste the evidence block into MEETINGS.md §13 | you, on that network | the P7.6 exit criterion |
+| 3 | Configure the `appsettings.Production.json` File Mount (§4) | Dokploy → api | RUNBOOK §2; the **api** service *is* git auto-deployed, so a deploy can still drop `LiveKit__*` and break every join |
+| 4 | Work the staged flags (§5) to whatever is not already raised | Dokploy → api | Phase 7 exit |
+| 5 | Rehearse a backup/restore per [OPERATIONS.md](OPERATIONS.md) | host | Phase 7 exit |
+| 6 | Recording: Egress host headroom, playable-MP4 staging run, legal/retention decision | owner | **Phase 6**, not P7.6 |
+
+Item 3 is the one that quietly undoes today's work if left: nothing in the product reports a dropped
+`LiveKit__*` environment until somebody is refused at join.
