@@ -96,19 +96,26 @@ order and the still-open legal/consent gate.
 
 ---
 
-## 1b. How this stack gets deployed (and why a docs commit can drop a call)
+## 1b. How this stack gets deployed
 
-`meetings-media` is a Dokploy **Compose service with the Git provider and Auto Deploy ON**, tracking
-`main` of the API repository. Two consequences that are not obvious and have already bitten once:
+`meetings-media` is a Dokploy Compose service using the **Raw provider** — the compose is pasted into
+Dokploy, **not** pulled from git. Consequences:
 
-- **Any push to `main` redeploys it** - including a commit that touches only documentation. Dokploy
-  watches the repository, not the paths inside it.
-- **A redeploy restarts LiveKit, and restarting LiveKit ends every room in progress.** Participants
-  are dropped and must rejoin. There is no drain or handover.
+- **Pushing to `main` does not deploy it.** Only the `api` service is git-linked with Auto Deploy.
+  A change to `infra/meetings/dokploy.compose.yml` reaches production only when somebody pastes it
+  into Dokploy -> meetings-media -> General -> Compose File and presses **Save**, then **Deploy**.
+- **The repository file is therefore a reference copy, and it can drift from production.** It did:
+  on 2026-09-07 the repo carried an `egress` service that production had never run. Diff the two
+  before assuming they match.
+- **Deploying restarts LiveKit and ends every room in progress.** There is no drain.
+- **Never press "Fresh Volumes"** to apply a config change - it destroys `meeting_redis_data`.
+  Plain **Deploy** leaves volumes intact.
 
-So `infra/meetings/dokploy.compose.yml` is not a reference copy of production - it *is* production,
-applied on the next push. Treat an edit to it as a deployment, and time pushes to `main` accordingly
-when meetings may be live. Confirmed 2026-09-07, after a P7.6 push redeployed the stack immediately.
+Dokploy also injects its own Traefik labels for the `livekit.inksphere.space` domain (Domains tab ->
+service `livekit`, port 7880, resolver `letsencrypt`). Hand-written labels in the compose coexist with
+those rather than replacing them - verified on 2026-09-07, when the TURN router was added and the
+existing domain kept routing. Verify it anyway after any label change: that domain breaking takes down
+every meeting, not just the restricted-network path.
 
 ---
 

@@ -1125,6 +1125,25 @@ guest/recording behavior disabled in production.
 
 ## 13. Evidence and decision log
 
+- **2026-09-07 — P7.6 TURN/TLS is live in production.** `turn.inksphere.space` resolves to
+  `72.61.231.225`, Traefik issued `CN=turn.inksphere.space` (valid to 2026-12-06), and
+  `livekit.inksphere.space` kept routing throughout (`200 OK`, cert unchanged). LiveKit came up with
+  `tls_port: 443` bound in-container, confirming the root-user finding in production. The
+  restricted-network path exists for the first time; the remaining P7.6 work is the relay `PASS` from
+  a genuinely UDP-blocked network on desktop and mobile, and the staged flag rollout.
+- **Correction — `meetings-media` uses Dokploy's Raw provider, not Git.** Two earlier entries and a
+  RUNBOOK section stated the opposite and are now fixed. Consequences: pushing to `main` never
+  deployed this stack (so no LiveKit restart and no dropped call ever resulted from a docs push), and
+  `infra/meetings/dokploy.compose.yml` is a **reference copy that can drift** — it did, carrying an
+  `egress` service production had never run. **Decision:** apply only the LiveKit changes by hand
+  rather than pasting the repository file, because deploying that file wholesale would have put an
+  Egress worker on a host RECORDING.md says lacks the headroom for one.
+- **Hand-written Traefik labels coexist with Dokploy's generated domain labels.** The risk was that
+  declaring `labels:`/`deploy.labels:` on the `livekit` service would replace the ones Dokploy
+  generates for `livekit.inksphere.space` and take down every meeting. It did not — verified
+  immediately after the deploy. The labels are declared in **both** places because this Traefik runs
+  the Docker *and* Swarm providers, which read different locations; the duplication is idempotent and
+  removes a silent failure where the router simply never registers.
 - **2026-09-07 — P7.6 partially executed in production (deployed; DNS outstanding):** the P7.6 push
   redeployed `meetings-media` immediately, because it is a Dokploy Compose service using the **Git
   provider with Auto Deploy on**, tracking `main`. LiveKit came back healthy (`200 OK`, 44ms), which

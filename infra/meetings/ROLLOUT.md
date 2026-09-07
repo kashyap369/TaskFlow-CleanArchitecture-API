@@ -84,11 +84,13 @@ and `7882`, `3478` and `30000–30100` on UDP. Note from RUNBOOK §4 that `ufw` 
 here — Docker publishes through its own chain and bypasses ufw's INPUT rules — so check the cloud
 provider's security group, not just the host.
 
-**3. Redeploy `meetings-media`.** Note that this is usually **not a manual step**: the stack is a
-Dokploy Compose service with the Git provider and Auto Deploy on, so it redeploys on any push to
-`main` — a documentation-only commit included — and each redeploy restarts LiveKit and ends every
-room in progress. Push deliberately. The Traefik labels live in `deploy.labels`, which is where
-Traefik's Swarm provider reads them. If this stack is ever switched to plain `docker compose`, they must move to
+**3. Redeploy `meetings-media`.** This is a **manual step**: the stack uses Dokploy's **Raw
+provider**, so pushing to `main` does not deploy it. Paste the compose into Dokploy -> meetings-media
+-> General -> Compose File, press **Save**, then **Deploy**. Never use *Fresh Volumes* for a config
+change — it destroys the Redis volume. The deploy restarts LiveKit and ends every room in progress.
+The Traefik labels are declared under both `labels:` and `deploy.labels:` because this Traefik has the
+Docker *and* Swarm providers enabled and they read different places; the duplication is idempotent and
+removes a silent-failure mode where the router never registers. If this stack is ever switched to plain `docker compose`, they must move to
 a service-level `labels:` block or TURN/TLS silently stays unrouted while everything else keeps
 working.
 
