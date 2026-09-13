@@ -220,6 +220,52 @@ public sealed class MeetingSecurityHardeningTests
         Assert.True(recording.HasAcceptedConsent(2));
     }
 
+    // ---- Duplicate media sessions -------------------------------------------------------------
+
+    // A per-join nonce in the participant identity means LiveKit's own DUPLICATE_IDENTITY protection
+    // can never fire: two sessions of the same person never share an identity. A refresh or a second
+    // tab therefore left one microphone published twice and the whole room heard that person twice.
+    // Issuing a token now ends the sessions it supersedes, so the newest join wins.
+    [Fact]
+    public async Task JoinToken_EndsThisParticipantsEarlierSessions_BeforeMintingANewIdentity()
+    {
+        var meeting = LiveMeeting();
+        var (media, user, recordings) = ArrangeJoin();
+        var handler = new GetMeetingJoinTokenCommandHandler(MeetingsReturning(meeting), user, media, recordings);
+
+        var token = await handler.Handle(new GetMeetingJoinTokenCommand(5), CancellationToken.None);
+
+        await media.Received(1).RemoveParticipantsAsync("meeting-room", "m5-p1-", Arg.Any<CancellationToken>());
+        Assert.StartsWith("m5-p1-", token.ParticipantIdentity, StringComparison.Ordinal);
+    }
+
+    // The sweep is cleanup, not a gate. A provider that cannot answer — including the ordinary case
+    // of a room that does not exist until its first joiner arrives — must never cost someone a seat.
+    [Fact]
+    public async Task JoinToken_IsStillIssued_WhenClearingEarlierSessionsFails()
+    {
+        var meeting = LiveMeeting();
+        var (media, user, recordings) = ArrangeJoin();
+        media.RemoveParticipantsAsync("meeting-room", "m5-p1-", Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("the room does not exist"));
+        var handler = new GetMeetingJoinTokenCommandHandler(MeetingsReturning(meeting), user, media, recordings);
+
+        var token = await handler.Handle(new GetMeetingJoinTokenCommand(5), CancellationToken.None);
+
+        Assert.Equal("join-token", token.Token);
+    }
+
+    private static (IMeetingMediaProvider Media, ICurrentUserService User,
+        IMeetingRecordingRepository Recordings) ArrangeJoin()
+    {
+        var media = Substitute.For<IMeetingMediaProvider>();
+        media.CreateJoinToken(Arg.Any<MeetingJoinTokenRequest>())
+            .Returns(new MeetingJoinToken("join-token", DateTimeOffset.UtcNow.AddMinutes(10)));
+        var user = Substitute.For<ICurrentUserService>();
+        user.UserId.Returns(11); user.Email.Returns("host@example.test");
+        return (media, user, Substitute.For<IMeetingRecordingRepository>());
+    }
+
     // ---- Shared arrangement -------------------------------------------------------------------
 
     private static Meeting LiveMeeting()

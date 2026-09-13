@@ -68,10 +68,11 @@ internal static class MeetingRoomAccessRules
             throw new UnauthorizedException("MEETING_ROOM_ACCESS_REVOKED", "Your meeting access has been removed.");
     }
 
-    public static MeetingRoomTokenDto Create(Meeting meeting, MeetingParticipant participant,
-        string displayName, IMeetingMediaProvider provider)
+    public static async Task<MeetingRoomTokenDto> CreateAsync(Meeting meeting, MeetingParticipant participant,
+        string displayName, IMeetingMediaProvider provider, CancellationToken ct)
     {
         EnsureMeetingLive(meeting); EnsureParticipantAllowed(participant);
+        await ReleaseEarlierSessionsAsync(meeting, participant, provider, ct);
         var canPublish = participant.AccessLevel != MeetingAccessLevel.Viewer && meeting.ParticipantsCanPublish;
         var canShareScreen = canPublish && meeting.ParticipantsCanShareScreen;
         var canModerate = participant.AccessLevel is MeetingAccessLevel.Host or MeetingAccessLevel.CoHost;
@@ -89,6 +90,37 @@ internal static class MeetingRoomAccessRules
         return new(provider.WebSocketUrl, issued.Value, issued.ExpiresAtUtc, meeting.Id, participant.Id,
             displayName, participant.AccessLevel, badge, canPublish, canShareScreen, canModerate,
             identity, meeting.Title);
+    }
+
+    /// <summary>
+    /// Ends this participant's earlier media sessions before a new identity is handed out.
+    ///
+    /// Identities carry a per-join nonce (<c>m{meetingId}-p{participantId}-{nonce}</c>), which is
+    /// what lets moderation sweep every session a participant holds by prefix. The cost is that
+    /// LiveKit's own DUPLICATE_IDENTITY protection can never fire, because two sessions of the same
+    /// person never share an identity: a refresh, a second tab, or a session stranded by a crash
+    /// left that participant publishing the same microphone twice, and everyone else in the room
+    /// heard them twice, slightly offset. Rejoining is authoritative now — the newest join wins and
+    /// earlier sessions are ejected, which is the protection the nonce had otherwise given up.
+    ///
+    /// A failure here never blocks the join. This is cleanup, and refusing someone their seat in a
+    /// meeting because a stale session could not be cleared would trade a self-healing annoyance for
+    /// one the caller cannot recover from. The provider already measures both calls it makes here,
+    /// so a persistently failing sweep stays visible in the media-call metrics without raising here.
+    /// </summary>
+    private static async Task ReleaseEarlierSessionsAsync(Meeting meeting, MeetingParticipant participant,
+        IMeetingMediaProvider provider, CancellationToken ct)
+    {
+        try
+        {
+            await provider.RemoveParticipantsAsync(meeting.RoomName,
+                MeetingRoomModerationRules.IdentityPrefix(meeting.Id, participant.Id), ct);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            // A room that does not exist yet, or a provider that is briefly unreachable, must not
+            // cost this participant their seat.
+        }
     }
 }
 
@@ -110,7 +142,7 @@ public sealed class GetMeetingJoinTokenCommandHandler(IMeetingRepository meeting
         if (string.IsNullOrWhiteSpace(displayName))
             displayName = user.Email.Split('@')[0];
         await EnsureRecordingConsentAsync(meeting.Id, participant.Id, recordings, ct);
-        return MeetingRoomAccessRules.Create(meeting, participant, displayName, provider);
+        return await MeetingRoomAccessRules.CreateAsync(meeting, participant, displayName, provider, ct);
     }
 
     internal static async Task EnsureRecordingConsentAsync(int meetingId, int participantId,
@@ -142,6 +174,7 @@ public sealed class GetGuestMeetingJoinTokenCommandHandler(IMeetingGuestAccessRe
         if (participant.State != MeetingParticipantState.Admitted)
             throw new ForbiddenException("MEETING_GUEST_NOT_ADMITTED", "Wait for the host to admit you before joining.");
         await GetMeetingJoinTokenCommandHandler.EnsureRecordingConsentAsync(meeting.Id, participant.Id, recordings, ct);
-        return MeetingRoomAccessRules.Create(meeting, participant, participant.DisplayName ?? "Guest", provider);
+        return await MeetingRoomAccessRules.CreateAsync(meeting, participant,
+            participant.DisplayName ?? "Guest", provider, ct);
     }
 }
