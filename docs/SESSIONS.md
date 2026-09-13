@@ -1,5 +1,45 @@
 # TaskFlow — Session Log
 
+## 2026-09-08 (Infisical vault stood up; all 35 taskflow secrets migrated and verified)
+
+- **A secrets vault now exists and holds a verified copy of every taskflow credential.**
+  Self-hosted Infisical at `https://vault.buildbykashyap.in`, project `taskflow`, environment
+  `prod`. Full detail — layout, machine identities, cutover plan — is in the new
+  [SECRETS.md](SECRETS.md). Nothing consumes it yet: **Dokploy is still the runtime source of
+  truth**, and the API is unchanged. This session copied, it did not cut over.
+- **Deliberately deployed outside Dokploy.** Running the vault as a Dokploy application would
+  mean Dokploy holds the credentials for the vault that holds Dokploy's credentials; a broken
+  deploy would take both. It is a standalone Compose stack at `/opt/infisical` under
+  `infisical.service`, with **no published host ports** — Traefik reaches it over
+  `dokploy-network` via a file-provider route. That last point matters on this host: UFW only
+  admits 22/80/443, but Docker publishes through the `FORWARD` chain and **bypasses UFW
+  entirely**, so ~120 ports are actually reachable. "Do not publish a port you do not need" is
+  the only rule that holds here.
+- **Dokploy stores `application.env` encrypted** (`iv:tag:ciphertext`, no readable key names),
+  so its database is not a usable source for a migration. The authoritative source is the
+  **resolved Swarm service spec** — what the container actually receives. Reading that gave 29
+  variables for `taskflow-api`, matching the Dokploy UI exactly.
+- **"All the credentials" was made falsifiable rather than asserted.** `buildArgs`,
+  `buildSecrets`, `previewEnv`, `previewBuildArgs`, `previewBuildSecrets`, Dokploy's
+  environment-level shared variables, and the `mongo`/`redis`/`mysql`/`mariadb` resource tables
+  were each checked and confirmed empty for taskflow. Final diff: 35 source keys, 35 vault keys,
+  zero missing, zero extra, **zero value mismatches**. Dokploy verified untouched afterwards via
+  `UpdatedAt`, Swarm version indices, env counts, `.env` mtimes and container uptimes — all
+  predating the session.
+- **ROLLOUT.md §7 item 3 has fired. Meetings are broken right now.** The cross-check found
+  `LIVEKIT_API_KEY` (what the LiveKit server accepts) and `LiveKit__ApiKey` (what the API signs
+  join tokens with) hold **different values**, and `LiveKit__Url` resolves to that same
+  container — there is no second deployment, so every token the API issues is rejected. The
+  timestamps name the cause: `meetings/.env` modified 2026-09-07 **03:30:58**, then
+  `taskflow-api` updated **03:38:58** with `state = rollback_completed`. The credential was
+  rotated in the compose stack and the matching API deploy **failed and rolled back**, restoring
+  the old key. This is the exact scenario ROLLOUT.md called "the one that quietly undoes today's
+  work", and the same class as the 2026-09-02 propagation failure. It is no longer hypothetical.
+- **Rotate the LiveKit key/secret when fixing this** — the current secret was exposed in a
+  working transcript during the investigation and should be treated as compromised.
+- Two copies of one credential drifted apart in production and nothing reported it. That is the
+  case for a vault, made by the codebase itself on day one.
+
 ## 2026-09-07 (Meetings Phase 7 / P7.6 — TURN/TLS deployed and proven in production)
 
 - **The deployment model was not what anyone had written down.** `meetings-media` is a Dokploy Compose
@@ -738,3 +778,37 @@
   intact for later Phase 7 resumption; the frontend sidebar entry is hidden in the sibling repository.
 - Unrelated API functionality remains enabled. Do not resume Meetings until runtime configuration
   propagation and a real multi-client production call are verified.
+
+## 2026-09-13 (Onboarding, the tour lock-out, permission locks, list controls)
+
+- **The "website freezes" report was the tour, and it was exactly reproducible on paper.** driver.js
+  adds `driver-active` to `<body>`, and `driver.css` turns that into
+  `.driver-active * { pointer-events: none }` — the page takes no clicks except on the highlighted
+  element and the popover. Nothing stopped a running tour on navigation, and the welcome's third
+  step highlights `[data-tour="org.nav"]`, which is precisely what makes the sidebar clickable
+  *during* the tour. Click a nav link, the page changes, the popover goes with it, and the class
+  stays: every click and scroll swallowed, nothing on screen, reload the only way out. Fixed in
+  `TourService` — teardown on `NavigationStart`, `destroy()` in a `finally`, and an unconditional
+  sweep of driver's body classes and portalled nodes as a backstop.
+- **Do not trust `localStorage` alone for a once-per-account promise.** The welcome was keyed on a
+  per-user `localStorage` bucket, so clearing site data, a private window or a second machine all
+  read as a new user. It now lives on `Users.OnboardingCompletedAt`. **The migration's backfill is
+  the part that matters** — the column alone would have shown the welcome to every existing account
+  on the next deploy.
+- **The seeded admin password was `Admin@123git`**, not the `Admin@123` every doc quotes — a
+  paste accident. Fixing the constant is not enough: `UserSeeder` only inserts when `Users` is
+  empty, so a deployed database keeps the old hash forever. Credentials are now `Seed:Admin`
+  configuration, with `ResetPasswordOnStartup` (default **false**) as the one-boot repair. It stays
+  off by default on purpose — on every startup it would silently revert a password an administrator
+  chose.
+- **`background` shorthand vs. a drawn caret.** `_input.scss` strips native select chrome with
+  `appearance: none` and draws the arrow back as a `background-image`; `_toolbar.scss` is imported
+  later and set the `background` *shorthand*, which resets that image to `none`. Every `.list-filter`
+  in the app had been rendering with no arrow at all. Use `background-color` when restyling a select.
+- **A `<select>` needs more than a blocked click to lock.** `PermissionLockDirective` was built for
+  buttons: `click` only, badge appended as a child. A select opens on `mousedown`, and only
+  `<option>` may be its child. The directive now blocks `mousedown`, reverts a `change` that slips
+  through, and puts the badge beside the control with the parent as the positioning context.
+- Backend 118/118 and frontend 319/319 pass, both builds, lint, design lint and EF drift clean.
+  **Deploy order matters:** the API migration must land before the UI, or `/user/me` has no
+  `hasCompletedOnboarding` and the client (correctly) reads the absent field as "seen".

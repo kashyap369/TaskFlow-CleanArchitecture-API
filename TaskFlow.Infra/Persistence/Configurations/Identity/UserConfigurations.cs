@@ -43,6 +43,11 @@ namespace TaskFlow.Infra.Persistence.Configurations.Identity
 
             builder.Property(x => x.LastLoginAt);
 
+            // Null means "has never seen the welcome". The migration
+            // that added this column backfilled every existing row, so
+            // only accounts registered afterwards read as new.
+            builder.Property(x => x.OnboardingCompletedAt);
+
             builder.Property(x => x.UpdatedAt);
 
             builder.Property(x => x.DeletedAt);

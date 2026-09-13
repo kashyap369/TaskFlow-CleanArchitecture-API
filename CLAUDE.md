@@ -87,6 +87,11 @@ DB: PostgreSQL, connection string `DefaultConnection`. Seeds on startup: system 
   system deliberately does **not** do.
 - [docs/MEETINGS-SUPPORT.md](docs/MEETINGS-SUPPORT.md) — user-facing troubleshooting: symptom →
   error code → who can fix it, for members, guests, collaboration and recording.
+- [docs/SECRETS.md](docs/SECRETS.md) — **where credentials live and how the API will read them.**
+  The self-hosted Infisical vault, what was migrated out of Dokploy and verified, the flat
+  no-folders secret layout, machine identities, and the ordered cutover to `infisical run`.
+  Read before changing any environment variable in Dokploy — and note the LiveKit credential
+  divergence recorded there, which currently breaks meeting joins.
 - [docs/SESSIONS.md](docs/SESSIONS.md) — session log: gotchas, dead ends, decisions
 - [infra/meetings/RUNBOOK.md](infra/meetings/RUNBOOK.md) — **production meetings triage.** What broke
   on 2026-09-04, how each fault was proved, how to read LiveKit logs, and how configuration survives

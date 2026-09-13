@@ -29,6 +29,17 @@ namespace TaskFlow.Domain.Entities.Identity
 
         public DateTime? LastLoginAt { get; private set; }
 
+        /// <summary>
+        /// When this account finished the first-run welcome, or null
+        /// while it never has. Server-side on purpose: the welcome is a
+        /// promise about the *account*, not about one browser, so
+        /// clearing site data or signing in from a second machine must
+        /// not replay it. Existing accounts were backfilled by the
+        /// migration that added the column, which is what makes the
+        /// welcome reach only genuinely new registrations.
+        /// </summary>
+        public DateTime? OnboardingCompletedAt { get; private set; }
+
         protected User()
         {
         }
@@ -140,6 +151,21 @@ namespace TaskFlow.Domain.Entities.Identity
                 new UserPhoneNumberChangedEvent(
                     Email.Value,
                     PhoneNumber.Value));
+        }
+
+        /// <summary>
+        /// Records that the account has been through the first-run
+        /// welcome. Idempotent — the client may call it from more than
+        /// one tab, and the first time is the one that counts.
+        /// </summary>
+        public void CompleteOnboarding()
+        {
+            if (OnboardingCompletedAt is not null)
+                return;
+
+            OnboardingCompletedAt = DateTime.UtcNow;
+
+            MarkAsUpdated();
         }
 
         public void RecordLogin()

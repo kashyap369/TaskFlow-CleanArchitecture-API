@@ -40,7 +40,8 @@ namespace TaskFlow.Application.Features.Identity.User.Queries.GetCurrentUserProf
                     "AccountType"                     AS "AccountType",
                     "IsEmailVerified"                 AS "IsEmailVerified",
                     "LastLoginAt"                     AS "LastLoginAt",
-                    "CreatedAt"                       AS "CreatedAt"
+                    "CreatedAt"                       AS "CreatedAt",
+                    ("OnboardingCompletedAt" IS NOT NULL) AS "HasCompletedOnboarding"
                 FROM "Users"
                 WHERE "Id" = @UserId
                   AND "IsDeleted" = FALSE;

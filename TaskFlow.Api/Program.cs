@@ -322,9 +322,18 @@ try
         // the Admin role to the seeded admin user.
         await RoleSeeder.SeedAsync(context);
 
+        // Credentials come from `Seed:Admin` so a deployment can set its
+        // own; the defaults are the ones the docs quote.
+        var adminSeedOptions = new AdminSeedOptions();
+
+        app.Configuration
+            .GetSection(AdminSeedOptions.SectionName)
+            .Bind(adminSeedOptions);
+
         await UserSeeder.SeedAsync(
             context,
-            passwordHasher);
+            passwordHasher,
+            adminSeedOptions);
 
         // Organization permission catalog — populated from
         // OrganizationPermissionNames so roles can be granted

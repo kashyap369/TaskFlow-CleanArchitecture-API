@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using TaskFlow.Api.Constants;
+using TaskFlow.Application.Features.Identity.User.Commands.CompleteOnboarding;
 using TaskFlow.Application.Features.Identity.User.Queries.GetCurrentUserProfile;
 using TaskFlow.Application.Features.Identity.User.Queries.GetUserById;
 using TaskFlow.Application.Features.Identity.User.Queries.GetUsers;
@@ -31,6 +32,22 @@ namespace TaskFlow.Api.Controllers.Identity
                     cancellationToken);
 
             return Ok(profile);
+        }
+
+        /// <summary>
+        /// Records that the signed-in account has been through the
+        /// first-run welcome, so it never plays again — on this browser
+        /// or any other. Idempotent.
+        /// </summary>
+        [HttpPost("me/onboarding/complete")]
+        public async Task<IActionResult> CompleteOnboarding(
+            CancellationToken cancellationToken)
+        {
+            await _mediator.Send(
+                new CompleteOnboardingCommand(),
+                cancellationToken);
+
+            return NoContent();
         }
 
         [HttpGet("{userId:int}")]
