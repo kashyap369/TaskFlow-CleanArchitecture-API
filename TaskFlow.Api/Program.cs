@@ -258,6 +258,14 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseForwardedHeaders();
+
+// CORS runs before the HTTPS redirect on purpose. Behind the production reverse proxy the API is
+// reached over plain HTTP, so if `X-Forwarded-Proto` is ever missing or not trusted the redirect
+// answers a preflight with a 307 that carries no `Access-Control-Allow-Origin`. Browsers do not
+// follow a redirected preflight, so the whole client fails with a CORS error that has nothing to do
+// with the CORS policy. Answering the preflight first makes that failure mode impossible.
+app.UseCors("AngularPolicy");
+
 if (app.Environment.IsDevelopment())
 {
     // The local LiveKit container cannot trust ASP.NET's self-signed certificate and some smoke-test
@@ -271,7 +279,6 @@ else
 {
     app.UseHttpsRedirection();
 }
-app.UseCors("AngularPolicy");
 app.UseAuthentication();
 app.UseRateLimiter();
 
