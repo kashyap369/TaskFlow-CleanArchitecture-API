@@ -860,3 +860,39 @@
   a documented fallback cache.
 - **Not verified: the image build.** No Docker on the dev machine, so the `apt` install of the CLI
   and `infisical login` running as `$APP_UID` are both unproven. Watch the first build.
+
+## 2026-09-13 — Infisical cutover completed, after a 50-minute production outage
+
+The cutover landed, but not before the API was down from **09:52 to 10:43 UTC** returning 502 on
+every endpoint.
+
+- **The outage was step 5 run before step 3.** Dokploy's environment block was cleared down to the
+  11 `LiveKit__*` / `Meetings__*` variables while the four `INFISICAL_*` credentials had never been
+  added. The entrypoint took its documented fallback path, found an almost-empty environment, and
+  died on the first database call: `The ConnectionString property has not been initialized`. The
+  fallback behaved exactly as designed — the ordering in SECRETS.md is not advisory.
+- **The `config:` diagnostic line from `report-config.sh` named the fault in one line** and turned
+  what looks like a networking failure into a configuration one. It earned its place.
+- **The image build was fine.** The "not verified" note from the previous session is resolved: the
+  CLI installed correctly and `infisical login` works as `$APP_UID`.
+- **The real defect was an unpinned `apt-get install infisical`.** CLI 0.43.0 moved secret fetching
+  to `/api/v4/secrets`; the self-hosted vault's image was built **2025-08-08** and serves v3 only, so
+  it answered 404 and `infisical run` exec'd the API with an empty environment — a *second*,
+  identical-looking failure behind the first. Pinned to **0.42.6**, the last release using
+  `/api/v3/secrets/raw`, with `infisical --version` at build time so a wrong version fails the build
+  rather than the boot.
+- **Diagnosing this needed no credentials.** `grep`ping the CLI binaries for `api/v[34]/secrets`
+  across versions located the boundary exactly; two attempts to probe it with real credentials were
+  correctly refused by tooling and were not necessary.
+- **The vault is 13 months stale and is now a single point of failure.** Its container restarted
+  2026-09-08 but reused an August-2025 local image, so the restart picked up nothing. With Dokploy's
+  copies cleared, the vault holds the **only** copy of all 35 production secrets and still has no
+  backups. Aligning the CLI down to the vault was chosen over upgrading the vault for exactly this
+  reason: 13 months of migrations against an unbacked secret store, mid-outage, is not a trade worth
+  making. **Back it up, then upgrade it** — that ordering is the open risk.
+- **Cutover step 4 is satisfied by construction, not by the suggested test.** The container's own
+  environment now holds only 15 variables, none of them `ConnectionStrings__*` or `JwtSettings__*`,
+  yet the API reports every one as present. They can only have come from the vault.
+- **Credentials exposed in a working transcript again** (LiveKit key/secret, the new Infisical client
+  secret). Same class of leak as 2026-09-08. Rotation pending; the LiveKit pair needed rotating
+  anyway because the two copies have diverged.

@@ -195,6 +195,36 @@ Production never writes to the vault. Writes happen through the UI, by a human.
 Given the rollback that caused the LiveKit divergence, watch step 2's deploy specifically —
 a rolled-back deploy silently reverts the entrypoint change too.
 
+## Cutover completed 2026-09-13 — and the two things it broke
+
+The API now reads from the vault. Dokploy holds 15 variables: the four `INFISICAL_*` plus the 11
+`LiveKit__*` / `Meetings__*` left in place. **Step 4 is satisfied by construction** — the container
+environment contains no `ConnectionStrings__*` or `JwtSettings__*` at all, yet the API reports every
+one present, so they can only have come from the vault.
+
+Two faults, each of which alone took production down for 50 minutes:
+
+1. **Step 5 was run before step 3.** Dokploy's environment was cleared before the `INFISICAL_*`
+   credentials were added. The entrypoint fell back to the container environment exactly as designed,
+   found nothing, and the API died on the first database call. The step ordering above is not advisory.
+2. **The CLI install was unpinned.** CLI `0.43.0` moved secret fetching to `/api/v4/secrets`. This
+   vault serves **v3 only** and answers `404`, so `infisical run` silently fetched nothing. The
+   Dockerfile now pins `INFISICAL_CLI_VERSION=0.42.6` — the last release using `/api/v3/secrets/raw` —
+   and runs `infisical --version` at build time so a wrong version fails the build, not the boot.
+
+### The vault is stale, unbacked, and now the only copy
+
+`infisical/infisical:latest-postgres` on this host was built **2025-08-08**. The container restarted
+2026-09-08 but reused that local image, so the restart upgraded nothing. That 13-month gap is what
+made the CLI pin necessary.
+
+With Dokploy's copies cleared, **the vault is the only remaining copy of all 35 production secrets,**
+and this host still has no backups. Upgrading it means running 13 months of migrations against that
+single copy.
+
+> **Back the vault up before upgrading it, and do not raise the CLI pin until `/api/v4/secrets`
+> answers.** Raising the pin against this vault reproduces the 2026-09-13 outage exactly.
+
 ## Rotating a secret
 
 1. Change the value in Infisical (`taskflow` / `prod`)
