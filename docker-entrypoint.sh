@@ -11,7 +11,7 @@ set -e
 
 if [ -z "${INFISICAL_UNIVERSAL_AUTH_CLIENT_ID}" ] || [ -z "${INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET}" ]; then
     echo "entrypoint: no Infisical machine identity configured; using the container environment" >&2
-    exec "$@"
+    exec /usr/local/bin/report-config.sh "$@"
 fi
 
 # Fail loudly rather than silently fetching from the wrong project or environment. A typo here
@@ -28,7 +28,9 @@ export INFISICAL_TOKEN
 
 echo "entrypoint: loading secrets from Infisical (${INFISICAL_PROJECT_ID}, ${INFISICAL_ENVIRONMENT:-prod})" >&2
 
+# report-config.sh runs *inside* `infisical run`, so it describes the environment the API actually
+# receives — the container's variables with the vault's merged in — not the one before the merge.
 exec infisical run \
     --projectId="${INFISICAL_PROJECT_ID}" \
     --env="${INFISICAL_ENVIRONMENT:-prod}" \
-    -- "$@"
+    -- /usr/local/bin/report-config.sh "$@"
