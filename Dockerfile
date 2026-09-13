@@ -16,11 +16,20 @@ WORKDIR /app
 # The Infisical CLI, which the entrypoint uses to fetch configuration from the vault at start.
 # artifacts-cli.infisical.com replaces the old Cloudsmith repository, which stops serving
 # 2026-09-16. curl and gnupg are needed only to add the repository and are removed again.
+#
+# The version is PINNED, and must stay pinned. CLI 0.43.0 moved secret fetching to the
+# server's /api/v4/secrets route; this self-hosted vault does not serve v4 and answers 404,
+# so `infisical run` fetches nothing and the API starts with an empty configuration. 0.42.6
+# is the last release that uses /api/v3/secrets/raw, which the vault does serve. An unpinned
+# install is exactly what broke production on 2026-09-13: the rebuild silently took 0.43.132.
+# Raise this pin only after the vault is upgraded and /api/v4/secrets answers.
+ARG INFISICAL_CLI_VERSION=0.42.6
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates gnupg \
  && curl -1sLf 'https://artifacts-cli.infisical.com/setup.deb.sh' | bash \
  && apt-get update \
- && apt-get install -y --no-install-recommends infisical \
+ && apt-get install -y --no-install-recommends "infisical=${INFISICAL_CLI_VERSION}" \
+ && infisical --version \
  && apt-get purge -y --auto-remove curl gnupg \
  && rm -rf /var/lib/apt/lists/*
 
