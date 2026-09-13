@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Amazon.Runtime;
 using Amazon.S3;
@@ -92,7 +93,31 @@ namespace TaskFlow.Infra.DependencyInjection
             // handlers use to run raw SQL straight into DTOs.
             services.AddSingleton<ISqlConnectionFactory, TaskFlow.Infra.Dapper.SqlConnectionFactory>();
 
-            services.Configure<JwtSettings>(configuration.GetSection("JwtSettings"));
+            // Bound once, here, and validated at startup. Only JwtSettings__SecretKey has to come
+            // from the environment now — the rest ships in appsettings.Production.json. Validating
+            // on start turns a missing or too-short secret into the same clear startup failure the
+            // other sections produce, instead of an unhandled throw during service registration
+            // that crash-loops the container with nothing actionable in the logs.
+            services
+                .AddOptions<JwtSettings>()
+                .Bind(configuration.GetSection("JwtSettings"))
+                .Validate(
+                    settings => !string.IsNullOrWhiteSpace(settings.Issuer),
+                    "JwtSettings:Issuer is required.")
+                .Validate(
+                    settings => !string.IsNullOrWhiteSpace(settings.Audience),
+                    "JwtSettings:Audience is required.")
+                .Validate(
+                    settings => settings.SecretKey.Length >= 32,
+                    "JwtSettings:SecretKey must contain at least 32 characters. " +
+                    "Set JwtSettings__SecretKey in the deployment environment.")
+                .Validate(
+                    settings => settings.ExpiryMinutes > 0,
+                    "JwtSettings:ExpiryMinutes must be greater than zero.")
+                .Validate(
+                    settings => settings.RefreshTokenExpiryDays > 0,
+                    "JwtSettings:RefreshTokenExpiryDays must be greater than zero.")
+                .ValidateOnStart();
             services.Configure<EmailSettings>(configuration.GetSection("EmailSettings"));
             services
                 .AddOptions<ClientSettings>()
@@ -277,15 +302,18 @@ namespace TaskFlow.Infra.DependencyInjection
             services.AddScoped<SmtpEmailSender>();
 
             services.AddScoped<IEmailService, EmailService>();
-            var jwtSettings = configuration
-                .GetSection("JwtSettings")
-                .Get<JwtSettings>()
-                ?? throw new InvalidOperationException("JwtSettings configuration is missing.");
-
             services.AddAuthentication(
                     JwtBearerDefaults.AuthenticationScheme)
-                .AddJwtBearer(options =>
+                .AddJwtBearer();
+
+            // Reads the validated JwtSettings instead of a snapshot taken during registration, so
+            // the secret is only touched once ValidateOnStart has approved it.
+            services
+                .AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
+                .Configure<IOptions<JwtSettings>>((options, jwt) =>
                 {
+                    var jwtSettings = jwt.Value;
+
                     options.TokenValidationParameters =
                         new TokenValidationParameters
                         {

@@ -812,3 +812,30 @@
 - Backend 118/118 and frontend 319/319 pass, both builds, lint, design lint and EF drift clean.
   **Deploy order matters:** the API migration must land before the UI, or `/user/me` has no
   `hasCompletedOnboarding` and the client (correctly) reads the absent field as "seen".
+
+## 2026-09-13 — production 502 was a missing `JwtSettings`, not CORS
+
+- **A browser "No 'Access-Control-Allow-Origin'" error is not evidence of a CORS bug.** Every call
+  from `taskflow.inksphere.space` failed the preflight, but `api.inksphere.space/health` — anonymous,
+  touching nothing — returned **502** too. Traefik generates that page itself and it carries no CORS
+  headers, so Chrome reports the outage as a CORS failure. **Check an anonymous endpoint before
+  touching CORS configuration**; two commits (`5f68cfe`, `bb33b45`) were spent adding and reverting a
+  comment on a policy that was never wrong.
+- **The real fault, from the Dokploy container log:**
+  `InvalidOperationException: JwtSettings configuration is missing.` — container `Exited (139)` in a
+  crash loop. `.Get<JwtSettings>()` returns null only when the section has **zero** children, so not
+  one `JwtSettings__*` variable was reaching the container. `docs/SECRETS.md` records 29 variables for
+  this app on 2026-09-08; 27 were present.
+- **It threw at `Program.cs:200`, before `builder.Build()`** — outside the try/catch that exists to
+  report startup failures cleanly. So the one class of error that handler was written for bypassed it
+  entirely and died as an unhandled exception. `JwtSettings` now uses the
+  `AddOptions().Validate().ValidateOnStart()` pattern the other five sections already use.
+- **`appsettings.json` is in `.dockerignore`; `appsettings.Production.json` is not.** The non-secret
+  JWT values (issuer, audience, lifetimes) now live in the Production file and ship in the image, so
+  only `JwtSettings__SecretKey` has to come from the environment — four fewer variables that can go
+  missing.
+- **The integration tests were reading a developer's untracked `appsettings.json`** out of the test
+  output directory for their JWT settings; the new validation is what exposed it. The fixture now
+  declares them in its in-memory collection like every other section.
+- Backend 118/118 pass, build clean. **The code fix does not end the outage on its own** —
+  `JwtSettings__SecretKey` still has to be restored in Dokploy from the Infisical copy.

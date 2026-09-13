@@ -1471,6 +1471,13 @@ public sealed class PlannerApiFixture : IAsyncLifetime
                     {
                         ["ConnectionStrings:DefaultConnection"] = testConnection.ConnectionString,
                         ["ClientSettings:BaseUrl"] = "http://localhost",
+                        // Declared here rather than inherited from a developer's untracked
+                        // appsettings.json, so the host starts the same way on any machine and in CI.
+                        ["JwtSettings:Issuer"] = "TaskFlow.Api",
+                        ["JwtSettings:Audience"] = "TaskFlow.Client",
+                        ["JwtSettings:SecretKey"] = "integration-test-jwt-secret-at-least-32-characters",
+                        ["JwtSettings:ExpiryMinutes"] = "60",
+                        ["JwtSettings:RefreshTokenExpiryDays"] = "7",
                         ["ObjectStorage:Provider"] = "Local",
                         ["ObjectStorage:LocalPath"] = "App_Data/integration-test-objects",
                         ["Meetings:Enabled"] = "true",
