@@ -839,3 +839,24 @@
   declares them in its in-memory collection like every other section.
 - Backend 118/118 pass, build clean. **The code fix does not end the outage on its own** —
   `JwtSettings__SecretKey` still has to be restored in Dokploy from the Infisical copy.
+
+### Same session — Infisical cutover prepared (not yet completed)
+
+- **The vault already held the missing secrets.** All five `JwtSettings__*` entries are in
+  `taskflow` / `prod`. The outage was Dokploy losing its copy of configuration the vault still had —
+  the argument for the cutover, demonstrated a second time in one week.
+- **`Dockerfile` + `docker-entrypoint.sh` implement `infisical run`.** The entrypoint takes the vault
+  path only when `INFISICAL_UNIVERSAL_AUTH_CLIENT_ID` is set and execs the API directly otherwise,
+  so one image serves both sides of the cutover and rollback is unsetting three variables rather
+  than a rebuild.
+- **The cutover plan as written in SECRETS.md would not have booted.** `--fallback-enabled` is not a
+  real flag; the credential env vars are `INFISICAL_UNIVERSAL_AUTH_*`, not
+  `INFISICAL_MACHINE_IDENTITY_*`; `dl.cloudsmith.io` stops serving 2026-09-16; and exec-form
+  `ENTRYPOINT` cannot do the command substitution the token fetch needs. All four corrected in the
+  doc. **Verify CLI flags against the vendor's docs before committing them to a plan** — this one sat
+  in the repo for five days reading as ready.
+- **The offline-cache intent is now unmet and that is a real risk.** The vault runs on the same host
+  as the API, so after cutover a vault outage stops the API from starting. Nothing in the CLI offers
+  a documented fallback cache.
+- **Not verified: the image build.** No Docker on the dev machine, so the `apt` install of the CLI
+  and `infisical login` running as `$APP_UID` are both unproven. Watch the first build.

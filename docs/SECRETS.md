@@ -117,36 +117,52 @@ apart in production and nothing reported it; that is the argument for a vault, d
 
 ## Next phase — make the API read from the vault
 
-Goal: Dokploy's environment block for `taskflow-api` shrinks from 29 variables to **three**,
+Goal: Dokploy's environment block for `taskflow-api` shrinks from 29 variables to **four**,
 and the vault becomes the single source of truth.
 
 ### Approach: `infisical run` in the container entrypoint
 
-The Infisical CLI fetches secrets and execs the app with them in its environment. .NET's
-configuration binding is unchanged — `JwtSettings__SecretKey` still arrives as an
-environment variable, so **no application code changes.**
+**Implemented** — `Dockerfile` + `docker-entrypoint.sh`, committed. The Infisical CLI fetches
+secrets and execs the app with them in its environment. .NET's configuration binding is unchanged —
+`JwtSettings__SecretKey` still arrives as an environment variable, so **no application code changes.**
 
-```dockerfile
-RUN curl -1sLf https://dl.cloudsmith.io/public/infisical/infisical-cli/setup.deb.sh | bash \
- && apt-get install -y infisical
+The entrypoint runs the vault path only when a machine identity is present and execs the API
+directly when it is not. That fallback is what makes the cutover reversible: unset the `INFISICAL_*`
+variables and the container returns to Dokploy's environment block **without a rebuild**. It is also
+what lets steps 3 and 4 below run with the old 29 variables still in place.
 
-ENTRYPOINT ["infisical","run", \
-            "--projectId","4203915e-62cd-4f00-bfd6-e0c16f319ab3", \
-            "--env","prod","--fallback-enabled","--"]
-CMD ["dotnet","TaskFlow.Api.dll"]
+```sh
+INFISICAL_TOKEN="$(infisical login --method=universal-auth --plain --silent)"
+export INFISICAL_TOKEN
+exec infisical run --projectId="$INFISICAL_PROJECT_ID" --env="${INFISICAL_ENVIRONMENT:-prod}" -- "$@"
 ```
 
 Dokploy then holds only:
 
 ```
-INFISICAL_MACHINE_IDENTITY_CLIENT_ID=...
-INFISICAL_MACHINE_IDENTITY_CLIENT_SECRET=...
+INFISICAL_UNIVERSAL_AUTH_CLIENT_ID=...
+INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET=...
 INFISICAL_API_URL=https://vault.buildbykashyap.in
+INFISICAL_PROJECT_ID=4203915e-62cd-4f00-bfd6-e0c16f319ab3
 ```
 
-`--fallback-enabled` caches the last successful fetch so a vault outage does not block a
-container start. This matters: the vault is on the same host, so it must not become a hard
-boot dependency.
+`INFISICAL_API_URL` is read by both `login` and `run`, which is why neither needs `--domain`.
+
+### Three corrections to the original plan (2026-09-13)
+
+The first draft of this section would not have booted. Recorded so the errors are not reintroduced:
+
+- **`--fallback-enabled` does not exist.** No such flag on `infisical run`, and no documented
+  offline-cache flag either. The intent behind it was sound and remains **unmet**: the vault runs on
+  the same host as the API, so it *is* a hard boot dependency. If the vault is down, the API will not
+  start. Accept this knowingly, or give the vault its own uptime story before relying on it.
+- **The credential variables are `INFISICAL_UNIVERSAL_AUTH_CLIENT_ID` / `_CLIENT_SECRET`**, not
+  `INFISICAL_MACHINE_IDENTITY_*`. The CLI reads the universal-auth names.
+- **`dl.cloudsmith.io` stops serving 2026-09-16.** The repository is now
+  `https://artifacts-cli.infisical.com/setup.deb.sh`.
+
+Also: `infisical run` cannot be the bare `ENTRYPOINT` as originally written, because the token must
+be obtained first and exec-form `ENTRYPOINT` cannot do command substitution. Hence the script.
 
 ### Secret layout: flat, no folders
 

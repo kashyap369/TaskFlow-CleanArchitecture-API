@@ -12,12 +12,31 @@ RUN dotnet publish TaskFlow.Api/TaskFlow.Api.csproj --configuration Release --no
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
+
+# The Infisical CLI, which the entrypoint uses to fetch configuration from the vault at start.
+# artifacts-cli.infisical.com replaces the old Cloudsmith repository, which stops serving
+# 2026-09-16. curl and gnupg are needed only to add the repository and are removed again.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends curl ca-certificates gnupg \
+ && curl -1sLf 'https://artifacts-cli.infisical.com/setup.deb.sh' | bash \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends infisical \
+ && apt-get purge -y --auto-remove curl gnupg \
+ && rm -rf /var/lib/apt/lists/*
+
 COPY --from=build /app/publish .
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 ENV ASPNETCORE_URLS=http://+:8080 \
     ASPNETCORE_ENVIRONMENT=Production \
-    DOTNET_EnableDiagnostics=0
+    DOTNET_EnableDiagnostics=0 \
+    INFISICAL_DISABLE_UPDATE_CHECK=true
 
 EXPOSE 8080
 USER $APP_UID
-ENTRYPOINT ["dotnet", "TaskFlow.Api.dll"]
+
+# The entrypoint execs this command, with the vault's secrets in the environment when a machine
+# identity is configured and without them when it is not.
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+CMD ["dotnet", "TaskFlow.Api.dll"]
