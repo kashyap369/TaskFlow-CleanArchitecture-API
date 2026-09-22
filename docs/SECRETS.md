@@ -312,6 +312,25 @@ stop the API booting — it surfaces later as mail that silently does not arrive
 throws on an empty `FromEmail` for exactly that reason, but nothing checks the credentials until
 the first send.
 
+### Proven end to end 2026-09-22
+
+A real sign-in code was requested against production and **arrived**. The chain that proves it,
+in order, because each link rules out a different failure:
+
+1. `config: present: ... EmailSettings__Password EmailSettings__Product__Password ...` with **no
+   `MISSING:` line**. Those two names did not exist in the previous `report-config.sh`, so their
+   appearance proves the **new build** is running *and* that both app passwords reached the
+   container — one line, two answers.
+2. `POST /api/auth/login-code/request` returned **200 in 2453ms**. `OneTimeCodeRequestService`
+   **rethrows** on a failed send, so a 200 can only mean `SendMailAsync` completed. The 2.4s is
+   the SMTP handshake: too slow to be a no-op, far too fast to be a timeout.
+3. The message was delivered to Gmail — **into spam**, which is the expected outcome below and
+   not a misconfiguration.
+
+The container reaches mailcow over the **host's own public IP**, hairpinning out through Docker's
+bridge, since the API and mailcow are the same machine. That path is now known to work; it is the
+one thing no local test can establish.
+
 ### Deliverability posture
 
 Verified 2026-09-22 against `1.1.1.1`:

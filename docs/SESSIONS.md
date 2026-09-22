@@ -95,9 +95,19 @@
   `EmailSettings` has a flat `FromEmail`, which still held the Gmail address, so the API would have
   authenticated as `noreply@` and then tried to send as Gmail — refused by mailcow, with no startup
   error to warn anyone. Vault values and code must ship together.
-- **Still not proven end to end: nothing has been sent.** Both app passwords are outstanding, so
-  no message has left the server and neither mailbox has completed a mail login. SMTP is
-  configured, documented and building — but until a real send lands, none of it is known to work.
+- **Proven end to end: a real sign-in code was sent and delivered.** `config: present:` named both
+  `EmailSettings__Password` and `EmailSettings__Product__Password` with no `MISSING:` line — and
+  since the previous `report-config.sh` did not know those names, that one line proved both that
+  the new build was running and that the vault values arrived. `POST /api/auth/login-code/request`
+  then returned **200 in 2453ms**; because `OneTimeCodeRequestService` rethrows on a failed send, a
+  200 can only mean the SMTP send completed, and 2.4s is a handshake rather than a timeout. The
+  message reached Gmail **and landed in spam** — the predicted outcome for a domain with no
+  sending history, not a fault.
+- **The Docker hairpin works.** API and mailcow are the same host, so the container reaches mailcow
+  via the host's own public IP through the bridge. That was the one path no local test could cover,
+  and it is now known good.
+- Ignore `libgssapi_krb5.so.2: cannot open shared object file` in the API log — Npgsql probing for
+  Kerberos on a slim base image, unrelated to mail, predates this work.
 
 ## 2026-09-08 (Infisical vault stood up; all 35 taskflow secrets migrated and verified)
 
