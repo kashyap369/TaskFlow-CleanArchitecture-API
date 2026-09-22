@@ -109,6 +109,31 @@
 - Ignore `libgssapi_krb5.so.2: cannot open shared object file` in the API log — Npgsql probing for
   Kerberos on a slim base image, unrelated to mail, predates this work.
 
+### Carried to the next session (2026-09-23, deliberately deferred)
+
+Nothing here blocks the transactional path, which is proven. Agreed to defer rather than forgotten:
+
+1. **The `taskflow@` / `Product` sender has never sent a real message.** It is configured, its app
+   password is in the vault and five unit tests cover the resolution, but nothing has left that
+   mailbox in production. It only fires when a **brand-new account is verified**, and it uses a
+   **different app password** from the one that was proven — so it can fail independently. Register
+   a throwaway account and verify it.
+2. **DKIM/SPF/DMARC were never confirmed on the delivered message.** The code landed in spam, which
+   is the expected cold-domain outcome — but "Show original" in Gmail was not checked. If DKIM says
+   FAIL, that is a real bug (mailcow not signing for `inksphere.space` despite the published key)
+   and no amount of reputation warm-up fixes it. **Check this before assuming reputation.**
+3. **The old Gmail app password is still live on Google's side.** Overwriting the vault row did not
+   revoke it, and it was exposed in a screenshot. Remove it at myaccount.google.com.
+4. **`EmailSettings__FromEmail` and `EmailSettings__FromName` are dead vault keys.** They bind to
+   nothing after the settings rewrite. Delete them before someone edits them expecting an effect.
+5. **Domain reputation.** `inksphere.space` has essentially no sending history. Register it with
+   Google Postmaster Tools, keep volume low and to engaged recipients, and leave DMARC at `p=none`
+   until the `rua` reports show TaskFlow's own mail passing consistently.
+6. **mailcow update available**, 2026-07b → 2026-09. Nothing here depends on it.
+
+Unrelated to email and still the largest risk on that host: the Infisical vault holds the **only**
+copy of 41 production secrets and **the host has no backups**. Unchanged by this session.
+
 ## 2026-09-08 (Infisical vault stood up; all 35 taskflow secrets migrated and verified)
 
 - **A secrets vault now exists and holds a verified copy of every taskflow credential.**
