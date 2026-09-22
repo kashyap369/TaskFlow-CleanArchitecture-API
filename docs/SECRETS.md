@@ -225,6 +225,147 @@ single copy.
 > **Back the vault up before upgrading it, and do not raise the CLI pin until `/api/v4/secrets`
 > answers.** Raising the pin against this vault reproduces the 2026-09-13 outage exactly.
 
+## SMTP — self-hosted mailcow (configured 2026-09-22)
+
+TaskFlow sends invitations, one-time codes and guest access mail through the **self-hosted
+mailcow** at `https://mail.buildbykashyap.in` (mailcow `2026-07b`). It is not a third-party
+relay: the same box holds the mailboxes and does the sending, so its uptime is TaskFlow's
+mail uptime.
+
+### The two domains are not interchangeable
+
+mailcow serves **two** domains from one host, and this trips people up:
+
+| | `buildbykashyap.in` | `inksphere.space` |
+|---|---|---|
+| Role | personal / brand | product side — **TaskFlow's sender lives here** |
+| Mailboxes | `contact@`, `dmarc@`, `newsletter@`, `shubham@` | `contact@`, `noreply@`, `shubham@`, `taskflow@` |
+| `mail.<domain>` A record | `72.61.231.225` | **none — does not resolve** |
+
+`mail.inksphere.space` has no A record. The SMTP **host** is therefore
+`mail.buildbykashyap.in` while the **address** is `noreply@inksphere.space`. That mismatch is
+correct and deliberate; "fixing" it to `mail.inksphere.space` breaks all outbound mail.
+
+### Two sending identities, one server
+
+TaskFlow sends as **two** addresses, and the split is deliberate — see `EmailSender` in
+`Application/Contracts/Email`:
+
+| | `EmailSender.Transactional` | `EmailSender.Product` |
+|---|---|---|
+| Address | `noreply@inksphere.space` | `taskflow@inksphere.space` |
+| Carries | verification, sign-in and reset codes, org invitations, meeting invites and guest codes | the thank-you sent after a new account is verified |
+| Replies | nobody reads them | reach a real mailbox |
+| Used when | **default for anything new** | relationship mail, not pending-action mail |
+
+The point is blast radius. If someone marks a friendly product email as spam, that must not be
+able to stop a password-reset code reaching a locked-out user. Different mailbox, separate
+reputation. A message sent under the wrong identity is not a cosmetic error.
+
+`IEmailService.SendAsync` takes the sender with **no default**, so every send site states which
+address it leaves under at the point the message is composed.
+
+### Settings
+
+| Key | Value | Where it lives |
+|---|---|---|
+| `EmailSettings__Host` | `mail.buildbykashyap.in` | Infisical |
+| `EmailSettings__Port` | `587` | Infisical |
+| `EmailSettings__EnableSsl` | `true` (STARTTLS) | Infisical |
+| `EmailSettings__Username` | `noreply@inksphere.space` | Infisical |
+| `EmailSettings__Password` | `noreply@` **app password**, SMTP-scoped | **Infisical — set by hand** |
+| `EmailSettings__Transactional__FromEmail` | `noreply@inksphere.space` | Infisical |
+| `EmailSettings__Transactional__FromName` | `TaskFlow` | Infisical |
+| `EmailSettings__Product__FromEmail` | `taskflow@inksphere.space` | Infisical |
+| `EmailSettings__Product__FromName` | `TaskFlow` | Infisical |
+| `EmailSettings__Product__Username` | `taskflow@inksphere.space` | Infisical |
+| `EmailSettings__Product__Password` | `taskflow@` **app password**, SMTP-scoped | **Infisical — set by hand** |
+
+A sender that defines no `Username`/`Password` falls back to the top-level pair. That fallback
+exists so the deployment *can* run on a single app password, but only if mailcow's
+**"Allow to send as"** grants the authenticating mailbox the other address. That grant is
+deliberately **not** in place: each mailbox holds its own credential, so neither app password can
+send as the other.
+
+**`EmailSettings__FromEmail` and `EmailSettings__FromName` are dead.** They survive from the
+Gmail-placeholder era and bind to nothing — the properties no longer exist on `EmailSettings`.
+Harmless, but delete them when convenient so nobody edits them expecting an effect.
+
+**Port 587, not 465.** `SmtpEmailSender` uses `System.Net.Mail.SmtpClient`, which has no
+implicit-TLS mode — its `EnableSsl` means STARTTLS. Port 465 is open on the host and will
+appear to be a valid choice, but the client cannot speak it and the connection hangs rather
+than failing cleanly.
+
+### The passwords are app passwords, not mailbox passwords
+
+Both password variables hold mailcow **app passwords** scoped to SMTP only. This matters twice
+over: revoking one does not lock anyone out of the mailbox, and a leak of the API's configuration
+does not hand over a mailbox that can *read* mail. Never put a mailbox login password in either.
+
+Rotating one: create the replacement app password first, update Infisical, restart the API,
+verify a real send, and only then delete the old one. Deleting first means invitations and guest
+codes fail for the length of the gap.
+
+**`EmailSettings` is not validated on startup** (unlike `JwtSettings`, `ClientSettings` and
+`ObjectStorage`, which call `ValidateOnStart`). A wrong or missing mail value therefore cannot
+stop the API booting — it surfaces later as mail that silently does not arrive. `SmtpEmailSender`
+throws on an empty `FromEmail` for exactly that reason, but nothing checks the credentials until
+the first send.
+
+### Deliverability posture
+
+Verified 2026-09-22 against `1.1.1.1`:
+
+- MX `inksphere.space` → `mail.buildbykashyap.in`
+- SPF `v=spf1 mx ip4:72.61.231.225 ~all`
+- DKIM `dkim._domainkey.inksphere.space`, 2048-bit RSA
+- DMARC `p=none; rua=mailto:contact@inksphere.space; fo=1`
+- PTR `72.61.231.225` → `mail.buildbykashyap.in`, matching the HELO name
+
+Two standing caveats:
+
+- **DMARC is `p=none`.** Nothing is enforced; a spoof of `inksphere.space` is not rejected by
+  receivers. Reports go to `contact@inksphere.space`. Tighten to `p=quarantine` only after
+  those reports show TaskFlow's own mail passing consistently — moving early will bin your
+  own invitations.
+- **`inksphere.space` has no sending history** (0 messages, 0 B as of 2026-09-22, and neither
+  mailbox had ever completed a mail login). A cold IP on a fresh domain draws greylisting and
+  spam-foldering from the large providers regardless of how correct the DNS is. Expect the first
+  invitations to land badly and warm up gradually rather than sending a large batch on day one.
+  The thank-you is tied to **verification** rather than registration partly for this reason: it
+  only ever goes to an address that has already proved it receives mail.
+
+## When the vault web UI will not log in (observed 2026-09-22)
+
+The console hung on the Infisical loading animation and never rendered a login form. Signing in
+again cleared it, so this is **not** a permanent fault — but the probe below is worth keeping,
+because it distinguishes a stuck console from a failing vault. Probed from outside:
+
+| Request | Status | Reading |
+|---|---|---|
+| `GET /api/status` | **200** | the backend is alive |
+| `GET /api/v1/admin/config` | **200** | and serving |
+| `GET /api/v3/secrets/raw` | **401** | the secrets API works — it only wants credentials |
+| `GET /api/v4/secrets` | **404** | the divergence behind the CLI pin, still present |
+| `POST /api/v1/auth/token` | **404** | **the only failing call, and where the UI hangs** |
+
+**A stuck console is not a failing vault.** The API reads secrets through the pinned CLI over
+`/api/v3/secrets/raw`, which answers `401` rather than `404` — the route exists and production is
+unaffected. Check those three status codes before concluding anything: if `/api/status` answers
+and `v3` returns `401`, the vault is serving and the problem is your session.
+
+`/api/v4/secrets` returning `404` while `/api/v3/secrets/raw` returns `401` is the exact
+divergence the CLI pin exists for, **confirmed still present on 2026-09-22** — so the pin must
+stay. Whether the same divergence explains the missing `/api/v1/auth/token` is **inference, not
+proof**: the route probe was stopped before it could be confirmed, and re-authenticating fixed
+the symptom without establishing the cause.
+
+**Do not fix this by upgrading or restarting the vault.** With Dokploy's copies cleared, it is the
+only copy of all 35 production secrets and this host still has no backups, so a restart that fails
+to come back is unrecoverable. The order stays the one already written above: **back it up, then
+upgrade it.** A broken console is an inconvenience; a vault that does not restart is the end of the
+project's credentials.
+
 ## Rotating a secret
 
 1. Change the value in Infisical (`taskflow` / `prod`)
@@ -238,7 +379,7 @@ the live copy and must be updated too. Two places, until cutover completes.
 ## Operational notes
 
 - Signups are disabled instance-wide (`allowSignUp: false`). New users are added by invite,
-  which needs SMTP — currently unconfigured, so invites do not send yet.
+  which needs SMTP — see the SMTP section below.
 - `ENCRYPTION_KEY` in `/opt/infisical/.env` is unrecoverable if lost. Every secret in the
   vault becomes permanently unreadable, even with a full database dump. It belongs in a
   break-glass envelope stored off this server, alongside the root SSH key, registrar login

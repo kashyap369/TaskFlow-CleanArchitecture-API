@@ -1841,7 +1841,7 @@ public sealed class PlannerTestEmailService : IEmailService
 {
     public string LastBody { get; private set; } = string.Empty;
     public string LastCode => System.Text.RegularExpressions.Regex.Match(LastBody, @">([0-9]{6})<").Groups[1].Value;
-    public Task SendAsync(string to, string subject, string body, CancellationToken cancellationToken = default)
+    public Task SendAsync(string to, string subject, string body, EmailSender sender, CancellationToken cancellationToken = default)
     { LastBody = body; return Task.CompletedTask; }
 }
 

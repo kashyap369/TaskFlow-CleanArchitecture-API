@@ -158,7 +158,7 @@ public sealed class RequestMeetingGuestCodeCommandHandler(IMeetingGuestAccessRep
         var template = await File.ReadAllTextAsync(templatePath, ct);
         template = template.Replace("{{MeetingTitle}}", WebUtility.HtmlEncode(meeting.Title)).Replace("{{Code}}", code)
             .Replace("{{CurrentYear}}", DateTime.UtcNow.Year.ToString());
-        await emailService.SendAsync(request.Email.Trim(), $"Your code for {meeting.Title}", template, ct);
+        await emailService.SendAsync(request.Email.Trim(), $"Your code for {meeting.Title}", template, EmailSender.Transactional, ct);
     }
 }
 

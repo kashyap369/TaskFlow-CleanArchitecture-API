@@ -1,6 +1,7 @@
-﻿using System.Net;
+using System.Net;
 using System.Net.Mail;
 using Microsoft.Extensions.Options;
+using TaskFlow.Application.Contracts.Email;
 
 namespace TaskFlow.Infra.Email.Smtp
 {
@@ -18,25 +19,37 @@ namespace TaskFlow.Infra.Email.Smtp
             string to,
             string subject,
             string body,
-            bool isHtml = true)
+            EmailSender sender,
+            bool isHtml = true,
+            CancellationToken cancellationToken = default)
         {
+            var identity = _settings.For(sender);
+
+            if (string.IsNullOrWhiteSpace(identity.FromEmail))
+                throw new InvalidOperationException(
+                    $"EmailSettings:{sender}:FromEmail is not configured, so TaskFlow "
+                    + "cannot send this message. Configure the sender or the mail is "
+                    + "silently lost.");
+
             using var client = new SmtpClient(
                 _settings.Host,
                 _settings.Port);
 
-            client.Credentials =
-                new NetworkCredential(
-                    _settings.Username,
-                    _settings.Password);
-
+            // STARTTLS on 587. See EmailSettings.Port — this is not implicit TLS,
+            // and this client cannot do implicit TLS at all.
             client.EnableSsl =
                 _settings.EnableSsl;
 
-            var message = new MailMessage
+            client.Credentials =
+                new NetworkCredential(
+                    identity.Username,
+                    identity.Password);
+
+            using var message = new MailMessage
             {
                 From = new MailAddress(
-                    _settings.FromEmail,
-                    _settings.FromName),
+                    identity.FromEmail,
+                    identity.FromName),
 
                 Subject = subject,
 
@@ -47,7 +60,12 @@ namespace TaskFlow.Infra.Email.Smtp
 
             message.To.Add(to);
 
-            await client.SendMailAsync(message);
+            // SendMailAsync's overload without a token ignores cancellation
+            // entirely; passing it lets a shutdown interrupt a hung connection
+            // rather than holding the request open until the SMTP timeout.
+            await client.SendMailAsync(
+                message,
+                cancellationToken);
         }
     }
 }

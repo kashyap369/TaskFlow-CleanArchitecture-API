@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using System.Net;
 using FluentValidation;
 using MediatR;
@@ -307,7 +307,7 @@ public sealed class CreateMeetingAccessLinkCommandHandler(IMeetingRepository mee
                 .Replace("{{JoinUrl}}", WebUtility.HtmlEncode(joinUrl))
                 .Replace("{{Expiry}}", link!.ExpiresAtUtc.ToString("f"))
                 .Replace("{{CurrentYear}}", DateTime.UtcNow.Year.ToString());
-            await emailService.SendAsync(request.LockedEmail.Trim(), $"Invitation: {meeting.Title}", template, ct);
+            await emailService.SendAsync(request.LockedEmail.Trim(), $"Invitation: {meeting.Title}", template, EmailSender.Transactional, ct);
         }
         return new(link!.Id, token, link.ExpiresAtUtc);
     }

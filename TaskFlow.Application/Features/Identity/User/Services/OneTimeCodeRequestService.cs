@@ -1,4 +1,4 @@
-using TaskFlow.Application.Contracts.Email;
+﻿using TaskFlow.Application.Contracts.Email;
 using TaskFlow.Application.Contracts.Security;
 using TaskFlow.Domain.Entities.Identity;
 using TaskFlow.Domain.Enums.Identity;
@@ -93,6 +93,7 @@ namespace TaskFlow.Application.Features.Identity.User.Services
                     user.Email.Value,
                     isReset ? "Reset your TaskFlow password" : "Your TaskFlow sign-in code",
                     template,
+                    EmailSender.Transactional,
                     cancellationToken);
             }
             catch

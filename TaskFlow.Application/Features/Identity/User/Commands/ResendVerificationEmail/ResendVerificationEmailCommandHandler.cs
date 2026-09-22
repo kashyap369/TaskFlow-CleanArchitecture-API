@@ -1,4 +1,4 @@
-using MediatR;
+﻿using MediatR;
 using TaskFlow.Application.Contracts.Configuration;
 using TaskFlow.Application.Contracts.Email;
 using TaskFlow.Application.Contracts.Security;
@@ -70,6 +70,7 @@ namespace TaskFlow.Application.Features.Identity.User.Commands.ResendVerificatio
                 user.Email.Value,
                 "Verify your TaskFlow account",
                 template,
+                EmailSender.Transactional,
                 cancellationToken);
         }
     }

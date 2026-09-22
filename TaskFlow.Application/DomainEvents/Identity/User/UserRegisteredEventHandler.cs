@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using TaskFlow.Application.Contracts.Configuration;
 using TaskFlow.Application.Contracts.Email;
 using TaskFlow.Application.Contracts.Security;
@@ -95,6 +95,7 @@ namespace TaskFlow.Application.DomainEvents.Identity.User
                     domainEvent.Email,
                     "Verify your TaskFlow account",
                     template,
+                    EmailSender.Transactional,
                     cancellationToken);
             }
             catch (OperationCanceledException)

@@ -69,6 +69,7 @@ namespace TaskFlow.Application.DomainEvents.Organizations
                 domainEvent.Email,
                 $"You've been invited to join {organizationName} on TaskFlow",
                 template,
+                EmailSender.Transactional,
                 cancellationToken);
         }
     }

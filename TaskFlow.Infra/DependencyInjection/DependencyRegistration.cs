@@ -65,6 +65,7 @@ namespace TaskFlow.Infra.DependencyInjection
             services.AddScoped<ISystemRoleRepository, SystemRoleRepository>();
             services.AddScoped<IUserRoleRepository, UserRoleRepository>();
             services.AddScoped<IDomainEventHandler<UserRegisteredEvent>, UserRegisteredEventHandler>();
+            services.AddScoped<IDomainEventHandler<UserEmailVerifiedEvent>, UserEmailVerifiedEventHandler>();
             services.AddScoped<IDomainEventHandler<OrganizationMemberInvitedEvent>, OrganizationMemberInvitedEventHandler>();
             services.AddScoped<IOrganizationPermissionChecker, OrganizationPermissionChecker>();
             services.AddScoped<IOrganizationAccessGuard, OrganizationAccessGuard>();

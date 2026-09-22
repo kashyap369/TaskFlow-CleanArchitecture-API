@@ -1,4 +1,4 @@
-﻿using TaskFlow.Application.Contracts.Email;
+using TaskFlow.Application.Contracts.Email;
 using TaskFlow.Infra.Email.Smtp;
 
 namespace TaskFlow.Infra.Email
@@ -18,13 +18,16 @@ namespace TaskFlow.Infra.Email
             string to,
             string subject,
             string body,
+            EmailSender sender,
             CancellationToken cancellationToken = default)
         {
             await _smtpEmailSender.SendAsync(
                 to,
                 subject,
                 body,
-                true);
+                sender,
+                true,
+                cancellationToken);
         }
     }
 }

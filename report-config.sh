@@ -7,8 +7,12 @@
 # works both on its own and as the thing `infisical run` execs.
 present=""
 missing=""
+# The two mail credentials are listed because EmailSettings is NOT validated on startup: a missing
+# one cannot stop the boot, it only stops invitations and OTPs from arriving, hours later and
+# silently. Names only - never print a value.
 for name in ConnectionStrings__DefaultConnection JwtSettings__SecretKey ClientSettings__BaseUrl \
-            ObjectStorage__Endpoint EmailSettings__Host Cors__AllowedOrigins__0 ASPNETCORE_URLS
+            ObjectStorage__Endpoint EmailSettings__Host EmailSettings__Password \
+            EmailSettings__Product__Password Cors__AllowedOrigins__0 ASPNETCORE_URLS
 do
     eval "value=\${$name}"
     if [ -n "$value" ]; then

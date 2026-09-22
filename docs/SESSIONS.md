@@ -1,5 +1,104 @@
 # TaskFlow — Session Log
 
+## 2026-09-22 (SMTP wired to self-hosted mailcow; `noreply@inksphere.space` is the sender)
+
+- **The "invites do not send yet" note in [SECRETS.md](SECRETS.md) is closed.** `EmailSettings`
+  was still carrying the `smtp.gmail.com` / `noreply@example.com` placeholder, so organization
+  invitations, email verification and meeting guest one-time codes all composed a message and
+  dropped it. The API now points at the self-hosted mailcow (`2026-07b`) at
+  `https://mail.buildbykashyap.in`. No route, no migration, no contract change.
+- **The host is not the address's domain, and that is deliberate.** mailcow serves two domains
+  from one box: `buildbykashyap.in` (personal — `contact@`, `dmarc@`, `newsletter@`, `shubham@`)
+  and `inksphere.space` (product — `contact@`, `noreply@`, `shubham@`, `taskflow@`).
+  **`mail.inksphere.space` has no A record**; only `mail.buildbykashyap.in` resolves. So
+  `Host = mail.buildbykashyap.in` with `FromEmail = noreply@inksphere.space`. Anyone "correcting"
+  the host to match the domain will take all outbound mail down.
+- **Port 587, never 465.** `SmtpEmailSender` uses `System.Net.Mail.SmtpClient`, which has no
+  implicit-TLS mode — `EnableSsl` there means STARTTLS. Port 465 *is* open on the host, so it
+  presents as the more secure option and then hangs rather than failing cleanly.
+- **DNS was verified rather than assumed**, against `1.1.1.1` and not the mailcow DNS page: MX
+  → `mail.buildbykashyap.in`, SPF `v=spf1 mx ip4:72.61.231.225 ~all`, DKIM `dkim._domainkey`
+  2048-bit RSA, DMARC `p=none` with reports to `contact@inksphere.space`, and PTR
+  `72.61.231.225` → `mail.buildbykashyap.in` matching the HELO name. All correct.
+- **Two accepted weaknesses, written down so they are not rediscovered as bugs.** DMARC is
+  `p=none`, so a spoof of `inksphere.space` is not rejected by anyone — tighten only after the
+  `rua` reports show TaskFlow's own mail passing, or the first casualty is your own invitations.
+  And `inksphere.space` has **no sending history at all** (0 messages, 0 B); correct DNS does not
+  buy reputation, so expect greylisting and spam-foldering from the large providers and warm the
+  volume up instead of sending a batch.
+- **The credential is an app password, not the mailbox password.** `EmailSettings__Username` /
+  `__Password` come from Infisical; the password is scoped to SMTP on the `noreply@` mailbox, so
+  revoking it neither locks anyone out of the mailbox nor hands a config leak the ability to read
+  mail. Rotation order matters: create the new one, update the vault, restart, verify a send, then
+  delete the old — deleting first fails every invitation for the length of the gap.
+- **Not proven end to end.** No message has been sent. The `noreply@` mailbox has never completed
+  a mail login (every `Last mail login` timestamp in mailcow is still blank), so the app password
+  and the first real send remain outstanding.
+- Also noted, not acted on: mailcow reports an available upgrade **2026-07b → 2026-09**.
+- **Two sending identities, not one.** `noreply@inksphere.space` carries everything the user must
+  act on (verification, sign-in and reset codes, org invitations, meeting invites and guest codes);
+  `taskflow@inksphere.space` carries the thank-you and is replyable. `IEmailService.SendAsync` now
+  takes an `EmailSender` with **no default**, so all six existing send sites had to name their
+  identity — which is the point: which address a message leaves under is worth deciding where the
+  message is written. The reason for the split is blast radius, not branding: a spam complaint
+  about friendly mail must not be able to stop a reset code reaching a locked-out user.
+- **The thank-you did not exist and is tied to verification, not registration.**
+  `UserRegisteredEventHandler` sends *"Verify your TaskFlow account"* — the repo calls it the
+  welcome email but it is the verification email. The new thank-you hangs off
+  `UserEmailVerifiedEvent`, which was **already raised by `User.VerifyEmail()` and had no handler
+  at all**. Two reasons for that placement: at registration the only thing the user needs is the
+  verify link, and a second message competes with it; and verification is the point at which the
+  address is proven real, which matters on a domain with zero sending reputation — mail to
+  addresses that bounce is how a new domain earns a spam label. New template `ThankYou.html`
+  (picked up automatically by the existing `Email\Templates\**\*.html` copy rule) and
+  `UserEmailVerifiedEventHandler`, registered beside the other two handlers.
+- **A failed thank-you cannot break verification.** Domain events dispatch after the commit, so a
+  user who clicked a valid link must never be told it failed because a courtesy email did not
+  send. The handler logs and swallows, rethrowing only genuine cancellation.
+- **mailcow hygiene applied to both mailboxes.** Full name on each was `inksphere`, which is what
+  recipients would have seen in the From line — both now `TaskFlow`. Quarantine notifications on
+  `noreply@` went `Daily` → `Never` (nobody will ever read that mailbox, so the notices were mail
+  to nowhere); `taskflow@` keeps `Daily` because it *is* read. Gotcha worth remembering: in the
+  mailcow mailbox editor the quarantine toggle **saves itself immediately over AJAX** while the
+  full-name field needs the form's *Save changes* — the first attempt silently kept the old name
+  even though a green "changes have been saved" toast appeared.
+- **Vault: 9 config keys written, both passwords deliberately left empty.** Production went 35 → 40
+  secrets: 4 overwrites of the stale Gmail-era placeholders (`Host`, `Port`, `EnableSsl`,
+  `Username`) and 5 new (`Transactional__*`, `Product__*`). `EmailSettings__FromEmail` and
+  `__FromName` are now **dead keys** — they bind to nothing after the settings rewrite and should
+  be deleted when convenient. The two app passwords are not set: creating them means typing a
+  secret, which stayed with the owner.
+- **No "Allow to send as" grant was made.** One app password *could* serve both addresses via that
+  mailcow permission, and the settings support it through a fallback, but each mailbox keeping its
+  own credential means neither can send as the other. Two app passwords was the deliberate choice.
+- **`EmailSettings` has no `ValidateOnStart`**, unlike `JwtSettings`/`ClientSettings`/
+  `ObjectStorage`. Mail configuration therefore cannot break the boot — it fails later, as mail
+  that quietly never arrives. That is why this work is not finished until something is actually
+  sent.
+- **The vault's web console would not log in mid-session, then came back once signed in again.**
+  While it was stuck it hung on the loading animation with `POST /api/v1/auth/token` → **404** as
+  the only failing request. Worth keeping because the probe underneath it is durable and useful:
+  `/api/status` **200**, `/api/v3/secrets/raw` **401**, `/api/v4/secrets` **404** — that last pair
+  is the exact divergence the CLI pin exists for, confirmed still present. A stuck console is
+  therefore not evidence that the vault is failing; check those three before concluding anything.
+  **Do not reach for a restart or an upgrade**: that vault holds the only copy of the production
+  secrets and the host has no backups.
+- **`report-config.sh` now names both mail credentials.** It previously checked only
+  `EmailSettings__Host`, so a dropped app password would have passed the boot report and then
+  surfaced as mail that silently never arrived — the exact class of failure the script was written
+  for. It prints names only, never values.
+- **Five tests cover sender resolution** (`EmailSenderResolutionTests`), including the flat
+  `EmailSettings__Product__FromEmail` binding the vault actually supplies and the single-credential
+  fallback. Worth having because a wrong From address does not throw: mailcow refuses it with
+  "not permitted to send as", long after the deploy looked healthy. Suite **118 → 123**.
+- **Deploying the vault change without the code change would have broken sending.** The old
+  `EmailSettings` has a flat `FromEmail`, which still held the Gmail address, so the API would have
+  authenticated as `noreply@` and then tried to send as Gmail — refused by mailcow, with no startup
+  error to warn anyone. Vault values and code must ship together.
+- **Still not proven end to end: nothing has been sent.** Both app passwords are outstanding, so
+  no message has left the server and neither mailbox has completed a mail login. SMTP is
+  configured, documented and building — but until a real send lands, none of it is known to work.
+
 ## 2026-09-08 (Infisical vault stood up; all 35 taskflow secrets migrated and verified)
 
 - **A secrets vault now exists and holds a verified copy of every taskflow credential.**
