@@ -267,11 +267,14 @@ namespace TaskFlow.Infra.DependencyInjection
                 OrganizationPermissionRepository>();
 
             services.AddScoped<ICalendarEntryRepository, CalendarEntryRepository>();
+            services.AddScoped<IAttendanceSessionRepository, AttendanceSessionRepository>();
+            services.AddScoped<IAttendanceSettingsRepository, AttendanceSettingsRepository>();
             services.AddScoped<IMeetingRepository, MeetingRepository>();
             services.AddScoped<IMeetingGuestAccessRepository, MeetingGuestAccessRepository>();
             services.AddScoped<IMeetingCollaborationRepository, MeetingCollaborationRepository>();
             services.AddScoped<IMeetingRecordingRepository, MeetingRecordingRepository>();
             services.AddHostedService<MeetingRetentionCleanupService>();
+            services.AddHostedService<TaskFlow.Infra.Attendance.AttendanceMaintenanceService>();
             services.AddHostedService<MeetingRecordingRecoveryService>();
 
             // Register the Wrok management  repositories
