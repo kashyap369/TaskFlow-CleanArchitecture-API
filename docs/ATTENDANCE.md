@@ -77,19 +77,33 @@ stop the whole API booting. Mitigations taken: the new blocks were modelled on `
 header and the two new blocks; and every one of the 37 columns was machine-checked across entity,
 configuration, snapshot and migration (name, CLR type, column type, length, nullability).
 
-**Confirm on the next local session:**
+**Verified 2026-10-18, before merging** (developer, locally, in a separate worktree):
 
-```
-dotnet build
-dotnet ef migrations has-pending-model-changes --project TaskFlow.Infra --startup-project TaskFlow.Api
-dotnet test
-```
+| Check | Result |
+|---|---|
+| `dotnet build` | 0 errors (73 warnings, all in older files) |
+| `dotnet test` | 129/129 — the integration suite builds a fresh database and runs every migration, `AddAttendance` included |
+| `dotnet ef migrations has-pending-model-changes` | No changes |
+| After deploy, unauthenticated `GET …/me/today` | 401 (route exists; the API has no fallback auth policy, so a missing route is 404) |
 
-**If production fails to start after this deploy:** redeploy the previous image. Nothing here
-modifies existing data, so rolling the code back is safe; the two new tables are simply unused.
+Merged to `main` as `76105fe` — a cherry-pick of the branch commit `99a325b` onto `origin/main`.
+A fresh worktree has no `TaskFlow.Api/appsettings.json` (git-ignored); the integration tests fail
+with `FileNotFoundException` until it is copied in.
+
+**If production fails to start after a later change here:** redeploy the previous image. Nothing
+in this module modifies existing data, so rolling the code back is safe.
 
 ## 7. Not in this version
 
 Work schedules and late marking, per-role / per-member hours, approved zones and out-of-zone
 reasons, team-lead routing, correction requests — designed in Taskaro's `docs/ATTENDANCE.md` §6a,
 planned as the next attendance phase. Face matching / liveness: not planned.
+
+**Location is not collected.** No coordinates are sent or stored today. Recording the position of
+each punch (latitude, longitude, accuracy — three nullable columns on `AttendanceSessions`, an
+additive migration) is the first step towards zones and has been offered; not yet decided.
+Continuous field tracking is a separate, later piece of work (Taskaro `docs/ATTENDANCE.md` §9).
+
+**Face check:** the Taskaro app checks on the device that the selfie contains a face before
+uploading. The API does not — it accepts any valid JPEG, PNG or HEIC. A server-side check would
+be the only enforceable one; it has not been decided.

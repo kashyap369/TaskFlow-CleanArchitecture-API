@@ -2,21 +2,22 @@
 
 > Keep the Current Status section up to date at the end of every session.
 
-## 🟡 Attendance — punch in / out with a selfie (2026-10-18)
+## ✅ Attendance — punch in / out with a selfie (2026-10-18) — live on `main` (`76105fe`)
 
-Implemented and **pushed to `main` without a local build or test run**, at the developer's
-instruction; the authoring session has no .NET SDK. Full reference: [ATTENDANCE.md](ATTENDANCE.md).
+Written without a .NET SDK, then **verified locally by the developer before merging**: `dotnet
+build` 0 errors, `dotnet test` **129/129**, `has-pending-model-changes` → no changes. Merged as a
+single cherry-pick onto `main` and deployed; the new route answers 401 (not 404) unauthenticated.
+Full reference: [ATTENDANCE.md](ATTENDANCE.md).
 
 - **New:** `AttendanceSession` and `AttendanceSettings` aggregates, 10 routes under
   `api/attendance`, permissions `ViewAttendance` / `ManageAttendance` (seeded at startup),
   `AttendanceMaintenanceService` (auto-close forgotten sessions; delete selfies after retention).
 - **Selfie on every punch**, stored in object storage with key + SHA-256 on the row.
-- **Migration `AddAttendance`** — two new tables, nothing existing altered. Snapshot and Designer
-  hand-written; see ATTENDANCE.md §6 for how they were checked and what to verify.
-- **Unverified:** compile, `dotnet test`, `has-pending-model-changes`. Six domain tests added
-  (`AttendanceSessionTests`), not run.
-- **Not done:** schedules, zones, out-of-zone reasons, team-lead routing (next attendance phase);
-  the task-permission enforcement noted in Taskaro's SESSIONS.md is still open.
+- **Migration `AddAttendance`** — two new tables, nothing existing altered; applied in production.
+- **Client:** the Taskaro mobile app (its Phase 8, written, being tested on Android). The Angular
+  UI consumes none of these routes.
+- **Not done:** location on punch, schedules, zones, out-of-zone reasons, team-lead routing (next
+  attendance phase); the task-permission enforcement noted in Taskaro's SESSIONS.md is still open.
 
 ## 🟡 Organization Meetings Phase 7 — P7.6: TURN/TLS live in production (2026-09-07)
 

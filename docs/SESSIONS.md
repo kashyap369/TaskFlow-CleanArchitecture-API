@@ -1,6 +1,22 @@
 # TaskFlow — Session Log
 
-## 2026-10-18 (Attendance: punch in / out with a selfie — shipped to `main` unbuilt)
+## 2026-10-18 (Attendance verified and merged to `main`)
+
+- The developer's local `main` held an unpushed commit and uncommitted account-settings work, so
+  attendance was merged **from a separate worktree**: `git worktree add ..\TaskFlow-attendance
+  origin/main -b attendance-merge`, `git cherry-pick 99a325b` → `76105fe`, checks, `git push origin
+  HEAD:main`. Their working folder was never touched.
+- Checks: build 0 errors; tests 129/129; `has-pending-model-changes` → none. The hand-written
+  snapshot was right first time.
+- **Gotcha:** the fresh worktree lacked the git-ignored `TaskFlow.Api/appsettings.json`; 19
+  integration tests failed with `FileNotFoundException` until it was copied across.
+- Deployed; unauthenticated `GET api/attendance/organization/1/me/today` → 401.
+- **Branch note:** `claude/blissful-allen-2gdkw2` carries `99a325b` and `main` carries `76105fe`,
+  the same change under two hashes. Merging the branch later is conflict-free; do not cherry-pick
+  `99a325b` again.
+- Open questions recorded in ATTENDANCE.md §7: location on punch, and a server-side face check.
+
+## 2026-10-18 (Attendance: punch in / out with a selfie — written on the branch, unbuilt)
 
 - **Why now:** the mobile app (Taskaro) is the attendance client; the developer asked for the flow
   in the API, in this codebase's style, pushed to `main`. The authoring session had **no .NET SDK**,
