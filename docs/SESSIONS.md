@@ -1,5 +1,30 @@
 # TaskFlow — Session Log
 
+## 2026-10-18 (Attendance: punch in / out with a selfie — shipped to `main` unbuilt)
+
+- **Why now:** the mobile app (Taskaro) is the attendance client; the developer asked for the flow
+  in the API, in this codebase's style, pushed to `main`. The authoring session had **no .NET SDK**,
+  so nothing was compiled or tested — stated in the commit, PHASES and ATTENDANCE.md.
+- **Style followed:** the Calendar feature (newest, compact): one file per feature in
+  `Features/Attendance`, tuple-assigned constructors, typed exceptions with SCREAMING_SNAKE codes,
+  Dapper reads with `IOrganizationScopedRequest`, permissions via `IOrganizationPermissionChecker`.
+- **Two facts from `Program.cs` that shaped it:** migrations run at startup (so the migration is
+  purely additive), and EF Core 10 throws on startup if the snapshot drifts from the model (so the
+  hand-written snapshot was machine-checked column by column against entity, configuration and
+  migration — and the checker was itself tested by planting two errors, both caught).
+- **`TimeZone` went in a new `AttendanceSettings` table, not on `Organizations`**, so the
+  migration touches no existing table. Schedules and zones will extend that table later.
+- **Date reads:** `WorkDate` is read into `DateOnly` exactly as `CalendarEntryRow.RecurrenceUntil`
+  is; query parameters pass `DateTime` with `::date`, as the calendar query does.
+- **Leave and holidays** reuse `GetCalendarEntriesQuery` through `ISender` instead of copying its
+  recurrence expansion.
+- **Open punch races:** a filtered unique index is the real guard; `UnitOfWork` maps its name to
+  `409 ATTENDANCE_ALREADY_PUNCHED_IN`. A stale open session is auto-closed and **saved before** the
+  new row is inserted, so the index never sees two open rows in one batch.
+- **Verify next session:** `dotnet build`, `dotnet ef migrations has-pending-model-changes`,
+  `dotnet test` (adds `AttendanceSessionTests`).
+
+
 ## 2026-09-22 (SMTP wired to self-hosted mailcow; `noreply@inksphere.space` is the sender)
 
 - **The "invites do not send yet" note in [SECRETS.md](SECRETS.md) is closed.** `EmailSettings`

@@ -92,6 +92,8 @@ DB: PostgreSQL, connection string `DefaultConnection`. Seeds on startup: system 
   no-folders secret layout, machine identities, and the ordered cutover to `infisical run`.
   Read before changing any environment variable in Dokploy — and note the LiveKit credential
   divergence recorded there, which currently breaks meeting joins.
+- [docs/ATTENDANCE.md](docs/ATTENDANCE.md) — **attendance** (punch in / out with a selfie): rules,
+  endpoints, schema, and how the 2026-10-18 migration was shipped. Read before touching attendance.
 - [docs/SESSIONS.md](docs/SESSIONS.md) — session log: gotchas, dead ends, decisions
 - [infra/meetings/RUNBOOK.md](infra/meetings/RUNBOOK.md) — **production meetings triage.** What broke
   on 2026-09-04, how each fault was proved, how to read LiveKit logs, and how configuration survives

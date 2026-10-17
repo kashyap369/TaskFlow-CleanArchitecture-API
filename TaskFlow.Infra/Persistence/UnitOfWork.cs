@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using TaskFlow.Application.Exceptions;
 using TaskFlow.Domain.Interfaces.Persistence;
+using TaskFlow.Infra.Persistence.Configurations.Organizations;
 using TaskFlow.Infra.Persistence.Context;
 
 namespace TaskFlow.Infra.Persistence;
@@ -37,6 +38,18 @@ public sealed class UnitOfWork : IUnitOfWork
             throw new ConflictException(
                 "PLANNER_REVISION_CONFLICT",
                 "This Planner board changed in another tab or device. Reload it before saving.");
+        }
+        catch (DbUpdateException exception) when (
+            exception.InnerException is PostgresException
+            {
+                SqlState: PostgresErrorCodes.UniqueViolation,
+                ConstraintName: AttendanceSessionConfiguration.OneOpenSessionIndex,
+            })
+        {
+            // Two punch-ins raced (a double tap on a slow connection); the index let one through.
+            throw new ConflictException(
+                "ATTENDANCE_ALREADY_PUNCHED_IN",
+                "You are already punched in.");
         }
     }
 

@@ -63,6 +63,8 @@ public sealed class TaskFlowDbContext : DbContext
     public DbSet<RequirementSnapshot> RequirementSnapshots => Set<RequirementSnapshot>();
     public DbSet<RequirementChange> RequirementChanges => Set<RequirementChange>();
     public DbSet<CalendarEntry> CalendarEntries => Set<CalendarEntry>();
+    public DbSet<AttendanceSession> AttendanceSessions => Set<AttendanceSession>();
+    public DbSet<AttendanceSettings> AttendanceSettings => Set<AttendanceSettings>();
     public DbSet<Meeting> Meetings => Set<Meeting>();
     public DbSet<MeetingBadgeDefinition> MeetingBadgeDefinitions => Set<MeetingBadgeDefinition>();
     public DbSet<MeetingParticipant> MeetingParticipants => Set<MeetingParticipant>();

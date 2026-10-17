@@ -43,7 +43,11 @@ namespace TaskFlow.Infra.Seeder.Organization.Permission
                 [OrganizationPermissionNames.ManageMeetings] =
                     "Manage any meeting in the organization.",
                 [OrganizationPermissionNames.RecordMeetings] =
-                    "Request and manage meeting recordings when recording is enabled."
+                    "Request and manage meeting recordings when recording is enabled.",
+                [OrganizationPermissionNames.ViewAttendance] =
+                    "See members' attendance: who is in today, their history and punch selfies.",
+                [OrganizationPermissionNames.ManageAttendance] =
+                    "Correct attendance records and change the organization's attendance settings."
             };
 
         public static async Task SeedAsync(
