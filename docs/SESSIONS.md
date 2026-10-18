@@ -19,7 +19,11 @@
   `HttpClient` with a pooled-connection lifetime, so Infra gains no package.
 - **First `= ANY(@Ids)` in the codebase** (Dapper passes `int[]` as a Postgres array on Npgsql). If
   it misbehaves, it is in `GetFieldTrackingDayQueryHandler`.
-- **Verify next session:** `dotnet build`, `has-pending-model-changes`, `dotnet test`.
+- **Verified by the developer the same day** (worktree `D:\Projects\TMS\TaskFlow-tracking`, branch
+  `tracking-test` → this branch at `606eb89`): `dotnet build` succeeded first time (73 pre-existing
+  nullability warnings, none new in kind); `dotnet test` **141/141** (129 + 12 new, the integration
+  suite applying `AddFieldTracking` to a fresh database); `has-pending-model-changes` → **no changes**
+  (only the pre-existing `AccountType` sentinel warning). Not yet deployed.
 
 
 ## 2026-10-18 (Attendance: punch in / out with a selfie — shipped to `main` unbuilt)

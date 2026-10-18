@@ -97,8 +97,8 @@ planned as the next attendance phase. Face matching / liveness: not planned.
 
 ## 8. Field tracking — route of tracked members while punched in (2026-10-18, branch only)
 
-> **Written on `claude/wonderful-darwin-8lt5ko`, not built, not merged.** Verify exactly as §6:
-> `dotnet build`, `dotnet ef migrations has-pending-model-changes`, `dotnet test`.
+> **On `claude/wonderful-darwin-8lt5ko`.** Verified locally 2026-10-18: build ok, `dotnet test`
+> 141/141, `has-pending-model-changes` → no changes. Not yet merged or deployed.
 
 ### Rules
 
