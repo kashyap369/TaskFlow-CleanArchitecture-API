@@ -98,7 +98,7 @@ planned as the next attendance phase. Face matching / liveness: not planned.
 ## 8. Field tracking — route of tracked members while punched in (2026-10-18, branch only)
 
 > **On `claude/wonderful-darwin-8lt5ko`.** Verified locally 2026-10-18: build ok, `dotnet test`
-> 141/141, `has-pending-model-changes` → no changes. Not yet merged or deployed.
+> 141/141, `has-pending-model-changes` → no changes. Deployed to `main` (`50544c8`); production answers the new routes.
 
 ### Rules
 

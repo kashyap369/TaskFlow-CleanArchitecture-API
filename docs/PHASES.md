@@ -5,7 +5,8 @@
 ## 🟡 Field tracking — routes of tracked members while punched in (2026-10-18, branch only)
 
 Written on `claude/wonderful-darwin-8lt5ko`; **built and tested locally by the developer (build ok,
-141/141 tests, no pending model changes); not yet merged or deployed.** Full reference:
+141/141 tests, no pending model changes); deployed to `main` as `50544c8` on 2026-10-18 — the API
+started, `AddFieldTracking` applied, `GET …/tracking/me/status` answers 401 unauthenticated.** Full reference:
 [ATTENDANCE.md](ATTENDANCE.md) §8; plan and defaults: Taskaro `docs/FIELD-TRACKING.md`.
 
 - **New:** tracked roles + `ViewFieldTracking`, consent, punch location, `POST …/tracking/points`,
