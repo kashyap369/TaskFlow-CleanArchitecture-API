@@ -2,6 +2,18 @@
 
 > Keep the Current Status section up to date at the end of every session.
 
+## 🟡 Field tracking — routes of tracked members while punched in (2026-10-18, branch only)
+
+Written on `claude/wonderful-darwin-8lt5ko`; **not built, not merged**. Full reference:
+[ATTENDANCE.md](ATTENDANCE.md) §8; plan and defaults: Taskaro `docs/FIELD-TRACKING.md`.
+
+- **New:** tracked roles + `ViewFieldTracking`, consent, punch location, `POST …/tracking/points`,
+  `FieldTrackingProcessingService` (Valhalla `trace_route`, optional), live / day / settings reads.
+- **Migration `AddFieldTracking`** — additive; hand-written snapshot and Designer, machine-checked.
+- **Verify:** `dotnet build`, `dotnet ef migrations has-pending-model-changes --project TaskFlow.Infra
+  --startup-project TaskFlow.Api`, `dotnet test` (adds `FieldTrackingRoutesTests`, `FieldTrackingTests`).
+- **Not done:** per-member overrides, zones, travel-allowance export.
+
 ## 🟡 Attendance — punch in / out with a selfie (2026-10-18)
 
 Implemented and **pushed to `main` without a local build or test run**, at the developer's

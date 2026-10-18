@@ -1,5 +1,27 @@
 # TaskFlow — Session Log
 
+## 2026-10-18 (Field tracking — written on a branch, unbuilt)
+
+- **Why:** the developer asked for route tracking end to end (API, web, app) with the Valhalla server
+  step left for them. Plan and every default taken: Taskaro `docs/FIELD-TRACKING.md` §13.
+- **Not on `main`.** Branch `claude/wonderful-darwin-8lt5ko`. Unlike attendance, nobody asked for a
+  push to the deploying branch, and the migration again rests on a hand-written snapshot.
+- **Style followed:** the attendance files (one file per concern in `Features/Attendance`), Dapper
+  reads with `IOrganizationScopedRequest`, permissions in handlers, typed SCREAMING_SNAKE errors.
+- **Deliberate exceptions, both documented in ATTENDANCE.md §8:** `LocationPoints`,
+  `TrackedRouteSegments`, `TrackStops` are plain `BaseEntity` and **hard-deleted** (raw location is
+  the most sensitive data held); and point timestamps come from the phone (points are recorded
+  offline) — only accepted inside the session window.
+- **The processing service writes through `TaskFlowDbContext` directly** (with `ExecuteDelete` /
+  `ExecuteUpdate`), as `AttendanceMaintenanceService` already does — a background sweep, not a
+  request handler.
+- **No `Microsoft.Extensions.Http` dependency:** `ValhallaRouteMatcher` is a singleton owning one
+  `HttpClient` with a pooled-connection lifetime, so Infra gains no package.
+- **First `= ANY(@Ids)` in the codebase** (Dapper passes `int[]` as a Postgres array on Npgsql). If
+  it misbehaves, it is in `GetFieldTrackingDayQueryHandler`.
+- **Verify next session:** `dotnet build`, `has-pending-model-changes`, `dotnet test`.
+
+
 ## 2026-10-18 (Attendance: punch in / out with a selfie — shipped to `main` unbuilt)
 
 - **Why now:** the mobile app (Taskaro) is the attendance client; the developer asked for the flow

@@ -2,7 +2,8 @@
 
 > **Canonical reference for the attendance module** (API side). The mobile client, Taskaro
 > (`kashyap369/Taskaro-app`), consumes it; its `docs/ATTENDANCE.md` holds the longer design and
-> the later phases (policies, zones, field tracking). The Angular client does not use it yet.
+> the later phases (policies, zones), and its `docs/FIELD-TRACKING.md` the field-tracking plan.
+> Since 2026-10-18 the Angular client has an Attendance section too (§8).
 >
 > **Status: implemented 2026-10-18, deployed straight to `main` at the developer's instruction,
 > without a local build or test run** (the authoring environment has no .NET SDK). See §6.
@@ -93,3 +94,73 @@ modifies existing data, so rolling the code back is safe; the two new tables are
 Work schedules and late marking, per-role / per-member hours, approved zones and out-of-zone
 reasons, team-lead routing, correction requests — designed in Taskaro's `docs/ATTENDANCE.md` §6a,
 planned as the next attendance phase. Face matching / liveness: not planned.
+
+## 8. Field tracking — route of tracked members while punched in (2026-10-18, branch only)
+
+> **Written on `claude/wonderful-darwin-8lt5ko`, not built, not merged.** Verify exactly as §6:
+> `dotnet build`, `dotnet ef migrations has-pending-model-changes`, `dotnet test`.
+
+### Rules
+
+| Rule | Where |
+|---|---|
+| Off until `ManageAttendance` turns it on and picks **tracked roles** (role ids, never names) | `UpdateFieldTrackingSettingsCommand`, `AttendanceTrackedRoles` |
+| Seeing anyone's route or position needs **`ViewFieldTracking`** (new; owner bypasses). Seeing who is in does **not** imply it | read handlers |
+| A member may always see **their own** route | `GetFieldTrackingDayQuery` |
+| Whether a session is tracked is decided **once, at punch-in** (member's role tracked + tracking on) | `FieldTrackingRules.MustTrackAsync` → `AttendanceSession.IsTracked` |
+| A tracked member must have **consented** (current policy version) to punch in | `PunchInCommandHandler` → `TRACKING_CONSENT_REQUIRED` |
+| Points only for the member's **own tracked** session, open — or closed ≤ 48 h (offline phones) | `RecordLocationPointsCommandHandler` |
+| A point must fall inside punch-in − 1 min … punch-out (or now) + 1 min; duplicates by time skipped | same; unique index `(AttendanceSessionId, RecordedAtUtc)` |
+| Point times are the **phone's** (recorded offline); `ReceivedAtUtc` is stored too. Punch times stay server-side | `LocationPoint` |
+| Mock (fake-GPS) fixes are **flagged, not refused** | `LocationPoint.IsMock` |
+| Raw points **hard-deleted** after `LocationRetentionDays` (7–365, default 30) — a deliberate exception to soft delete; segments, stops, km kept | `FieldTrackingProcessingService.PurgeExpiredPointsAsync` |
+| Gaps (no fix ≥ 5 min, ≥ 200 m apart) become **Inferred** segments; clients must draw them as guesses | `FieldTrackingRoutes` |
+
+### Endpoints — `api/attendance/organization/{orgId}/tracking`
+
+| Method | Route | Who | Returns |
+|---|---|---|---|
+| `GET` | `me/status` | member | `MyFieldTrackingStatusDto` (tracked? consented? open session tracked? intervals) |
+| `POST` | `consent` | member | `{ policyVersion }` → 204 (`TRACKING_POLICY_OUTDATED` if not current) |
+| `DELETE` | `consent` | member | 204 — withdraws |
+| `POST` | `points` | member | `{ attendanceSessionId?, points: [{ recordedAt, latitude, longitude, accuracyMeters?, speedMetersPerSecond?, headingDegrees?, isMock, batteryPercent?, isCharging?, isBatterySaverOn? }] }` (≤ 1000) → `{ attendanceSessionId, accepted, skipped, trackingActive }` |
+| `GET` | `me?date=` | member | `FieldTrackingDayDto` for one work date (default today) |
+| `GET` | `member/{userId}?date=` | self or `ViewFieldTracking` | same |
+| `GET` | `live` | `ViewFieldTracking` | tracked open sessions with the newest fix (or the punch-in position) |
+| `GET` | `settings` | `ManageAttendance` or `ViewFieldTracking` | enabled, retention, policy version, `roadMatchingAvailable`, roles with `isTracked` + member count |
+| `PUT` | `settings` | `ManageAttendance` | `{ trackingEnabled, locationRetentionDays, trackedRoleIds[] }` → 204 |
+
+`punch-in` / `punch-out` also accept optional form fields `latitude`, `longitude`, `accuracyMeters`
+(`.` decimal separator).
+
+Error codes: `TRACKING_CONSENT_REQUIRED`, `TRACKING_NOT_REQUIRED` (409, session not tracked),
+`ATTENDANCE_NOT_PUNCHED_IN` (409), `TRACKING_SESSION_CLOSED` (409, > 48 h), `TRACKING_BATCH_OVERLAP`
+(409, retry), `TRACKING_POLICY_OUTDATED`, `TRACKING_ROLE_NOT_FOUND`. The app stops recording on the
+409s except the overlap.
+
+### Processing and Valhalla
+
+`FieldTrackingProcessingService` (every 3 min, 50 sessions a pass) rebuilds a session's route from
+**all** its points whenever it has unprocessed ones: drop fixes worse than 50 m or faster than
+70 m/s → find stops (≥ 10 min within 100 m) → collapse stops, split at gaps → match each recorded
+piece (≤ 1000 points) with Valhalla `trace_route`, route each gap with `route`. Segments and stops
+are replaced and exactly the points used are marked processed, in one transaction.
+
+`Valhalla:BaseUrl` (env `Valhalla__BaseUrl`, e.g. `http://valhalla:8002`) — **empty means not
+configured**, and the cleaned track is stored unsnapped (`isSnapped = false`); nothing fails. Valhalla
+down → points stay unprocessed and are retried. Also `Valhalla:Costing` (`auto` default; `motorcycle`,
+`motor_scooter`, `bicycle`, `pedestrian`), `TimeoutSeconds` (30), `SearchRadiusMeters` (50). Server
+setup: Taskaro `tools/valhalla/README.md`.
+
+### Schema — migration `20261018180000_AddFieldTracking`
+
+Additive only. Columns: `AttendanceSessions` + `IsTracked` (default false), `PunchIn/OutLatitude`,
+`…Longitude`, `…AccuracyMeters` (nullable); `AttendanceSettings` + `TrackingEnabled` (default false),
+`LocationRetentionDays` (default 30). Tables: `AttendanceTrackedRoles`, `FieldTrackingConsents`
+(both soft-deletable, filtered unique indexes), `LocationPoints`, `TrackedRouteSegments`,
+`TrackStops` (plain `BaseEntity`, hard-deleted). Snapshot and Designer hand-written; every column
+machine-checked across entity, snapshot and migration, as in §6.
+
+Tests: `FieldTrackingRoutesTests` (clean, stops, gap bridging, chunking, polyline) and
+`FieldTrackingTests` (domain). Expected values were checked with a Python port of the algorithm;
+the C# has not been run.
