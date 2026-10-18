@@ -1,5 +1,17 @@
 # TaskFlow — Session Log
 
+## 2026-10-18 (Field tracking planned — docs only)
+
+- Planning session driven from Taskaro; **no API code**. Plan: Taskaro `docs/FIELD-TRACKING.md`;
+  API share in [ATTENDANCE.md §8](ATTENDANCE.md).
+- Valhalla (road snapping) was run on the developer's PC against India western-zone data and
+  routed correctly; it is **not** on the server yet. When it is, it must stay internal (no public
+  port) with a ~1.5 GB memory limit — the VPS sits at ~65 % RAM.
+- **Doc drift noticed, not fixed here:** on this branch (`claude/epic-maxwell-xl28is`, = `main`
+  `76105fe`) PHASES and ATTENDANCE.md still say attendance is unbuilt/unverified. Taskaro's
+  session 9 records it as built, tested (129/129) and live; the correction (`83ef5b4`) sits on
+  `claude/blissful-allen-2gdkw2`, not on `main`.
+
 ## 2026-10-18 (Attendance: punch in / out with a selfie — shipped to `main` unbuilt)
 
 - **Why now:** the mobile app (Taskaro) is the attendance client; the developer asked for the flow

@@ -93,3 +93,22 @@ modifies existing data, so rolling the code back is safe; the two new tables are
 Work schedules and late marking, per-role / per-member hours, approved zones and out-of-zone
 reasons, team-lead routing, correction requests — designed in Taskaro's `docs/ATTENDANCE.md` §6a,
 planned as the next attendance phase. Face matching / liveness: not planned.
+
+## 8. Planned next: field (route) tracking — not built
+
+Planned 2026-10-18; **no code in this repository yet**. The full plan lives in Taskaro's
+`docs/FIELD-TRACKING.md` (`kashyap369/Taskaro-app`). The API's share, all proposed names:
+
+- Permission **`ViewFieldTracking`** (see maps / routes / live positions) and a **tracked roles**
+  list managed with `ManageAttendance`; a location **consent** record per member.
+- Optional `latitude` / `longitude` / `accuracy` on punch-in and punch-out (additive columns).
+- `POST organization/{orgId}/track` — batches of points (with battery %), accepted **only while the
+  member has an open session**, else `409 ATTENDANCE_NOT_PUNCHED_IN`.
+- Tables `LocationPoints`, `MemberLastLocations`, `TrackedRouteSegments`, `TrackStops`.
+- `IRouteMatcher` → `ValhallaRouteMatcher`: a background service snaps points to roads with a
+  self-hosted **Valhalla** (`trace_route`) reachable only inside the server (`Valhalla__BaseUrl`),
+  and computes stops and kilometres.
+- Reads: `tracking/live`, `tracking/member/{userId}?date=`, `tracking/me?date=`,
+  `tracking/settings` — Dapper, access-scope marker, explicit `ViewFieldTracking` check.
+- Raw points hard-deleted after a retention period (default 30 days); summaries kept.
+

@@ -2,6 +2,14 @@
 
 > Keep the Current Status section up to date at the end of every session.
 
+## ⬜ Field (route) tracking — planned, no code (2026-10-18)
+
+Planned with the developer for travelling / site-visit roles: tracked only while punched in,
+snapped to roads by a self-hosted Valhalla, battery % per point, map visible only to the owner and
+roles granted `ViewFieldTracking`. API share summarised in [ATTENDANCE.md §8](ATTENDANCE.md); full
+plan and build order (FT.0–FT.8) in Taskaro's `docs/FIELD-TRACKING.md`. Nothing here changes the
+API surface yet, so the parity ledger is untouched.
+
 ## 🟡 Attendance — punch in / out with a selfie (2026-10-18)
 
 Implemented and **pushed to `main` without a local build or test run**, at the developer's
