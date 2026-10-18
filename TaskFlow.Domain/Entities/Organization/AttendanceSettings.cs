@@ -12,6 +12,7 @@ public sealed class AttendanceSettings : AuditableEntity, IAggregateRoot
     public const string DefaultTimeZone = "UTC";
     public const int DefaultAutoCloseAfterHours = 16;
     public const int DefaultPhotoRetentionDays = 90;
+    public const int DefaultLocationRetentionDays = 30;
 
     public int OrganizationId { get; private set; }
     // IANA name. The work date of a punch is the calendar day in this time zone.
@@ -19,6 +20,10 @@ public sealed class AttendanceSettings : AuditableEntity, IAggregateRoot
     public int AutoCloseAfterHours { get; private set; } = DefaultAutoCloseAfterHours;
     public int PhotoRetentionDays { get; private set; } = DefaultPhotoRetentionDays;
     public int UpdatedByUserId { get; private set; }
+    // Field tracking: off until someone with ManageAttendance turns it on and picks the roles.
+    public bool TrackingEnabled { get; private set; }
+    // Raw GPS points are deleted after this; the matched route, stops and distance stay.
+    public int LocationRetentionDays { get; private set; } = DefaultLocationRetentionDays;
 
     private AttendanceSettings() { }
 
@@ -33,6 +38,16 @@ public sealed class AttendanceSettings : AuditableEntity, IAggregateRoot
     public void Update(string timeZone, int autoCloseAfterHours, int photoRetentionDays, int updatedByUserId)
     {
         Apply(timeZone, autoCloseAfterHours, photoRetentionDays, updatedByUserId);
+        MarkAsUpdated();
+    }
+
+    public void UpdateTracking(bool enabled, int locationRetentionDays, int updatedByUserId)
+    {
+        if (locationRetentionDays is < 7 or > 365) throw new ArgumentOutOfRangeException(nameof(locationRetentionDays));
+        if (updatedByUserId <= 0) throw new ArgumentOutOfRangeException(nameof(updatedByUserId));
+        TrackingEnabled = enabled;
+        LocationRetentionDays = locationRetentionDays;
+        UpdatedByUserId = updatedByUserId;
         MarkAsUpdated();
     }
 

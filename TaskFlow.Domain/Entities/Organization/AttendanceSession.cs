@@ -11,6 +11,28 @@ namespace TaskFlow.Domain.Entities.Organization;
 public sealed record AttendancePhoto(string StorageKey, string ContentType, long SizeBytes, string Sha256);
 
 /// <summary>
+/// Where the phone said it was at a punch. Optional and only a claim: it is recorded, never used
+/// to refuse a punch (zones are a later phase).
+/// </summary>
+public sealed record PunchLocation
+{
+    public double Latitude { get; }
+    public double Longitude { get; }
+    public double? AccuracyMeters { get; }
+
+    public PunchLocation(double latitude, double longitude, double? accuracyMeters)
+    {
+        if (double.IsNaN(latitude) || latitude is < -90 or > 90) throw new ArgumentOutOfRangeException(nameof(latitude));
+        if (double.IsNaN(longitude) || longitude is < -180 or > 180) throw new ArgumentOutOfRangeException(nameof(longitude));
+        if (accuracyMeters is { } accuracy && (double.IsNaN(accuracy) || accuracy < 0))
+            throw new ArgumentOutOfRangeException(nameof(accuracyMeters));
+        Latitude = latitude;
+        Longitude = longitude;
+        AccuracyMeters = accuracyMeters;
+    }
+}
+
+/// <summary>
 /// One stretch of being at work: a punch-in and, later, a punch-out. A member may have several
 /// on one work date (breaks, split shifts). Punch times always come from the server clock.
 /// At most one session per member per organization is open — enforced by a filtered unique
@@ -40,13 +62,23 @@ public sealed class AttendanceSession : AuditableEntity, IAggregateRoot
     public int? AdjustedByUserId { get; private set; }
     public string? AdjustmentReason { get; private set; }
     public DateTime? AdjustedAtUtc { get; private set; }
+    public double? PunchInLatitude { get; private set; }
+    public double? PunchInLongitude { get; private set; }
+    public double? PunchInAccuracyMeters { get; private set; }
+    public double? PunchOutLatitude { get; private set; }
+    public double? PunchOutLongitude { get; private set; }
+    public double? PunchOutAccuracyMeters { get; private set; }
+    // Decided once, at punch-in: the member's role was tracked and they had consented. Location
+    // points are only accepted for a tracked session, so turning tracking off mid-day cannot
+    // be dodged and turning it on cannot start tracking someone already at work.
+    public bool IsTracked { get; private set; }
 
     public bool IsOpen => Status == AttendanceSessionStatus.Open;
 
     private AttendanceSession() { }
 
     private AttendanceSession(int organizationId, int userId, DateOnly workDate, DateTime punchInAtUtc,
-        string? note, AttendancePhoto photo)
+        string? note, AttendancePhoto photo, PunchLocation? location, bool isTracked)
     {
         if (organizationId <= 0) throw new ArgumentOutOfRangeException(nameof(organizationId));
         if (userId <= 0) throw new ArgumentOutOfRangeException(nameof(userId));
@@ -62,14 +94,18 @@ public sealed class AttendanceSession : AuditableEntity, IAggregateRoot
         PunchInPhotoContentType = photo.ContentType;
         PunchInPhotoSizeBytes = photo.SizeBytes;
         PunchInPhotoSha256 = photo.Sha256;
+        PunchInLatitude = location?.Latitude;
+        PunchInLongitude = location?.Longitude;
+        PunchInAccuracyMeters = location?.AccuracyMeters;
+        IsTracked = isTracked;
         AddDomainEvent(new AttendancePunchedInEvent(organizationId, userId, PunchInAtUtc));
     }
 
     public static AttendanceSession PunchIn(int organizationId, int userId, DateOnly workDate, DateTime nowUtc,
-        string? note, AttendancePhoto photo) =>
-        new(organizationId, userId, workDate, nowUtc, note, photo);
+        string? note, AttendancePhoto photo, PunchLocation? location = null, bool isTracked = false) =>
+        new(organizationId, userId, workDate, nowUtc, note, photo, location, isTracked);
 
-    public void PunchOut(DateTime nowUtc, string? note, AttendancePhoto photo)
+    public void PunchOut(DateTime nowUtc, string? note, AttendancePhoto photo, PunchLocation? location = null)
     {
         ArgumentNullException.ThrowIfNull(photo);
         if (!IsOpen) throw new InvalidOperationException("Only an open attendance session can be punched out.");
@@ -83,6 +119,9 @@ public sealed class AttendanceSession : AuditableEntity, IAggregateRoot
         PunchOutPhotoContentType = photo.ContentType;
         PunchOutPhotoSizeBytes = photo.SizeBytes;
         PunchOutPhotoSha256 = photo.Sha256;
+        PunchOutLatitude = location?.Latitude;
+        PunchOutLongitude = location?.Longitude;
+        PunchOutAccuracyMeters = location?.AccuracyMeters;
         MarkAsUpdated();
         AddDomainEvent(new AttendancePunchedOutEvent(OrganizationId, UserId, punchOut));
     }

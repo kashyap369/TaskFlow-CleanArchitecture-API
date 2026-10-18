@@ -1160,6 +1160,9 @@ namespace TaskFlow.Infra.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsTracked")
+                        .HasColumnType("boolean");
+
                     b.Property<int>("OrganizationId")
                         .HasColumnType("integer");
 
@@ -1172,8 +1175,17 @@ namespace TaskFlow.Infra.Migrations
                     b.Property<DateTime?>("PhotosPurgedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<double?>("PunchInAccuracyMeters")
+                        .HasColumnType("double precision");
+
                     b.Property<DateTime>("PunchInAtUtc")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<double?>("PunchInLatitude")
+                        .HasColumnType("double precision");
+
+                    b.Property<double?>("PunchInLongitude")
+                        .HasColumnType("double precision");
 
                     b.Property<string>("PunchInNote")
                         .HasMaxLength(500)
@@ -1194,8 +1206,17 @@ namespace TaskFlow.Infra.Migrations
                     b.Property<long?>("PunchInPhotoSizeBytes")
                         .HasColumnType("bigint");
 
+                    b.Property<double?>("PunchOutAccuracyMeters")
+                        .HasColumnType("double precision");
+
                     b.Property<DateTime?>("PunchOutAtUtc")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<double?>("PunchOutLatitude")
+                        .HasColumnType("double precision");
+
+                    b.Property<double?>("PunchOutLongitude")
+                        .HasColumnType("double precision");
 
                     b.Property<string>("PunchOutNote")
                         .HasMaxLength(500)
@@ -1261,6 +1282,9 @@ namespace TaskFlow.Infra.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
+                    b.Property<int>("LocationRetentionDays")
+                        .HasColumnType("integer");
+
                     b.Property<int>("OrganizationId")
                         .HasColumnType("integer");
 
@@ -1271,6 +1295,9 @@ namespace TaskFlow.Infra.Migrations
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.Property<bool>("TrackingEnabled")
+                        .HasColumnType("boolean");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -1284,6 +1311,44 @@ namespace TaskFlow.Infra.Migrations
                         .IsUnique();
 
                     b.ToTable("AttendanceSettings", (string)null);
+                });
+
+            modelBuilder.Entity("TaskFlow.Domain.Entities.Organization.AttendanceTrackedRole", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AddedByUserId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("OrganizationId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("OrganizationRoleId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrganizationId", "OrganizationRoleId")
+                        .IsUnique()
+                        .HasFilter("\"IsDeleted\" = FALSE");
+
+                    b.ToTable("AttendanceTrackedRoles", (string)null);
                 });
 
             modelBuilder.Entity("TaskFlow.Domain.Entities.Organization.CalendarEntry", b =>
@@ -1357,6 +1422,113 @@ namespace TaskFlow.Infra.Migrations
                     b.HasIndex("OrganizationId", "StartsAtUtc");
 
                     b.ToTable("CalendarEntries", (string)null);
+                });
+
+            modelBuilder.Entity("TaskFlow.Domain.Entities.Organization.FieldTrackingConsent", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("AcceptedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("OrganizationId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PolicyVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrganizationId", "UserId", "PolicyVersion")
+                        .IsUnique()
+                        .HasFilter("\"IsDeleted\" = FALSE");
+
+                    b.ToTable("FieldTrackingConsents", (string)null);
+                });
+
+            modelBuilder.Entity("TaskFlow.Domain.Entities.Organization.LocationPoint", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<double?>("AccuracyMeters")
+                        .HasColumnType("double precision");
+
+                    b.Property<int>("AttendanceSessionId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("BatteryPercent")
+                        .HasColumnType("integer");
+
+                    b.Property<double?>("HeadingDegrees")
+                        .HasColumnType("double precision");
+
+                    b.Property<bool?>("IsBatterySaverOn")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool?>("IsCharging")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsMock")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsProcessed")
+                        .HasColumnType("boolean");
+
+                    b.Property<double>("Latitude")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("Longitude")
+                        .HasColumnType("double precision");
+
+                    b.Property<int>("OrganizationId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("ReceivedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("RecordedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<double?>("SpeedMetersPerSecond")
+                        .HasColumnType("double precision");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AttendanceSessionId")
+                        .HasFilter("\"IsProcessed\" = FALSE");
+
+                    b.HasIndex("AttendanceSessionId", "RecordedAtUtc")
+                        .IsUnique();
+
+                    b.HasIndex("OrganizationId", "UserId", "RecordedAtUtc");
+
+                    b.ToTable("LocationPoints", (string)null);
                 });
 
             modelBuilder.Entity("TaskFlow.Domain.Entities.Organization.Organization", b =>
@@ -1734,6 +1906,96 @@ namespace TaskFlow.Infra.Migrations
                         .IsUnique();
 
                     b.ToTable("TeamMembers", (string)null);
+                });
+
+            modelBuilder.Entity("TaskFlow.Domain.Entities.Organization.TrackStop", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("ArrivedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("AttendanceSessionId")
+                        .HasColumnType("integer");
+
+                    b.Property<double>("Latitude")
+                        .HasColumnType("double precision");
+
+                    b.Property<DateTime>("LeftAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<double>("Longitude")
+                        .HasColumnType("double precision");
+
+                    b.Property<int>("OrganizationId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AttendanceSessionId", "ArrivedAtUtc");
+
+                    b.ToTable("TrackStops", (string)null);
+                });
+
+            modelBuilder.Entity("TaskFlow.Domain.Entities.Organization.TrackedRouteSegment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AttendanceSessionId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<double>("DistanceMeters")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("EncodedPolyline")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("EndedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsSnapped")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("OrganizationId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PointCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Sequence")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("StartedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AttendanceSessionId", "Sequence");
+
+                    b.HasIndex("OrganizationId", "UserId", "StartedAtUtc");
+
+                    b.ToTable("TrackedRouteSegments", (string)null);
                 });
 
             modelBuilder.Entity("TaskFlow.Domain.Entities.Planner.PlannerAsset", b =>

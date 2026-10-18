@@ -11,9 +11,12 @@ using TaskFlow.Domain.Interfaces.Persistence;
 namespace TaskFlow.Application.Features.Attendance;
 
 // The selfie is mandatory on both punches. Time is never taken from the request: it is the server's.
-public sealed record PunchInCommand(int OrganizationId, string? Note, long PhotoLength, Stream? Photo) : IRequest<int>;
+// Location is optional and only recorded — it never decides whether a punch is accepted.
+public sealed record PunchInCommand(int OrganizationId, string? Note, long PhotoLength, Stream? Photo,
+    double? Latitude = null, double? Longitude = null, double? AccuracyMeters = null) : IRequest<int>;
 
-public sealed record PunchOutCommand(int OrganizationId, string? Note, long PhotoLength, Stream? Photo) : IRequest;
+public sealed record PunchOutCommand(int OrganizationId, string? Note, long PhotoLength, Stream? Photo,
+    double? Latitude = null, double? Longitude = null, double? AccuracyMeters = null) : IRequest;
 
 public sealed record AdjustAttendanceSessionCommand(int SessionId, DateTimeOffset PunchInAtUtc,
     DateTimeOffset PunchOutAtUtc, string Reason) : IRequest;
@@ -27,6 +30,11 @@ public sealed class PunchInCommandValidator : AbstractValidator<PunchInCommand>
     {
         RuleFor(x => x.OrganizationId).GreaterThan(0);
         RuleFor(x => x.Note).MaximumLength(500);
+        RuleFor(x => x.Latitude).InclusiveBetween(-90d, 90d).When(x => x.Latitude is not null);
+        RuleFor(x => x.Longitude).InclusiveBetween(-180d, 180d).When(x => x.Longitude is not null);
+        RuleFor(x => x.AccuracyMeters).GreaterThanOrEqualTo(0d).When(x => x.AccuracyMeters is not null);
+        RuleFor(x => x).Must(x => x.Latitude.HasValue == x.Longitude.HasValue)
+            .WithMessage("Send both latitude and longitude, or neither.");
     }
 }
 
@@ -36,7 +44,18 @@ public sealed class PunchOutCommandValidator : AbstractValidator<PunchOutCommand
     {
         RuleFor(x => x.OrganizationId).GreaterThan(0);
         RuleFor(x => x.Note).MaximumLength(500);
+        RuleFor(x => x.Latitude).InclusiveBetween(-90d, 90d).When(x => x.Latitude is not null);
+        RuleFor(x => x.Longitude).InclusiveBetween(-180d, 180d).When(x => x.Longitude is not null);
+        RuleFor(x => x.AccuracyMeters).GreaterThanOrEqualTo(0d).When(x => x.AccuracyMeters is not null);
+        RuleFor(x => x).Must(x => x.Latitude.HasValue == x.Longitude.HasValue)
+            .WithMessage("Send both latitude and longitude, or neither.");
     }
+}
+
+internal static class PunchLocations
+{
+    public static PunchLocation? From(double? latitude, double? longitude, double? accuracyMeters) =>
+        latitude is { } lat && longitude is { } lng ? new PunchLocation(lat, lng, accuracyMeters) : null;
 }
 
 public sealed class AdjustAttendanceSessionCommandValidator : AbstractValidator<AdjustAttendanceSessionCommand>
@@ -70,13 +89,26 @@ public sealed class PunchInCommandHandler : IRequestHandler<PunchInCommand, int>
     private readonly IAttendanceSessionRepository _sessions; private readonly IAttendanceSettingsRepository _settings;
     private readonly IOrganizationAccessGuard _access; private readonly IObjectStorage _storage;
     private readonly ICurrentUserService _user; private readonly IUnitOfWork _unitOfWork;
+    private readonly IOrganizationMemberRepository _members; private readonly IAttendanceTrackedRoleRepository _trackedRoles;
+    private readonly IFieldTrackingConsentRepository _consents;
     public PunchInCommandHandler(IAttendanceSessionRepository sessions, IAttendanceSettingsRepository settings,
-        IOrganizationAccessGuard access, IObjectStorage storage, ICurrentUserService user, IUnitOfWork unitOfWork) =>
-        (_sessions, _settings, _access, _storage, _user, _unitOfWork) = (sessions, settings, access, storage, user, unitOfWork);
+        IOrganizationAccessGuard access, IObjectStorage storage, ICurrentUserService user, IUnitOfWork unitOfWork,
+        IOrganizationMemberRepository members, IAttendanceTrackedRoleRepository trackedRoles,
+        IFieldTrackingConsentRepository consents) =>
+        (_sessions, _settings, _access, _storage, _user, _unitOfWork, _members, _trackedRoles, _consents) =
+        (sessions, settings, access, storage, user, unitOfWork, members, trackedRoles, consents);
     public async Task<int> Handle(PunchInCommand request, CancellationToken cancellationToken)
     {
         // Owner or active member: a deactivated member cannot punch.
         await _access.EnsureOrganizationAsync(request.OrganizationId, cancellationToken);
+        // A tracked member must have agreed to location sharing first — checked before the selfie
+        // is stored, so a refusal leaves nothing behind.
+        var isTracked = await FieldTrackingRules.MustTrackAsync(_settings, _members, _trackedRoles,
+            request.OrganizationId, _user.UserId, cancellationToken);
+        if (isTracked && await _consents.GetAsync(request.OrganizationId, _user.UserId,
+                FieldTrackingPolicy.CurrentVersion, cancellationToken) is null)
+            throw new BusinessException("TRACKING_CONSENT_REQUIRED",
+                "Your role shares location while punched in. Open the latest Taskaro app and agree to location sharing to punch in.");
         var photo = await AttendancePhotoPolicy.ReadAsync(request.Photo, request.PhotoLength, cancellationToken);
         var settings = await _settings.GetByOrganizationAsync(request.OrganizationId, cancellationToken);
         var now = DateTime.UtcNow;
@@ -100,7 +132,8 @@ public sealed class PunchInCommandHandler : IRequestHandler<PunchInCommand, int>
         {
             var workDate = AttendanceClock.WorkDate(now, AttendanceClock.Resolve(settings?.TimeZone));
             var session = AttendanceSession.PunchIn(request.OrganizationId, _user.UserId, workDate, now, request.Note,
-                new AttendancePhoto(storageKey, photo.ContentType, photo.Content.LongLength, photo.Sha256));
+                new AttendancePhoto(storageKey, photo.ContentType, photo.Content.LongLength, photo.Sha256),
+                PunchLocations.From(request.Latitude, request.Longitude, request.AccuracyMeters), isTracked);
             await _sessions.AddAsync(session, cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
             return session.Id;
@@ -132,7 +165,8 @@ public sealed class PunchOutCommandHandler : IRequestHandler<PunchOutCommand>
         try
         {
             session.PunchOut(DateTime.UtcNow, request.Note,
-                new AttendancePhoto(storageKey, photo.ContentType, photo.Content.LongLength, photo.Sha256));
+                new AttendancePhoto(storageKey, photo.ContentType, photo.Content.LongLength, photo.Sha256),
+                PunchLocations.From(request.Latitude, request.Longitude, request.AccuracyMeters));
             _sessions.Update(session);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
         }

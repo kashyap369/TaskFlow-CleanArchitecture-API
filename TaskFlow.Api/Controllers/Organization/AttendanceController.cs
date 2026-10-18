@@ -26,7 +26,8 @@ public sealed class AttendanceController : ControllerBase
         if (request.Photo is null)
             return BadRequest(new { code = SelfieRequiredCode, message = SelfieRequiredMessage });
         await using var photo = request.Photo.OpenReadStream();
-        return Ok(await _mediator.Send(new PunchInCommand(organizationId, request.Note, request.Photo.Length, photo),
+        return Ok(await _mediator.Send(new PunchInCommand(organizationId, request.Note, request.Photo.Length, photo,
+            request.Latitude, request.Longitude, request.AccuracyMeters),
             cancellationToken));
     }
 
@@ -38,7 +39,8 @@ public sealed class AttendanceController : ControllerBase
         if (request.Photo is null)
             return BadRequest(new { code = SelfieRequiredCode, message = SelfieRequiredMessage });
         await using var photo = request.Photo.OpenReadStream();
-        await _mediator.Send(new PunchOutCommand(organizationId, request.Note, request.Photo.Length, photo), cancellationToken);
+        await _mediator.Send(new PunchOutCommand(organizationId, request.Note, request.Photo.Length, photo,
+            request.Latitude, request.Longitude, request.AccuracyMeters), cancellationToken);
         return NoContent();
     }
 

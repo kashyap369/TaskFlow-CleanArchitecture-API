@@ -39,6 +39,8 @@ namespace TaskFlow.Domain.Constants
 
         public const string ManageAttendance = "ManageAttendance";
 
+        public const string ViewFieldTracking = "ViewFieldTracking";
+
         /// <summary>
         /// Every known permission — used by the seeder to keep
         /// the OrganizationPermissions catalog table in sync.
@@ -59,7 +61,8 @@ namespace TaskFlow.Domain.Constants
             ManageMeetings,
             RecordMeetings,
             ViewAttendance,
-            ManageAttendance
+            ManageAttendance,
+            ViewFieldTracking
         };
     }
 }

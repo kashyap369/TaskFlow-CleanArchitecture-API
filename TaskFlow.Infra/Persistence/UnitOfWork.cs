@@ -51,6 +51,19 @@ public sealed class UnitOfWork : IUnitOfWork
                 "ATTENDANCE_ALREADY_PUNCHED_IN",
                 "You are already punched in.");
         }
+        catch (DbUpdateException exception) when (
+            exception.InnerException is PostgresException
+            {
+                SqlState: PostgresErrorCodes.UniqueViolation,
+                ConstraintName: LocationPointConfiguration.OnePointPerInstantIndex,
+            })
+        {
+            // The same batch arrived twice at once (a retry overlapping a slow first send).
+            // Resending is safe: the next attempt skips the points already stored.
+            throw new ConflictException(
+                "TRACKING_BATCH_OVERLAP",
+                "Some of these locations were already being saved. Send the batch again.");
+        }
     }
 
     public async Task<T> ExecuteInTransactionAsync<T>(

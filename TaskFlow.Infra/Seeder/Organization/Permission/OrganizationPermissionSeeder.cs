@@ -47,7 +47,9 @@ namespace TaskFlow.Infra.Seeder.Organization.Permission
                 [OrganizationPermissionNames.ViewAttendance] =
                     "See members' attendance: who is in today, their history and punch selfies.",
                 [OrganizationPermissionNames.ManageAttendance] =
-                    "Correct attendance records and change the organization's attendance settings."
+                    "Correct attendance records and change the organization's attendance settings.",
+                [OrganizationPermissionNames.ViewFieldTracking] =
+                    "See where tracked members are and the routes they took while punched in."
             };
 
         public static async Task SeedAsync(

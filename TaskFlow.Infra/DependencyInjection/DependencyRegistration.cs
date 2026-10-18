@@ -269,12 +269,30 @@ namespace TaskFlow.Infra.DependencyInjection
             services.AddScoped<ICalendarEntryRepository, CalendarEntryRepository>();
             services.AddScoped<IAttendanceSessionRepository, AttendanceSessionRepository>();
             services.AddScoped<IAttendanceSettingsRepository, AttendanceSettingsRepository>();
+            services.AddScoped<IAttendanceTrackedRoleRepository, AttendanceTrackedRoleRepository>();
+            services.AddScoped<IFieldTrackingConsentRepository, FieldTrackingConsentRepository>();
+            services.AddScoped<ILocationPointRepository, LocationPointRepository>();
             services.AddScoped<IMeetingRepository, MeetingRepository>();
             services.AddScoped<IMeetingGuestAccessRepository, MeetingGuestAccessRepository>();
             services.AddScoped<IMeetingCollaborationRepository, MeetingCollaborationRepository>();
             services.AddScoped<IMeetingRecordingRepository, MeetingRecordingRepository>();
             services.AddHostedService<MeetingRetentionCleanupService>();
             services.AddHostedService<TaskFlow.Infra.Attendance.AttendanceMaintenanceService>();
+            services
+                .AddOptions<TaskFlow.Infra.Tracking.ValhallaSettings>()
+                .Bind(configuration.GetSection(TaskFlow.Infra.Tracking.ValhallaSettings.SectionName))
+                .Validate(settings => string.IsNullOrWhiteSpace(settings.BaseUrl) ||
+                        Uri.TryCreate(settings.BaseUrl, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https",
+                    "Valhalla:BaseUrl must be empty or an absolute http(s) URL.")
+                .Validate(settings => settings.Costing is "auto" or "motorcycle" or "motor_scooter" or "bicycle" or "pedestrian",
+                    "Valhalla:Costing must be auto, motorcycle, motor_scooter, bicycle or pedestrian.")
+                .Validate(settings => settings.TimeoutSeconds is >= 5 and <= 300,
+                    "Valhalla:TimeoutSeconds must be between 5 and 300.")
+                .Validate(settings => settings.SearchRadiusMeters is >= 5 and <= 500,
+                    "Valhalla:SearchRadiusMeters must be between 5 and 500.")
+                .ValidateOnStart();
+            services.AddSingleton<TaskFlow.Application.Contracts.Tracking.IRouteMatcher, TaskFlow.Infra.Tracking.ValhallaRouteMatcher>();
+            services.AddHostedService<TaskFlow.Infra.Tracking.FieldTrackingProcessingService>();
             services.AddHostedService<MeetingRecordingRecoveryService>();
 
             // Register the Wrok management  repositories
