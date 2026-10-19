@@ -41,6 +41,26 @@ public sealed class GetFieldTrackingDayQueryValidator : AbstractValidator<GetFie
     }
 }
 
+/// <summary>
+/// The fixes behind one member's day, sampled, so the map can hover each one and show what was
+/// stored. Same rule as the route itself: the member themself, or ViewFieldTracking.
+/// </summary>
+public sealed record GetFieldTrackingPointsQuery(int OrganizationId, int UserId, DateOnly? Date)
+    : IRequest<FieldTrackingPointsDto>, IOrganizationScopedRequest;
+
+/// <summary>The current member's own fixes for one work date.</summary>
+public sealed record GetMyFieldTrackingPointsQuery(int OrganizationId, DateOnly? Date)
+    : IRequest<FieldTrackingPointsDto>, IOrganizationScopedRequest;
+
+public sealed class GetFieldTrackingPointsQueryValidator : AbstractValidator<GetFieldTrackingPointsQuery>
+{
+    public GetFieldTrackingPointsQueryValidator()
+    {
+        RuleFor(x => x.OrganizationId).GreaterThan(0);
+        RuleFor(x => x.UserId).GreaterThan(0);
+    }
+}
+
 public sealed class GetMyFieldTrackingStatusQueryHandler : IRequestHandler<GetMyFieldTrackingStatusQuery, MyFieldTrackingStatusDto>
 {
     private readonly ISqlConnectionFactory _sql; private readonly ICurrentUserService _user;
@@ -212,6 +232,7 @@ public sealed class GetFieldTrackingDayQueryHandler : IRequestHandler<GetFieldTr
 {
     private const int MaxPendingPoints = 3000;
     private static readonly TimeSpan BatteryBucket = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan PunchBatteryWindow = TimeSpan.FromMinutes(10);
 
     private readonly ISqlConnectionFactory _sql; private readonly ICurrentUserService _user;
     private readonly IOrganizationPermissionChecker _permissions;
@@ -229,17 +250,20 @@ public sealed class GetFieldTrackingDayQueryHandler : IRequestHandler<GetFieldTr
         var date = request.Date ?? AttendanceClock.WorkDate(DateTime.UtcNow, AttendanceClock.Resolve(settings.TimeZone));
 
         const string userSql = """
-            SELECT u."FirstName" || ' ' || u."LastName"
+            SELECT u."FirstName" || ' ' || u."LastName" AS "FullName", u."Email"
             FROM "Users" u
             WHERE u."Id" = @UserId AND u."IsDeleted" = FALSE;
             """;
-        var fullName = await connection.QuerySingleOrDefaultAsync<string>(new CommandDefinition(userSql,
+        var member = await connection.QuerySingleOrDefaultAsync<MemberRow>(new CommandDefinition(userSql,
             new { request.UserId }, cancellationToken: cancellationToken)) ??
             throw new NotFoundException("USER_NOT_FOUND", "Member not found.");
 
         const string sessionsSql = """
             SELECT s."Id", s."PunchInAtUtc", s."PunchOutAtUtc", s."Status", s."IsTracked",
-                   s."PunchInLatitude", s."PunchInLongitude", s."PunchOutLatitude", s."PunchOutLongitude"
+                   s."PunchInLatitude", s."PunchInLongitude", s."PunchOutLatitude", s."PunchOutLongitude",
+                   s."PunchInAccuracyMeters", s."PunchOutAccuracyMeters", s."PunchInNote", s."PunchOutNote",
+                   (s."PunchInPhotoKey" IS NOT NULL AND s."PunchInPhotoKey" <> '') AS "HasPunchInPhoto",
+                   (s."PunchOutPhotoKey" IS NOT NULL AND s."PunchOutPhotoKey" <> '') AS "HasPunchOutPhoto"
             FROM "AttendanceSessions" s
             WHERE s."OrganizationId" = @OrganizationId AND s."UserId" = @UserId AND s."WorkDate" = @Date::date
               AND s."IsDeleted" = FALSE
@@ -293,13 +317,39 @@ public sealed class GetFieldTrackingDayQueryHandler : IRequestHandler<GetFieldTr
                     AttendanceReads.Utc(x.LeftAtUtc), Math.Round((x.LeftAtUtc - x.ArrivedAtUtc).TotalMinutes, 1))).ToList(),
             points.Where(x => x.AttendanceSessionId == session.Id && !x.IsProcessed).TakeLast(MaxPendingPoints)
                 .Select(x => new TrackPointDto(AttendanceReads.Utc(x.RecordedAtUtc), x.Latitude, x.Longitude,
-                    x.AccuracyMeters, x.IsMock)).ToList()))
+                    x.AccuracyMeters, x.IsMock)).ToList(),
+            PunchDetail(session, "in", points)!, PunchDetail(session, "out", points)))
             .ToList();
 
-        return new FieldTrackingDayDto(request.UserId, fullName, date, settings.TimeZone,
+        return new FieldTrackingDayDto(request.UserId, member.FullName, member.Email, date, settings.TimeZone,
             segments.Where(x => x.Kind == TrackedSegmentKind.Recorded).Sum(x => x.DistanceMeters),
             segments.Where(x => x.Kind == TrackedSegmentKind.Inferred).Sum(x => x.DistanceMeters),
             stops.Count, points.Count(x => x.IsMock), points.Count, SampleBattery(points), sessionDtos);
+    }
+
+    /// <summary>
+    /// The pin's detail. A punch records no battery of its own, so the nearest recorded fix within
+    /// <see cref="PunchBatteryWindow"/> of it is used, and nothing is shown when there is none —
+    /// a guess from an hour later would be worse than a blank.
+    /// </summary>
+    public static PunchDetailDto? PunchDetail(SessionRow session, string kind, IReadOnlyList<PointRow> points)
+    {
+        var at = kind == "in" ? session.PunchInAtUtc : session.PunchOutAtUtc;
+        if (at is not { } punchedAt) return null;
+        var nearest = points
+            .Where(x => x.AttendanceSessionId == session.Id && x.BatteryPercent is not null)
+            .Select(x => (Point: x, Away: (x.RecordedAtUtc - punchedAt).Duration()))
+            .Where(x => x.Away <= PunchBatteryWindow)
+            .OrderBy(x => x.Away)
+            .Select(x => x.Point)
+            .FirstOrDefault();
+        return new PunchDetailDto(session.Id, kind, AttendanceReads.Utc(punchedAt),
+            kind == "in" ? session.PunchInLatitude : session.PunchOutLatitude,
+            kind == "in" ? session.PunchInLongitude : session.PunchOutLongitude,
+            kind == "in" ? session.PunchInAccuracyMeters : session.PunchOutAccuracyMeters,
+            kind == "in" ? session.HasPunchInPhoto : session.HasPunchOutPhoto,
+            nearest?.BatteryPercent, nearest?.IsCharging,
+            kind == "in" ? session.PunchInNote : session.PunchOutNote);
     }
 
     /// <summary>The first reading in each five-minute bucket, plus the latest, so a day draws as a line, not 6 000 dots.</summary>
@@ -320,12 +370,20 @@ public sealed class GetFieldTrackingDayQueryHandler : IRequestHandler<GetFieldTr
         return samples;
     }
 
+    public sealed class MemberRow
+    {
+        public string FullName { get; init; } = string.Empty; public string Email { get; init; } = string.Empty;
+    }
+
     public sealed class SessionRow
     {
         public int Id { get; init; } public DateTime PunchInAtUtc { get; init; } public DateTime? PunchOutAtUtc { get; init; }
         public AttendanceSessionStatus Status { get; init; } public bool IsTracked { get; init; }
         public double? PunchInLatitude { get; init; } public double? PunchInLongitude { get; init; }
         public double? PunchOutLatitude { get; init; } public double? PunchOutLongitude { get; init; }
+        public double? PunchInAccuracyMeters { get; init; } public double? PunchOutAccuracyMeters { get; init; }
+        public string? PunchInNote { get; init; } public string? PunchOutNote { get; init; }
+        public bool HasPunchInPhoto { get; init; } public bool HasPunchOutPhoto { get; init; }
     }
 
     public sealed class SegmentRow
@@ -348,6 +406,119 @@ public sealed class GetFieldTrackingDayQueryHandler : IRequestHandler<GetFieldTr
         public double Latitude { get; init; } public double Longitude { get; init; } public double? AccuracyMeters { get; init; }
         public bool IsMock { get; init; } public int? BatteryPercent { get; init; } public bool? IsCharging { get; init; }
         public bool IsProcessed { get; init; }
+    }
+}
+
+public sealed class GetMyFieldTrackingPointsQueryHandler : IRequestHandler<GetMyFieldTrackingPointsQuery, FieldTrackingPointsDto>
+{
+    private readonly ISender _sender; private readonly ICurrentUserService _user;
+    public GetMyFieldTrackingPointsQueryHandler(ISender sender, ICurrentUserService user) => (_sender, _user) = (sender, user);
+    public Task<FieldTrackingPointsDto> Handle(GetMyFieldTrackingPointsQuery request, CancellationToken cancellationToken) =>
+        _sender.Send(new GetFieldTrackingPointsQuery(request.OrganizationId, _user.UserId, request.Date), cancellationToken);
+}
+
+public sealed class GetFieldTrackingPointsQueryHandler : IRequestHandler<GetFieldTrackingPointsQuery, FieldTrackingPointsDto>
+{
+    /// <summary>
+    /// How many fixes one session may return. A shift records thousands (one every five seconds
+    /// while moving), and this read exists to give the map something to hover — so it keeps an
+    /// even slice of them rather than all of them. 400 is about one fix a minute over an
+    /// eight-hour shift, which is the resolution a person reading a map can actually use; the
+    /// route line itself is drawn from the matched segments and loses no detail to this.
+    /// </summary>
+    public const int MaxPointsPerSession = 400;
+
+    private readonly ISqlConnectionFactory _sql; private readonly ICurrentUserService _user;
+    private readonly IOrganizationPermissionChecker _permissions;
+    public GetFieldTrackingPointsQueryHandler(ISqlConnectionFactory sql, ICurrentUserService user,
+        IOrganizationPermissionChecker permissions) => (_sql, _user, _permissions) = (sql, user, permissions);
+    public async Task<FieldTrackingPointsDto> Handle(GetFieldTrackingPointsQuery request, CancellationToken cancellationToken)
+    {
+        // A member may always see their own fixes (transparency); anyone else needs ViewFieldTracking.
+        if (request.UserId != _user.UserId)
+            await _permissions.EnsurePermissionAsync(request.OrganizationId, _user.UserId,
+                OrganizationPermissionNames.ViewFieldTracking, cancellationToken);
+
+        using var connection = _sql.Create();
+        var settings = await AttendanceReads.LoadSettingsAsync(connection, request.OrganizationId, cancellationToken);
+        var date = request.Date ?? AttendanceClock.WorkDate(DateTime.UtcNow, AttendanceClock.Resolve(settings.TimeZone));
+
+        const string sessionsSql = """
+            SELECT s."Id", s."PunchInAtUtc", s."PunchOutAtUtc"
+            FROM "AttendanceSessions" s
+            WHERE s."OrganizationId" = @OrganizationId AND s."UserId" = @UserId AND s."WorkDate" = @Date::date
+              AND s."IsDeleted" = FALSE
+            ORDER BY s."PunchInAtUtc", s."Id";
+            """;
+        var sessions = (await connection.QueryAsync<PointSessionRow>(new CommandDefinition(sessionsSql, new
+        {
+            request.OrganizationId,
+            request.UserId,
+            Date = date.ToDateTime(TimeOnly.MinValue)
+        }, cancellationToken: cancellationToken))).ToList();
+        var ids = sessions.Select(x => x.Id).ToArray();
+
+        const string pointsSql = """
+            SELECT p."AttendanceSessionId", p."RecordedAtUtc", p."Latitude", p."Longitude", p."AccuracyMeters",
+                   p."SpeedMetersPerSecond", p."HeadingDegrees", p."BatteryPercent", p."IsCharging",
+                   p."IsBatterySaverOn", p."IsMock"
+            FROM "LocationPoints" p
+            WHERE p."AttendanceSessionId" = ANY(@Ids)
+            ORDER BY p."AttendanceSessionId", p."RecordedAtUtc", p."Id";
+            """;
+        var points = ids.Length == 0
+            ? new List<RecordedPointRow>()
+            : (await connection.QueryAsync<RecordedPointRow>(new CommandDefinition(pointsSql,
+                new { Ids = ids }, cancellationToken: cancellationToken))).ToList();
+
+        var sessionDtos = sessions.Select(session =>
+        {
+            var mine = points.Where(x => x.AttendanceSessionId == session.Id).ToList();
+            return new RecordedPointsSessionDto(session.Id, AttendanceReads.Utc(session.PunchInAtUtc),
+                session.PunchOutAtUtc is { } end ? AttendanceReads.Utc(end) : null, mine.Count,
+                Sample(mine, MaxPointsPerSession)
+                    .Select(x => new RecordedPointDto(AttendanceReads.Utc(x.RecordedAtUtc), x.Latitude, x.Longitude,
+                        x.AccuracyMeters, x.SpeedMetersPerSecond, x.HeadingDegrees, x.BatteryPercent, x.IsCharging,
+                        x.IsBatterySaverOn, x.IsMock)).ToList());
+        }).ToList();
+
+        return new FieldTrackingPointsDto(request.UserId, date, settings.TimeZone,
+            sessionDtos.Sum(x => x.TotalPointCount), sessionDtos.Sum(x => x.Points.Count), MaxPointsPerSession,
+            sessionDtos);
+    }
+
+    /// <summary>
+    /// Keeps one fix in every stride of <c>ceil(count / max)</c>, always including the first and
+    /// the last so the sample starts and ends where the session does. Fixes arrive at a near-fixed
+    /// interval, so an even stride by position is an even stride in time — and unlike picking by
+    /// time it cannot thin a dense stretch to nothing or leave a sparse one untouched. The result
+    /// is never longer than <paramref name="max"/> + 1.
+    /// </summary>
+    public static List<T> Sample<T>(IReadOnlyList<T> ordered, int max)
+    {
+        if (max <= 0) throw new ArgumentOutOfRangeException(nameof(max));
+        if (ordered.Count <= max) return ordered.ToList();
+        var stride = (int)Math.Ceiling(ordered.Count / (double)max);
+        var kept = new List<T>();
+        var last = -1;
+        for (var i = 0; i < ordered.Count; i += stride) { kept.Add(ordered[i]); last = i; }
+        if (last != ordered.Count - 1) kept.Add(ordered[^1]);
+        return kept;
+    }
+
+    public sealed class PointSessionRow
+    {
+        public int Id { get; init; } public DateTime PunchInAtUtc { get; init; } public DateTime? PunchOutAtUtc { get; init; }
+    }
+
+    public sealed class RecordedPointRow
+    {
+        public int AttendanceSessionId { get; init; } public DateTime RecordedAtUtc { get; init; }
+        public double Latitude { get; init; } public double Longitude { get; init; }
+        public double? AccuracyMeters { get; init; } public double? SpeedMetersPerSecond { get; init; }
+        public double? HeadingDegrees { get; init; } public int? BatteryPercent { get; init; }
+        public bool? IsCharging { get; init; } public bool? IsBatterySaverOn { get; init; }
+        public bool IsMock { get; init; }
     }
 }
 

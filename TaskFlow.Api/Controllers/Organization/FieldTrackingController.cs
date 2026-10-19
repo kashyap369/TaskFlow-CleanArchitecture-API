@@ -57,6 +57,17 @@ public sealed class FieldTrackingController : ControllerBase
         CancellationToken cancellationToken) =>
         Ok(await _mediator.Send(new GetFieldTrackingDayQuery(organizationId, userId, date), cancellationToken));
 
+    /// <summary>The stored fixes behind a day's route, sampled — the map's hover detail.</summary>
+    [HttpGet("me/points")]
+    public async Task<IActionResult> GetMyPoints(int organizationId, [FromQuery] DateOnly? date,
+        CancellationToken cancellationToken) =>
+        Ok(await _mediator.Send(new GetMyFieldTrackingPointsQuery(organizationId, date), cancellationToken));
+
+    [HttpGet("member/{userId:int}/points")]
+    public async Task<IActionResult> GetMemberPoints(int organizationId, int userId, [FromQuery] DateOnly? date,
+        CancellationToken cancellationToken) =>
+        Ok(await _mediator.Send(new GetFieldTrackingPointsQuery(organizationId, userId, date), cancellationToken));
+
     [HttpGet("live")]
     public async Task<IActionResult> GetLive(int organizationId, CancellationToken cancellationToken) =>
         Ok(await _mediator.Send(new GetLiveFieldTrackingQuery(organizationId), cancellationToken));
