@@ -297,7 +297,10 @@ public sealed class GetFieldTrackingDayQueryHandler : IRequestHandler<GetFieldTr
             .ToList();
 
         return new FieldTrackingDayDto(request.UserId, fullName, date, settings.TimeZone,
-            segments.Where(x => x.Kind == TrackedSegmentKind.Recorded).Sum(x => x.DistanceMeters),
+            // Travelled is everything the member's own points prove, whether or not a road
+            // explains it: a train ride is travel. Only a gap - which nobody has any record of -
+            // is counted as guessed.
+            segments.Where(x => x.Kind != TrackedSegmentKind.Inferred).Sum(x => x.DistanceMeters),
             segments.Where(x => x.Kind == TrackedSegmentKind.Inferred).Sum(x => x.DistanceMeters),
             stops.Count, points.Count(x => x.IsMock), points.Count, SampleBattery(points), sessionDtos);
     }

@@ -41,12 +41,12 @@ public sealed class ValhallaRouteMatcher : IRouteMatcher, IDisposable
 
     public bool IsConfigured => _http is not null;
 
-    public Task<MatchedRoute?> MatchAsync(IReadOnlyList<GeoPoint> points, CancellationToken cancellationToken)
+    public Task<MatchedRoute?> MatchAsync(IReadOnlyList<GeoPoint> points, RouteTravelMode mode, CancellationToken cancellationToken)
     {
         var request = new
         {
             shape = points.Select(x => new { lat = x.Latitude, lon = x.Longitude }).ToArray(),
-            costing = _settings.Costing,
+            costing = CostingFor(mode),
             shape_match = "map_snap",
             directions_type = "none",
             units = "kilometers",
@@ -55,21 +55,14 @@ public sealed class ValhallaRouteMatcher : IRouteMatcher, IDisposable
         return SendAsync("trace_route", request, cancellationToken);
     }
 
-    public Task<MatchedRoute?> RouteAsync(GeoPoint from, GeoPoint to, CancellationToken cancellationToken)
-    {
-        var request = new
-        {
-            locations = new[]
-            {
-                new { lat = from.Latitude, lon = from.Longitude },
-                new { lat = to.Latitude, lon = to.Longitude }
-            },
-            costing = _settings.Costing,
-            directions_type = "none",
-            units = "kilometers"
-        };
-        return SendAsync("route", request, cancellationToken);
-    }
+    /// <summary>
+    /// The Valhalla costing model for a travel mode. Walking is matched as a pedestrian so the
+    /// matcher stops obeying one-way and turn restrictions that do not apply on foot; the
+    /// configured <see cref="ValhallaSettings.Costing"/> remains the driving model, so an
+    /// organization can still choose motorcycle or motor_scooter for its riders.
+    /// </summary>
+    private string CostingFor(RouteTravelMode mode) =>
+        mode == RouteTravelMode.Walking ? "pedestrian" : _settings.Costing;
 
     private async Task<MatchedRoute?> SendAsync(string action, object request, CancellationToken cancellationToken)
     {

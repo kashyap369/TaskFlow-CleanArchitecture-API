@@ -15,6 +15,10 @@ public sealed class FieldTrackingRoutesTests
         new(Start + offset, BaseLatitude + northMeters / 111_320.0,
             BaseLongitude + eastMeters / (111_320.0 * Math.Cos(BaseLatitude * Math.PI / 180)), accuracy);
 
+    private static GeoPoint Geo(double eastMeters, double northMeters) =>
+        new(BaseLatitude + northMeters / 111_320.0,
+            BaseLongitude + eastMeters / (111_320.0 * Math.Cos(BaseLatitude * Math.PI / 180)));
+
     /// <summary>Ten minutes driving east, fifteen minutes parked, twenty minutes of silence, two minutes driving north.</summary>
     private static List<TrackInputPoint> Day()
     {
@@ -166,5 +170,67 @@ public sealed class FieldTrackingRoutesTests
         }
 
         Assert.Empty(FieldTrackingRoutes.FindStops(FieldTrackingRoutes.Clean(points)));
+    }
+
+    [Fact]
+    public void ModeFor_CallsAStrollWalkingAndACommuteDriving()
+    {
+        // 1.3 m/s over ten minutes: a walk.
+        var walk = new PlannedSegment(TrackedSegmentKind.Recorded, Start, Start.AddMinutes(10),
+            [Geo(0, 0), Geo(780, 0)]);
+        // 11 m/s over the same ten minutes: a vehicle.
+        var drive = new PlannedSegment(TrackedSegmentKind.Recorded, Start, Start.AddMinutes(10),
+            [Geo(0, 0), Geo(6600, 0)]);
+
+        Assert.Equal(RouteTravelMode.Walking, FieldTrackingRoutes.ModeFor(walk));
+        Assert.Equal(RouteTravelMode.Driving, FieldTrackingRoutes.ModeFor(drive));
+    }
+
+    [Fact]
+    public void MatchExplainsPoints_AcceptsARoadMatchThatHugsTheTrack()
+    {
+        // A real road match sits within a few metres of the fixes it explains.
+        var recorded = new List<GeoPoint>();
+        var matched = new List<GeoPoint>();
+        for (var i = 0; i <= 50; i++)
+        {
+            recorded.Add(Geo(40 * i, 0));
+            matched.Add(Geo(40 * i, 6));
+        }
+
+        Assert.True(FieldTrackingRoutes.MatchExplainsPoints(recorded, matched));
+    }
+
+    [Fact]
+    public void MatchExplainsPoints_RejectsATrainSnappedOntoTheRoadBesideTheRailway()
+    {
+        // Valhalla never refuses: it answers with the best road it can find, so a local train
+        // comes back snapped onto the highway running parallel, a few hundred metres away.
+        var recorded = new List<GeoPoint>();
+        var matched = new List<GeoPoint>();
+        for (var i = 0; i <= 50; i++)
+        {
+            recorded.Add(Geo(40 * i, 0));
+            matched.Add(Geo(40 * i, 300));
+        }
+
+        Assert.False(FieldTrackingRoutes.MatchExplainsPoints(recorded, matched));
+        Assert.InRange(FieldTrackingRoutes.MedianDeviationMeters(recorded, matched), 295, 305);
+    }
+
+    [Fact]
+    public void MatchExplainsPoints_IsNotFooledByOneStrayFix()
+    {
+        // One fix off a roof should not throw away an otherwise good match, which is why the
+        // measure is the median rather than the worst case.
+        var recorded = new List<GeoPoint>();
+        var matched = new List<GeoPoint>();
+        for (var i = 0; i <= 50; i++)
+        {
+            recorded.Add(Geo(40 * i, i == 25 ? 900 : 0));
+            matched.Add(Geo(40 * i, 5));
+        }
+
+        Assert.True(FieldTrackingRoutes.MatchExplainsPoints(recorded, matched));
     }
 }

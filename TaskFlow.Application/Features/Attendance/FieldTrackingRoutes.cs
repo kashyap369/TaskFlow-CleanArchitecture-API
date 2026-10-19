@@ -38,6 +38,68 @@ public static class FieldTrackingRoutes
     // Map matchers work best (and have limits) on bounded traces.
     public const int MaxPointsPerSegment = 1000;
 
+    // Over a whole moving stretch, faster than this is a vehicle rather than a person on foot.
+    // Judged on the stretch, not on single fixes, so a brisk moment does not make a walk a drive.
+    public const double WalkingSpeedMetersPerSecond = 2.5;
+
+    // How far the snapped line may sit from the points it claims to explain. A railway runs tens
+    // of metres from the road beside it, so a train matched onto that road lands well outside
+    // this; an honest road match stays inside it even in an urban canyon.
+    public const double MaxMatchDeviationMeters = 80;
+
+    // Comparing every raw point against every matched vertex is quadratic and this runs every few
+    // minutes for every open session, so the comparison is made on a sample of the raw points.
+    private const int DeviationSampleSize = 100;
+
+    /// <summary>
+    /// How a stretch was travelled, from its own average speed. Used to pick the matcher's rules:
+    /// matching a walk as a car is what put a U-turn on a one-way street someone walked down.
+    /// </summary>
+    public static RouteTravelMode ModeFor(PlannedSegment segment)
+    {
+        var seconds = (segment.EndedAtUtc - segment.StartedAtUtc).TotalSeconds;
+        if (seconds <= 0) return RouteTravelMode.Walking;
+        var speed = LengthMeters(segment.Points) / seconds;
+        return speed > WalkingSpeedMetersPerSecond ? RouteTravelMode.Driving : RouteTravelMode.Walking;
+    }
+
+    /// <summary>
+    /// Whether a matched line actually explains the points it was built from. Valhalla always
+    /// answers with the best road it can find, so a train is returned snapped onto the road beside
+    /// the railway rather than refused. Comparing the answer with where the member really was is
+    /// the only way to catch that: the typical (median) distance from a recorded fix to the
+    /// matched line is small for a real road match and large for travel that was never on a road.
+    /// </summary>
+    public static bool MatchExplainsPoints(IReadOnlyList<GeoPoint> recorded, IReadOnlyList<GeoPoint> matched) =>
+        MedianDeviationMeters(recorded, matched) <= MaxMatchDeviationMeters;
+
+    /// <summary>The typical distance from a recorded fix to the nearest vertex of a matched line.</summary>
+    public static double MedianDeviationMeters(IReadOnlyList<GeoPoint> recorded, IReadOnlyList<GeoPoint> matched)
+    {
+        if (recorded.Count == 0 || matched.Count == 0) return 0;
+
+        var step = Math.Max(1, (int)Math.Ceiling(recorded.Count / (double)DeviationSampleSize));
+        var deviations = new List<double>();
+        for (var i = 0; i < recorded.Count; i += step)
+        {
+            var nearest = double.MaxValue;
+            foreach (var vertex in matched)
+            {
+                var distance = DistanceMeters(recorded[i], vertex);
+                if (distance < nearest) nearest = distance;
+                // Already close enough that this fix cannot move the median upwards.
+                if (nearest == 0) break;
+            }
+            deviations.Add(nearest);
+        }
+
+        deviations.Sort();
+        var middle = deviations.Count / 2;
+        return deviations.Count % 2 == 1
+            ? deviations[middle]
+            : (deviations[middle - 1] + deviations[middle]) / 2;
+    }
+
     public static PlannedRoute Build(IReadOnlyList<TrackInputPoint> points)
     {
         var clean = Clean(points);

@@ -100,14 +100,10 @@ public sealed class FieldTrackingProcessingService(IServiceScopeFactory scopes,
             var sequence = 0;
             foreach (var planned in plan.Segments)
             {
-                var matched = planned.Kind == TrackedSegmentKind.Recorded
-                    ? await matcher.MatchAsync(planned.Points, ct)
-                    : await matcher.RouteAsync(planned.Points[0], planned.Points[^1], ct);
-                var polyline = matched?.EncodedPolyline ?? Polyline.Encode(planned.Points);
-                var distance = matched?.DistanceMeters ?? FieldTrackingRoutes.LengthMeters(planned.Points);
+                var (kind, polyline, distance, snapped) = await DrawAsync(matcher, planned, ct);
                 segments.Add(new TrackedRouteSegment(session.Id, session.OrganizationId, session.UserId, sequence++,
-                    planned.Kind, planned.StartedAtUtc, planned.EndedAtUtc, polyline, distance,
-                    planned.Kind == TrackedSegmentKind.Recorded ? planned.Points.Count : 0, matched is not null, now));
+                    kind, planned.StartedAtUtc, planned.EndedAtUtc, polyline, distance,
+                    kind == TrackedSegmentKind.Inferred ? 0 : planned.Points.Count, snapped, now));
             }
             stops.AddRange(plan.Stops.Select(x => new TrackStop(session.Id, session.OrganizationId, session.UserId,
                 x.Latitude, x.Longitude, x.ArrivedAtUtc, x.LeftAtUtc)));
@@ -125,6 +121,43 @@ public sealed class FieldTrackingProcessingService(IServiceScopeFactory scopes,
             .Where(x => x.AttendanceSessionId == sessionId && !x.IsProcessed && x.Id <= lastId)
             .ExecuteUpdateAsync(x => x.SetProperty(p => p.IsProcessed, true), ct);
         await transaction.CommitAsync(ct);
+    }
+
+    /// <summary>
+    /// Decides what line a planned piece becomes. Three outcomes, and which one it is matters more
+    /// than the shape: a road the member really travelled, their own recorded track where no road
+    /// explains it, or a plain straight line across a gap nobody has any record of.
+    /// </summary>
+    private static async Task<(TrackedSegmentKind Kind, string Polyline, double DistanceMeters, bool Snapped)> DrawAsync(
+        IRouteMatcher matcher, PlannedSegment planned, CancellationToken ct)
+    {
+        var raw = Polyline.Encode(planned.Points);
+        var rawLength = FieldTrackingRoutes.LengthMeters(planned.Points);
+
+        // A gap has no points by definition, so there is nothing to match and nothing to claim.
+        // Asking the router for "the likely road between" drew car journeys nobody made, across
+        // train rides and across lunch breaks alike; a straight line says what is actually known.
+        if (planned.Kind == TrackedSegmentKind.Inferred)
+        {
+            return (TrackedSegmentKind.Inferred, raw, rawLength, false);
+        }
+
+        // No engine configured: the cleaned track is the route, exactly as before.
+        if (!matcher.IsConfigured)
+        {
+            return (TrackedSegmentKind.Recorded, raw, rawLength, false);
+        }
+
+        var matched = await matcher.MatchAsync(planned.Points, FieldTrackingRoutes.ModeFor(planned), ct);
+        if (matched is not null &&
+            FieldTrackingRoutes.MatchExplainsPoints(planned.Points, Polyline.Decode(matched.EncodedPolyline)))
+        {
+            return (TrackedSegmentKind.Recorded, matched.EncodedPolyline, matched.DistanceMeters, true);
+        }
+
+        // Either no road fits these points, or the only road that does sits far from where the
+        // member actually was - a local train beside the highway. Their own track is the truth.
+        return (TrackedSegmentKind.OffRoad, raw, rawLength, false);
     }
 
     /// <summary>
