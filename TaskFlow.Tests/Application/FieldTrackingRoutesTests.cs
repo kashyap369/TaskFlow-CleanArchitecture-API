@@ -117,4 +117,54 @@ public sealed class FieldTrackingRoutesTests
             Assert.Equal(points[i].Longitude, decoded[i].Longitude, 6);
         }
     }
+
+    [Fact]
+    public void Clean_DropsFixesThatStateNoAccuracy()
+    {
+        // The coarse network-provider fixes arrive this way; GPS always states its accuracy.
+        var points = new List<TrackInputPoint>
+        {
+            At(TimeSpan.Zero, 0, 0),
+            At(TimeSpan.FromSeconds(5), 30, 0, accuracy: null),
+            At(TimeSpan.FromSeconds(10), 60, 0)
+        };
+
+        var clean = FieldTrackingRoutes.Clean(points);
+
+        Assert.Equal(2, clean.Count);
+        Assert.All(clean, x => Assert.NotNull(x.AccuracyMeters));
+    }
+
+    [Fact]
+    public void FindStops_KeepsOneStop_WhenIndoorDriftExceedsTheBareRadius()
+    {
+        // A morning at one desk: fixes admit to 45 m of error and wander further than the bare
+        // 100 m radius. Judged against the radius alone this split into "movement" and was then
+        // snapped onto nearby streets — the phantom office route.
+        var points = new List<TrackInputPoint>();
+        for (var minute = 0; minute <= 30; minute++)
+        {
+            var east = minute % 2 == 0 ? 0 : 130;
+            points.Add(At(TimeSpan.FromMinutes(minute), east, 0, accuracy: 45));
+        }
+
+        var stop = Assert.Single(FieldTrackingRoutes.FindStops(FieldTrackingRoutes.Clean(points)));
+
+        Assert.Equal(Start, stop.ArrivedAtUtc);
+        Assert.Equal(Start.AddMinutes(30), stop.LeftAtUtc);
+    }
+
+    [Fact]
+    public void FindStops_StillSeesRealMovementAsMovement()
+    {
+        // The tolerance must not swallow someone actually leaving: accurate fixes walking away
+        // stay movement, so no stop is found.
+        var points = new List<TrackInputPoint>();
+        for (var minute = 0; minute <= 30; minute++)
+        {
+            points.Add(At(TimeSpan.FromMinutes(minute), 200 * minute, 0, accuracy: 8));
+        }
+
+        Assert.Empty(FieldTrackingRoutes.FindStops(FieldTrackingRoutes.Clean(points)));
+    }
 }

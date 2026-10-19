@@ -22,6 +22,9 @@ public static class FieldTrackingRoutes
 {
     // A fix worse than this is more likely to mislead than to help (urban canyons, Wi-Fi/cell fallback).
     public const double MaxAccuracyMeters = 50;
+    // Indoors a phone drifts further than StopRadiusMeters while its owner sits at one desk, which
+    // used to break the stop run and leave "movement" for the matcher to snap onto nearby streets.
+    // A stop therefore tolerates drift up to the accuracy the fixes themselves admit to.
     // ~250 km/h: anything faster between two fixes is a GPS jump, not travel.
     public const double MaxSpeedMetersPerSecond = 70;
     // Jitter while standing still; closer fixes add nothing to the line.
@@ -49,7 +52,9 @@ public static class FieldTrackingRoutes
         var kept = new List<TrackInputPoint>();
         foreach (var point in points.OrderBy(x => x.RecordedAtUtc))
         {
-            if (point.AccuracyMeters is > MaxAccuracyMeters) continue;
+            // A fix with no stated accuracy cannot be judged, and the ones that arrive that way are
+            // the coarse network fixes, not GPS. Keeping them is what drew routes nobody walked.
+            if (point.AccuracyMeters is not { } accuracy || !double.IsFinite(accuracy) || accuracy > MaxAccuracyMeters) continue;
             if (kept.Count > 0)
             {
                 var previous = kept[^1];
@@ -78,7 +83,12 @@ public static class FieldTrackingRoutes
             {
                 var count = end - start + 1;
                 var centre = new GeoPoint(latitudeSum / count, longitudeSum / count);
-                if (DistanceMeters(centre, new GeoPoint(points[end + 1].Latitude, points[end + 1].Longitude)) > StopRadiusMeters)
+                var next = points[end + 1];
+                // A fix is only as sure of itself as its accuracy: one 40 m fix that lands 120 m
+                // from the centre is still consistent with sitting at that centre. Judging it
+                // against the bare radius is what split a morning at one desk into "movement".
+                var tolerance = StopRadiusMeters + Math.Min(MaxAccuracyMeters, next.AccuracyMeters ?? 0);
+                if (DistanceMeters(centre, new GeoPoint(next.Latitude, next.Longitude)) > tolerance)
                     break;
                 end++;
                 latitudeSum += points[end].Latitude;
