@@ -28,6 +28,12 @@ instruction; the authoring session has no .NET SDK. Full reference: [ATTENDANCE.
   hand-written; see ATTENDANCE.md §6 for how they were checked and what to verify.
 - **Unverified:** compile, `dotnet test`, `has-pending-model-changes`. Six domain tests added
   (`AttendanceSessionTests`), not run.
+- **Attendance map reads (2026-10-19, branch `claude/attendance-map-features`):** three read-only
+  additions — `attended-members` (only who punched in on a date), `punchIn`/`punchOut` detail on
+  each tracked session (coordinates, accuracy, note, `hasPhoto`, nearest battery) and
+  `…/tracking/{me|member/{id}}/points` (the day's stored fixes, sampled to 400 a session). No
+  migration. Build clean, **155/155** tests including 5 HTTP integration tests over the three reads.
+  Details and what was deliberately **not** built (no employee code, no address): ATTENDANCE.md §9.
 - **Not done:** schedules, zones, out-of-zone reasons, team-lead routing (next attendance phase);
   the task-permission enforcement noted in Taskaro's SESSIONS.md is still open.
 

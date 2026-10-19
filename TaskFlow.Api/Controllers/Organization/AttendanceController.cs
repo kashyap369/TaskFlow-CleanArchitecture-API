@@ -63,6 +63,12 @@ public sealed class AttendanceController : ControllerBase
         CancellationToken cancellationToken) =>
         Ok(await _mediator.Send(new GetAttendanceRosterQuery(organizationId, date, teamId), cancellationToken));
 
+    /// <summary>Only the members who punched in on <paramref name="date"/> — the map tabs' member picker.</summary>
+    [HttpGet("organization/{organizationId:int}/attended-members")]
+    public async Task<IActionResult> GetAttendedMembers(int organizationId, [FromQuery] DateOnly? date,
+        CancellationToken cancellationToken) =>
+        Ok(await _mediator.Send(new GetAttendedMembersQuery(organizationId, date), cancellationToken));
+
     [HttpGet("organization/{organizationId:int}/settings")]
     public async Task<IActionResult> GetSettings(int organizationId, CancellationToken cancellationToken) =>
         Ok(await _mediator.Send(new GetAttendanceSettingsQuery(organizationId), cancellationToken));

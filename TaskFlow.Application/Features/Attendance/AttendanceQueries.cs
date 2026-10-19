@@ -34,6 +34,15 @@ public sealed record GetAttendanceRosterQuery(int OrganizationId, DateOnly? Date
 /// <summary>A punch selfie: the member's own, or anyone's in the organization with ViewAttendance.</summary>
 public sealed record GetAttendancePhotoQuery(int SessionId, string Kind) : IRequest<AttendancePhotoFile>;
 
+/// <summary>
+/// Who actually punched in on one work date. The member pickers on the attendance map tabs are
+/// built from this, not from the whole member list: picking someone who was never in that day
+/// only ever produces an empty route. Names and roles only — no location and no contact detail.
+/// ViewAttendance or ViewFieldTracking, checked in the handler.
+/// </summary>
+public sealed record GetAttendedMembersQuery(int OrganizationId, DateOnly? Date)
+    : IRequest<AttendedMembersDto>, IOrganizationScopedRequest;
+
 public sealed class GetMyAttendanceQueryValidator : AbstractValidator<GetMyAttendanceQuery>
 {
     public GetMyAttendanceQueryValidator()
@@ -236,6 +245,67 @@ public sealed class GetAttendancePhotoQueryHandler : IRequestHandler<GetAttendan
         public int OrganizationId { get; init; } public int UserId { get; init; }
         public string? PunchInPhotoKey { get; init; } public string? PunchInPhotoContentType { get; init; }
         public string? PunchOutPhotoKey { get; init; } public string? PunchOutPhotoContentType { get; init; }
+    }
+}
+
+public sealed class GetAttendedMembersQueryHandler : IRequestHandler<GetAttendedMembersQuery, AttendedMembersDto>
+{
+    private readonly ISqlConnectionFactory _sql; private readonly ICurrentUserService _user;
+    private readonly IOrganizationPermissionChecker _permissions;
+    public GetAttendedMembersQueryHandler(ISqlConnectionFactory sql, ICurrentUserService user,
+        IOrganizationPermissionChecker permissions) => (_sql, _user, _permissions) = (sql, user, permissions);
+    public async Task<AttendedMembersDto> Handle(GetAttendedMembersQuery request, CancellationToken cancellationToken)
+    {
+        // Either permission is enough: this is the picker for both the attendance tabs and the map
+        // tabs, and it reveals no more than "this person was at work that day".
+        if (!await _permissions.HasPermissionAsync(request.OrganizationId, _user.UserId,
+                OrganizationPermissionNames.ViewAttendance, cancellationToken) &&
+            !await _permissions.HasPermissionAsync(request.OrganizationId, _user.UserId,
+                OrganizationPermissionNames.ViewFieldTracking, cancellationToken))
+            throw new ForbiddenException("PERMISSION_DENIED",
+                "Listing who punched in needs the ViewAttendance or ViewFieldTracking permission.");
+
+        // The owner has no member row, so the role falls back to "Owner" exactly as the live map does.
+        const string sql = """
+            SELECT s."UserId", u."FirstName" || ' ' || u."LastName" AS "FullName",
+                   COALESCE(r."Name", 'Owner') AS "RoleName",
+                   COUNT(*)::int AS "SessionCount",
+                   MIN(s."PunchInAtUtc") AS "FirstPunchInUtc",
+                   MAX(s."PunchOutAtUtc") AS "LastPunchOutUtc",
+                   BOOL_OR(s."Status" = @Open) AS "IsStillIn",
+                   BOOL_OR(s."IsTracked") AS "WasTracked"
+            FROM "AttendanceSessions" s
+            JOIN "Users" u ON u."Id" = s."UserId" AND u."IsDeleted" = FALSE
+            LEFT JOIN "OrganizationMembers" m ON m."OrganizationId" = s."OrganizationId"
+                 AND m."UserId" = s."UserId" AND m."IsDeleted" = FALSE
+            LEFT JOIN "OrganizationRoles" r ON r."Id" = m."OrganizationRoleId" AND r."IsDeleted" = FALSE
+            WHERE s."OrganizationId" = @OrganizationId AND s."WorkDate" = @Date::date AND s."IsDeleted" = FALSE
+            GROUP BY s."UserId", u."FirstName", u."LastName", r."Name"
+            ORDER BY u."FirstName", u."LastName";
+            """;
+
+        using var connection = _sql.Create();
+        var settings = await AttendanceReads.LoadSettingsAsync(connection, request.OrganizationId, cancellationToken);
+        var date = request.Date ?? AttendanceClock.WorkDate(DateTime.UtcNow, AttendanceClock.Resolve(settings.TimeZone));
+        var rows = await connection.QueryAsync<AttendedRow>(new CommandDefinition(sql, new
+        {
+            request.OrganizationId,
+            Date = date.ToDateTime(TimeOnly.MinValue),
+            Open = (int)AttendanceSessionStatus.Open
+        }, cancellationToken: cancellationToken));
+        return new AttendedMembersDto(date, settings.TimeZone, rows
+            .Select(x => new AttendedMemberDto(x.UserId, x.FullName, x.RoleName, x.SessionCount,
+                AttendanceReads.Utc(x.FirstPunchInUtc),
+                x.LastPunchOutUtc is { } end ? AttendanceReads.Utc(end) : null, x.IsStillIn, x.WasTracked))
+            .ToList());
+    }
+
+    public sealed class AttendedRow
+    {
+        public int UserId { get; init; } public string FullName { get; init; } = string.Empty;
+        public string RoleName { get; init; } = string.Empty; public int SessionCount { get; init; }
+        public DateTime FirstPunchInUtc { get; init; } public DateTime? LastPunchOutUtc { get; init; }
+        public bool IsStillIn { get; init; } public bool WasTracked { get; init; }
     }
 }
 

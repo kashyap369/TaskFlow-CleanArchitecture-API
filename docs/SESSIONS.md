@@ -1,5 +1,42 @@
 # TaskFlow — Session Log
 
+## 2026-10-19 (Attendance map: three reads, built and proved against a real database)
+
+- **Why:** after the first real field shifts the developer asked for three things on the attendance
+  map — a member picker limited to who punched in, the punch selfie on the map pin with a detail
+  panel, and a hover on each recorded fix. All three are reads; nothing here changes how a route is
+  built. Reference: ATTENDANCE.md §9.
+- **Branch `claude/attendance-map-features`, cut from `origin/main`** (worktree
+  `D:\Projects\TMS\TaskFlow-mapfeatures`). Deliberately *not* based on
+  `claude/tracking-accuracy-fix`: the route-accuracy fixes are independent and still unmerged, and
+  stacking them would have made one reviewable change into two tangled ones.
+- **Three routes added** (`attended-members`, `me/points`, `member/{id}/points`) — ledger **201 → 204**.
+  `TrackedSessionDto` and `FieldTrackingDayDto` gained fields; both are additive, and the Taskaro app
+  binds them as plain classes, so its existing models keep working untouched.
+- **A new route rather than a flag on `roster`:** the roster needs `ViewAttendance` and the map tabs
+  are gated on `ViewFieldTracking`. A manager holding only the tracking permission would have been
+  refused the picker for the map they are allowed to see. The new read accepts either permission and
+  carries no email or contact detail, so the tracking permission does not widen into the directory.
+- **The photo endpoint was not loosened.** `hasPhoto` on each punch tells the client to fetch the
+  selfie with its token and render it from an object URL. That is the whole of what Phase 8.10 was
+  waiting on, and it needed no API change beyond the flag.
+- **Fix sampling lives in C#, not SQL.** The first version thinned with `row_number() OVER (…)` in
+  Postgres; it was moved into `GetFieldTrackingPointsQueryHandler.Sample` so there is one
+  implementation with tests over it, at the cost of reading a session's rows (the day read already
+  does exactly that). An even stride **by position**, not by time: fixes arrive at a fixed interval,
+  and a time-based pick can thin a dense stretch to nothing.
+- **Gotcha worth remembering:** in a fresh worktree 19 integration tests fail with
+  `FileNotFoundException: TaskFlow.Api/appsettings.json`. That file is gitignored and the fixture
+  reads the connection string out of it — copy it in from the main checkout before believing a red
+  suite. Nothing was wrong with the code.
+- **Verified here, not asserted:** `dotnet build` clean, `dotnet test` **155/155**, including five
+  integration tests that drive all three reads over HTTP against a freshly migrated database and pin
+  both refusal paths. These are Dapper reads; the integration suite is the only thing that can prove
+  the SQL.
+- **Not built, and said so in ATTENDANCE.md §9:** no employee code (nothing in the schema holds one)
+  and no address for a punch or a fix (no column, and no geocoder — reverse geocoding would send
+  every tracked coordinate off the server).
+
 ## 2026-10-18 (Field tracking — written on a branch, unbuilt)
 
 - **Why:** the developer asked for route tracking end to end (API, web, app) with the Valhalla server

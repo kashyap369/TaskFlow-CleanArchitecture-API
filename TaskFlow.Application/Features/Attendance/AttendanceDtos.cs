@@ -44,3 +44,12 @@ public sealed record AttendanceRosterRowDto(int UserId, string FullName, string 
 public sealed record AttendanceRosterDto(DateOnly WorkDate, string TimeZone, IReadOnlyList<AttendanceRosterRowDto> Members);
 
 public sealed record AttendancePhotoFile(byte[] Content, string ContentType, string FileName);
+
+/// <summary>
+/// One member who has at least one attendance session on a work date. Feeds the member pickers on
+/// the map tabs, which must offer only people who actually punched in that day.
+/// </summary>
+public sealed record AttendedMemberDto(int UserId, string FullName, string RoleName,
+    int SessionCount, DateTime FirstPunchInUtc, DateTime? LastPunchOutUtc, bool IsStillIn, bool WasTracked);
+
+public sealed record AttendedMembersDto(DateOnly WorkDate, string TimeZone, IReadOnlyList<AttendedMemberDto> Members);

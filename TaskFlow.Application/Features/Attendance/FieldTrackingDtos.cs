@@ -47,13 +47,43 @@ public sealed record TrackPointDto(DateTime RecordedAtUtc, double Latitude, doub
 
 public sealed record BatterySampleDto(DateTime RecordedAtUtc, int BatteryPercent, bool? IsCharging);
 
+/// <summary>
+/// What the map's punch pin shows when it is clicked. The selfie itself is not here: it is private
+/// and comes from the authenticated photo endpoint, so the client is told only whether one exists.
+/// Battery is the nearest recorded fix within ten minutes of the punch — the punch itself does not
+/// record it. There is no address: nothing in the schema stores one and no geocoder is called.
+/// </summary>
+public sealed record PunchDetailDto(int AttendanceSessionId, string Kind, DateTime AtUtc, double? Latitude,
+    double? Longitude, double? AccuracyMeters, bool HasPhoto, int? BatteryPercent, bool? IsCharging, string? Note);
+
 public sealed record TrackedSessionDto(int AttendanceSessionId, DateTime PunchInAtUtc, DateTime? PunchOutAtUtc,
     AttendanceSessionStatus Status, bool IsTracked, double? PunchInLatitude, double? PunchInLongitude,
     double? PunchOutLatitude, double? PunchOutLongitude, IReadOnlyList<TrackedSegmentDto> Segments,
     IReadOnlyList<TrackStopDto> Stops,
     // Received but not yet folded into the matched route (the processing service runs every few minutes).
-    IReadOnlyList<TrackPointDto> PendingPoints);
+    IReadOnlyList<TrackPointDto> PendingPoints,
+    PunchDetailDto PunchIn, PunchDetailDto? PunchOut);
 
-public sealed record FieldTrackingDayDto(int UserId, string FullName, DateOnly WorkDate, string TimeZone,
+public sealed record FieldTrackingDayDto(int UserId, string FullName, string Email, DateOnly WorkDate, string TimeZone,
     double DistanceMeters, double InferredDistanceMeters, int StopCount, int MockPointCount, int PointCount,
     IReadOnlyList<BatterySampleDto> Battery, IReadOnlyList<TrackedSessionDto> Sessions);
+
+/// <summary>
+/// One stored fix, with every field the phone sent, for the map's hover. Separate from
+/// <see cref="TrackPointDto"/>, which exists only to draw the not-yet-matched tail of a route.
+/// </summary>
+public sealed record RecordedPointDto(DateTime RecordedAtUtc, double Latitude, double Longitude,
+    double? AccuracyMeters, double? SpeedMetersPerSecond, double? HeadingDegrees, int? BatteryPercent,
+    bool? IsCharging, bool? IsBatterySaverOn, bool IsMock);
+
+public sealed record RecordedPointsSessionDto(int AttendanceSessionId, DateTime PunchInAtUtc, DateTime? PunchOutAtUtc,
+    int TotalPointCount, IReadOnlyList<RecordedPointDto> Points);
+
+/// <summary>
+/// A day's recorded fixes, <b>sampled</b>: a shift at one fix every five seconds is thousands of
+/// rows and the client is drawing hover targets, not a dataset. <see cref="SampledPointCount"/>
+/// against <see cref="TotalPointCount"/> is what the page must show so nobody reads the thinned
+/// set as the whole record.
+/// </summary>
+public sealed record FieldTrackingPointsDto(int UserId, DateOnly WorkDate, string TimeZone, int TotalPointCount,
+    int SampledPointCount, int MaxPointsPerSession, IReadOnlyList<RecordedPointsSessionDto> Sessions);
